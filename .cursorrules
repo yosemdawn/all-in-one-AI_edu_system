@@ -1,0 +1,229 @@
+# Cursor 项目规则
+
+## Git 提交规范
+
+### 提交信息格式
+Git commit message 格式：**类型使用英文，描述必须使用中文**
+
+```
+<type>: <中文描述>
+
+[可选的详细描述]
+
+[可选的footer]
+```
+
+### 提交类型（Type）
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| feat | 新增功能 | `feat: 添加学生批量导入功能` |
+| fix | 修复bug | `fix: 修复作业提交时间显示错误` |
+| docs | 文档更新 | `docs: 完善README项目说明` |
+| style | 代码格式调整（不影响功能） | `style: 统一组件缩进格式` |
+| refactor | 代码重构（不改变功能） | `refactor: 优化API请求封装逻辑` |
+| perf | 性能优化 | `perf: 优化作业列表加载速度` |
+| test | 添加或修改测试 | `test: 添加用户登录单元测试` |
+| build | 构建工具或依赖更新 | `build: 升级Vue版本到3.4.0` |
+| chore | 配置文件修改 | `chore: 更新Vite配置支持PWA` |
+| revert | 代码回退 | `revert: 回退上一版本的权限修改` |
+
+### 提交示例
+
+#### ✅ 好的提交示例
+
+```bash
+# 简单提交
+git commit -m "feat: 添加AI批改规则配置页面"
+
+# 详细提交
+git commit -m "fix: 修复学生提交作业后状态不更新的问题
+
+- 修复提交成功后状态未刷新
+- 添加提交后的消息提示
+- 优化提交流程的错误处理
+
+关闭 #123"
+```
+
+**更多示例：**
+```bash
+feat: 实现教师端批量添加学生功能
+fix: 解决班级邀请码重复生成的问题
+docs: 更新API接口文档
+style: 调整登录页面布局
+refactor: 重构作业列表组件代码结构
+perf: 优化首页数据加载性能
+test: 添加班级管理模块测试用例
+build: 升级Element Plus到最新版本
+chore: 添加ESLint规则配置
+```
+
+#### ❌ 不好的提交示例
+
+```bash
+# 使用中文类型（错误）
+git commit -m "功能: 添加学生导入"
+
+# 描述使用英文（错误）
+git commit -m "feat: add student import"
+
+# 描述不清晰（错误）
+git commit -m "fix: 修改了一些东西"
+
+# 没有类型（错误）
+git commit -m "添加了功能"
+```
+
+### 提交规则
+
+1. **类型使用英文**：类型必须使用英文（feat、fix、docs等）
+2. **描述必须中文**：简短描述和详细描述都必须用中文
+3. **类型必填**：每个提交必须包含类型前缀
+4. **描述清晰**：简短描述要明确说明改动内容
+5. **使用动词开头**：如"添加"、"修复"、"更新"、"优化"等
+6. **不超过50字**：标题行尽量控制在50字以内
+7. **详细描述可选**：复杂改动建议添加详细描述
+8. **关联Issue**：相关问题用"关闭 #编号"或"相关 #编号"
+
+---
+
+## 代码规范
+
+### TypeScript 规范
+
+1. **严格模式**：启用TypeScript严格模式
+2. **类型定义**：所有函数参数和返回值必须明确类型
+3. **接口优先**：使用interface定义对象类型
+4. **避免any**：除非必要，避免使用any类型
+
+```typescript
+// ✅ 好的写法
+interface User {
+  id: string
+  name: string
+  email: string
+}
+
+function getUser(id: string): Promise<User> {
+  return api.get(`/users/${id}`)
+}
+
+// ❌ 不好的写法
+function getUser(id: any): any {
+  return api.get(`/users/${id}`)
+}
+```
+
+### Vue 组件规范
+
+1. **Composition API**：优先使用Composition API
+2. **组件命名**：使用PascalCase命名组件
+3. **Props类型**：必须定义Props的TypeScript类型
+4. **响应式数据**：使用ref和reactive管理状态
+5. **组合式函数**：复用逻辑提取为use开头的函数
+
+```vue
+<script setup lang="ts">
+// ✅ 好的写法
+interface Props {
+  title: string
+  count: number
+}
+
+const props = defineProps<Props>()
+const emit = defineEmits<{
+  update: [value: number]
+}>()
+</script>
+```
+
+### 文件命名规范
+
+- **组件文件**：PascalCase（如：`UserProfile.vue`）
+- **组合式函数**：camelCase，use前缀（如：`useUserData.ts`）
+- **工具函数**：kebab-case（如：`format-date.ts`）
+- **类型定义**：kebab-case（如：`user-types.ts`）
+
+### 代码格式
+
+1. **缩进**：使用2个空格
+2. **引号**：优先使用单引号
+3. **分号**：语句末尾不加分号（遵循项目配置）
+4. **行宽**：建议不超过100字符
+5. **格式化**：使用Prettier自动格式化
+
+---
+
+## 项目特定规则
+
+### API 调用
+
+1. 所有API调用必须通过`src/utils/request.ts`封装
+2. API方法定义在`src/api/`目录下
+3. 使用TypeScript定义请求和响应类型
+4. 统一错误处理
+
+### 状态管理
+
+1. 全局状态使用Vuex store
+2. Store模块放在`src/store/modules/`
+3. 组件内状态优先使用Composition API
+4. 避免在组件中直接修改store state
+
+### 路由管理
+
+1. 路由配置在`src/router/index.ts`
+2. 路由懒加载所有页面组件
+3. 路由守卫统一在`src/router/permission.ts`
+4. 路由命名使用kebab-case
+
+### 样式规范
+
+1. 优先使用Tailwind CSS工具类
+2. 组件样式使用scoped style
+3. 全局样式放在`src/assets/styles/`
+4. 避免使用内联样式
+
+---
+
+## AI 辅助开发规范
+
+### 使用 Cursor AI 时
+
+1. **清晰描述需求**：用中文详细描述要实现的功能
+2. **提供上下文**：说明相关的文件和模块
+3. **指定技术栈**：明确使用Vue 3、TypeScript等
+4. **代码审查**：AI生成的代码需要人工审查
+5. **测试验证**：修改后必须测试功能是否正常
+
+### 代码审查重点
+
+- ✅ 类型安全：检查TypeScript类型定义
+- ✅ 错误处理：确保有适当的错误处理
+- ✅ 性能考虑：避免不必要的重复计算
+- ✅ 可维护性：代码结构清晰，命名规范
+- ✅ 用户体验：交互友好，加载状态明确
+
+---
+
+## 注意事项
+
+1. **提交前检查**：确保代码无Lint错误
+2. **功能测试**：本地测试功能正常后再提交
+3. **代码审查**：重要改动建议请人审查
+4. **文档更新**：API变更时同步更新文档
+5. **版本控制**：遵循语义化版本规范
+
+---
+
+## 📌 重要提醒
+
+### Git 提交格式要求
+```
+✅ 正确格式：feat: 添加用户登录功能
+❌ 错误格式：功能: 添加用户登录功能
+❌ 错误格式：feat: add user login
+```
+
+**记住：类型用英文，描述用中文！好的提交信息是项目历史的重要文档，请认真对待每一次提交！**
