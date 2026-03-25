@@ -378,7 +378,7 @@ const router = useRouter();
 
 // 响应式数据
 const loading = ref(false);
-const assignmentList = ref<AssignmentListItem[]>([]);
+const assignmentList = ref<any[]>([]);
 const detailVisible = ref(false);
 const currentAssignment = ref<Assignment | null>(null);
 const viewMode = ref<"grid" | "list">("grid");

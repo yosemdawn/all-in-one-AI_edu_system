@@ -170,7 +170,7 @@ const loadRoleData = async () => {
   loading.value = true;
   try {
     // 构建查询参数
-    const params = {
+    const params: any = {
       page: pagination.page,
       limit: pagination.limit,
     };

@@ -247,8 +247,8 @@ import type {
   CreateAssignmentDto,
   AiRuleSnapshot,
   SubmissionFormat,
-  Assignment,
 } from "@/types/assignments";
+import type { Assignment as ApiAssignment } from "@/api/assignments";
 import WangEditor from "@/components/WangEditor.vue";
 import ClassSelector from "../components/ClassSelector.vue";
 import AiRuleSelector from "../components/AiRuleSelector.vue";
@@ -422,7 +422,7 @@ const loadAssignmentData = async () => {
 
   loading.value = true;
   try {
-    const assignment = (await getAssignment(assignmentId.value)) as Assignment;
+    const assignment = (await getAssignment(assignmentId.value)) as ApiAssignment;
     Object.assign(formData, {
       title: assignment.title,
       description: assignment.description,

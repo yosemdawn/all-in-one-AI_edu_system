@@ -48,7 +48,7 @@ export default defineConfig({
     cors: true, // 启用CORS
     proxy: {
       '/api': {
-        target: 'http://124.222.166.174:83',// 一诺的测试后端
+        target: 'http://localhost:3000',// 本地后端
         changeOrigin: true,
         secure: false, // 如果后端使用HTTPS，设置为true
         // 可选：添加请求头以便后端正确识别代理

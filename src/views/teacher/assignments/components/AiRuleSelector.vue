@@ -163,6 +163,9 @@
 import { ref, computed, onMounted } from "vue";
 import { Setting } from "@element-plus/icons-vue";
 import { getAvailableAiRules } from "@/api/ai-rule";
+import type {
+  AiRuleSnapshot as AssignmentAiRuleSnapshot,
+} from "@/types/assignments";
 
 // 从API获取的完整AI规则信息
 interface AiRuleItem {
@@ -175,20 +178,12 @@ interface AiRuleItem {
   tags: string[];
 }
 
-// 简化的AI规则快照（用于作业存储）
-interface AiRuleSnapshot {
-  id: string;
-  name: string;
-  modelType: string;
-  prompt: string;
-}
-
 interface Props {
-  modelValue: AiRuleSnapshot | null;
+  modelValue: AssignmentAiRuleSnapshot | null;
 }
 
 interface Emits {
-  (e: "update:modelValue", value: AiRuleSnapshot | null): void;
+  (e: "update:modelValue", value: AssignmentAiRuleSnapshot | null): void;
 }
 
 const props = defineProps<Props>();
@@ -246,11 +241,13 @@ const confirmRuleSelection = () => {
   );
   if (selectedRule) {
     // 将完整的AI规则信息转换为简化的快照格式
-    const ruleSnapshot: AiRuleSnapshot = {
+    const ruleSnapshot: AssignmentAiRuleSnapshot = {
       id: selectedRule.id,
       name: selectedRule.name,
       modelType: selectedRule.modelType,
       prompt: selectedRule.prompt,
+      originalRuleId: selectedRule.id,
+      snapshotAt: new Date().toISOString(),
     };
     emit("update:modelValue", ruleSnapshot);
     showRuleSelector.value = false;

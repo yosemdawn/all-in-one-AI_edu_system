@@ -259,7 +259,7 @@ const emit = defineEmits<{
 
 // 数据状态
 const loading = ref(false);
-const assignments = ref<Assignment[]>([]);
+const assignments = ref<any[]>([]);
 
 // 搜索表单
 const searchForm = reactive<AssignmentQueryParams>({

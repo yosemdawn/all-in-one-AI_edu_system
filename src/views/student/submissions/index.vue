@@ -298,7 +298,7 @@ const submissionFormRef = ref();
 const activeTab = ref("assignment");
 const lastSaveTime = ref("");
 const showAiProcessingFullscreen = ref(false);
-const aiTimeoutTimer = ref<NodeJS.Timeout | null>(null);
+const aiTimeoutTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
 // 使用组合式函数
 const {

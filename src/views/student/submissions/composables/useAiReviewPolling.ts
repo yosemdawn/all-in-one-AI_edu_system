@@ -12,7 +12,7 @@ export function useAiReviewPolling() {
   const pollingCount = ref(0);
 
   // 轮询定时器
-  let pollingTimer: NodeJS.Timeout | null = null;
+  let pollingTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * 获取轮询间隔（渐进式轮询）

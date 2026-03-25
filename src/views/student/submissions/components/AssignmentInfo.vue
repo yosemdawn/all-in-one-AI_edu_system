@@ -75,11 +75,27 @@ import {
   ArrowUp,
   ArrowDown,
 } from "@element-plus/icons-vue";
-import type { Assignment, Submission } from "../../../../api/submissions";
+import type { Submission } from "../../../../api/submissions";
+import type {
+  AssignmentMaterial,
+  SubmissionFormat,
+} from "@/types/assignments";
 import { useSubmissionUtils } from "../composables";
 
+type SubmissionAssignment = {
+  description: string;
+  teacherName: string;
+  dueDate?: string;
+  endDate?: string;
+  maxScore?: number;
+  questionMaterial?: AssignmentMaterial;
+  referenceAnswer?: AssignmentMaterial;
+  gradingNotes?: string;
+  submissionFormat?: SubmissionFormat;
+};
+
 interface Props {
-  assignment: Assignment;
+  assignment: SubmissionAssignment;
   submission?: Submission | null;
   statusTagType: "success" | "warning" | "info" | "primary" | "danger";
   statusText: string;

@@ -210,10 +210,10 @@ const loadClassList = async () => {
 const loadAssignmentList = async (classId: string) => {
   try {
     const response = await getAssignmentList({
-      classId,
+      className: undefined,
       page: 1,
       pageSize: 100, // 获取足够多的作业用于下拉选择
-    });
+    } as any);
     assignmentList.value = response.items || [];
   } catch (error) {
     console.error("加载作业列表失败", error);

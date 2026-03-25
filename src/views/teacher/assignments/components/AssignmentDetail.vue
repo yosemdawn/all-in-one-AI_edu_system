@@ -46,8 +46,8 @@
           </div>
 
           <div class="info-item">
-            <label class="info-label">AI规则：</label>
-            <span class="info-value">{{ assignment.aiRuleName }}</span>
+            <label class="info-label">评分规则模板：</label>
+            <span class="info-value">{{ assignment.aiRule?.name || "未设置" }}</span>
           </div>
 
           <div class="info-item">
@@ -139,15 +139,15 @@
           </div>
           <div class="stat-item">
             <div class="stat-number ai-reviewed">
-              {{ assignment.submissionStats.aiReviewed }}
+              {{ assignment.submissionStats.graded }}
             </div>
-            <div class="stat-label">AI已批改</div>
+            <div class="stat-label">AI/系统已处理</div>
           </div>
           <div class="stat-item">
             <div class="stat-number teacher-reviewed">
-              {{ assignment.submissionStats.teacherReviewed }}
+              {{ assignment.submissionStats.pending }}
             </div>
-            <div class="stat-label">教师已批改</div>
+            <div class="stat-label">待教师处理</div>
           </div>
         </div>
 
@@ -209,7 +209,6 @@
             <span class="card-title">作业描述</span>
           </div>
         </template>
-        git
         <div
           class="description-content editor-content-view"
           v-html="assignment.description"
@@ -306,13 +305,13 @@ const getSubmissionPercentage = (stats: Assignment["submissionStats"]) => {
 // 计算AI批改百分比
 const getAiReviewPercentage = (stats: Assignment["submissionStats"]) => {
   if (stats.submitted === 0) return 0;
-  return Math.round((stats.aiReviewed / stats.submitted) * 100);
+  return Math.round((stats.graded / stats.submitted) * 100);
 };
 
 // 计算教师批改百分比
 const getTeacherReviewPercentage = (stats: Assignment["submissionStats"]) => {
   if (stats.submitted === 0) return 0;
-  return Math.round((stats.teacherReviewed / stats.submitted) * 100);
+  return Math.round((stats.pending / stats.submitted) * 100);
 };
 
 // 编辑作业

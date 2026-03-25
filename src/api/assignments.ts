@@ -28,6 +28,7 @@ export interface Assignment {
   referenceAnswer?: AssignmentMaterial;
   gradingNotes?: string;
   submissionFormat?: SubmissionFormat;
+  allowAttachments?: boolean;
   startDate: string;
   endDate: string;
   status: AssignmentStatus;

@@ -189,6 +189,7 @@ interface Class {
   teacherName?: string;
   status: "active" | "inactive" | "disbanded";
   studentCount: number;
+  maxStudents?: number;
   description?: string;
   createdAt: string;
   updatedAt: string;
@@ -210,9 +211,9 @@ const router = useRouter();
 
 // 数据状态
 const loading = ref(false);
-const classList = ref<Class[]>([]);
+const classList = ref<any[]>([]);
 const showCreateDialog = ref(false);
-const editingClass = ref<Class | null>(null);
+const editingClass = ref<any | null>(null);
 
 // 自适应高度相关
 const containerRef = ref<HTMLElement>();
@@ -283,7 +284,7 @@ const calculateContentHeight = () => {
 };
 
 const debounce = (func: Function, wait: number) => {
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   return (...args: any[]) => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(() => func.apply(null, args), wait);
