@@ -180,16 +180,16 @@
             </div>
 
             <!-- 切换登录/注册表单 -->
-            <!-- <div class="text-center text-sm mt-4">
-          <span v-if="isRegister">
-            已有账号?
-            <a href="#" @click.prevent="isRegister = false" class="text-blue-500 hover:text-blue-700 transition-colors">点击登录</a>
-          </span>
-          <span v-else>
-            没有账号?
-            <a href="#" @click.prevent="isRegister = true" class="text-blue-500 hover:text-blue-700 transition-colors">点击注册</a>
-          </span>
-        </div> -->
+            <div class="text-center text-sm mt-4">
+              <span v-if="isRegister">
+                已有账号?
+                <a href="#" @click.prevent="isRegister = false" class="text-blue-500 hover:text-blue-700 transition-colors">点击登录</a>
+              </span>
+              <span v-else>
+                没有账号?
+                <a href="#" @click.prevent="isRegister = true" class="text-blue-500 hover:text-blue-700 transition-colors">点击注册</a>
+              </span>
+            </div>
           </el-form>
         </div>
       </div>

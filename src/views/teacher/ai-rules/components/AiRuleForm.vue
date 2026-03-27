@@ -178,7 +178,7 @@ const formRef = ref(null);
 const formData = reactive({
   name: "",
   description: "",
-  modelType: "deepseek",
+  modelType: "doubao",
   prompt: "",
   status: "active",
   visibility: "private",
@@ -200,7 +200,6 @@ const commonTags = ref([
 // 获取模型图标
 const getModelIcon = (modelCode) => {
   const icons = {
-    deepseek: "🤖",
     doubao: "🥤",
   };
   return icons[modelCode] || "🔮";
@@ -269,7 +268,7 @@ const formRules = {
 const resetForm = () => {
   formData.name = "";
   formData.description = "";
-  formData.modelType = "deepseek";
+  formData.modelType = "doubao";
   formData.prompt = "";
   formData.status = "active";
   formData.visibility = "private";

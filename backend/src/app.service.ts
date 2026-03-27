@@ -248,9 +248,9 @@ export class AppService {
       code: 'doubao',
       name: '豆包',
       provider: 'ByteDance',
-      modelName: 'doubao-lite',
+      modelName: 'doubao-seed-2-0-lite-260215',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      apiKey: 'demo-key',
+      apiKey: 'f6e0146b-475d-43e2-853d-d66ff226460f',
       status: 'active',
       isDefault: true,
       totalUsage: 12,
@@ -1093,8 +1093,22 @@ export class AppService {
     const user = this.getUserByToken(auth);
     const assignment = this.assignments.find((item) => item.id === payload.assignmentId);
     if (!assignment) throw new NotFoundException('作业不存在');
+
+    const allowedClassIds = assignment.classes.map((item) => item.id);
+    const targetClassId = payload.classId || user.classId;
+    if (!targetClassId || !allowedClassIds.includes(targetClassId)) {
+      throw new BadRequestException('提交班级与作业班级不匹配');
+    }
+
+    const member = this.classMembers.find(
+      (item) => item.studentId === user.id && item.classId === targetClassId && item.status === 'active',
+    );
+    if (!member) {
+      throw new BadRequestException('当前学生不在该班级中，无法提交此作业');
+    }
+
     const className =
-      this.classes.find((item) => item._id === payload.classId)?.name ||
+      this.classes.find((item) => item._id === targetClassId)?.name ||
       user.className ||
       '';
 
@@ -1103,17 +1117,34 @@ export class AppService {
     );
 
     if (existing) {
+      const previousSubmittedCount = existing.isDraft ? 0 : existing.submissionCount || 0;
+      if (!payload.isDraft && existing.status === 'teacher_reviewed') {
+        throw new BadRequestException('作业已被教师批改，不能再次提交');
+      }
+      if (!payload.isDraft && previousSubmittedCount >= 2) {
+        throw new BadRequestException('已达到最大提交次数，不能再次提交');
+      }
+
+      existing.classId = targetClassId;
+      existing.className = className;
       existing.content = payload.content;
       existing.attachments = payload.attachments || [];
       existing.isDraft = !!payload.isDraft;
       existing.status = payload.isDraft ? 'draft' : 'submitted';
       existing.submittedAt = payload.isDraft ? existing.submittedAt : this.now();
       existing.updatedAt = this.now();
+      existing.teacherScore = undefined;
+      existing.teacherReviewContent = undefined;
+      existing.teacherReviewedAt = undefined;
+      existing.aiScore = undefined;
+      existing.aiReviewContent = undefined;
+      existing.aiReviewedAt = undefined;
+      existing.aiReviewMetadata = undefined;
       existing.submissionCount = payload.isDraft
-        ? existing.submissionCount
-        : existing.submissionCount + 1;
+        ? previousSubmittedCount
+        : previousSubmittedCount + 1;
       if (!payload.isDraft) this.scheduleAiReview(existing);
-      return this.envelope(existing, '提交成功');
+      return this.envelope(existing, payload.isDraft ? '草稿保存成功' : '提交成功');
     }
 
     const item: Submission = {
@@ -1122,7 +1153,7 @@ export class AppService {
       studentId: user.id,
       studentName: user.name,
       studentNumber: user.studentId,
-      classId: payload.classId,
+      classId: targetClassId,
       className,
       content: payload.content,
       attachments: payload.attachments || [],
@@ -1135,28 +1166,46 @@ export class AppService {
     };
     this.submissions.push(item);
     if (!payload.isDraft) this.scheduleAiReview(item);
-    return this.envelope(item, '提交成功');
+    return this.envelope(item, payload.isDraft ? '草稿保存成功' : '提交成功');
   }
 
   private scheduleAiReview(submission: Submission) {
+    submission.aiScore = undefined;
+    submission.aiReviewContent = undefined;
+    submission.aiReviewedAt = undefined;
+    submission.aiReviewMetadata = undefined;
+
     setTimeout(() => {
+      const assignment = this.assignments.find((item) => item.id === submission.assignmentId);
+      const model = this.aiModels.find((item) => item.code === 'doubao' && item.status === 'active');
+      const contentText = (submission.content || '').replace(/<[^>]*>/g, '').trim();
+      const useFallbackReview = !assignment?.aiRule || !contentText;
+
       submission.status = 'ai_reviewed';
-      submission.aiScore = 88;
-      submission.aiReviewContent =
-        '基于题目、标准答案和评分规则模板，系统判定本次作答整体较好。\n\n优点：答案结构清晰。\n问题：个别题目仍有偏差。\n建议：对照标准答案检查第2题与第4题。';
+      submission.aiScore = useFallbackReview ? 0 : 88;
+      submission.aiReviewContent = useFallbackReview
+        ? '未能生成有效评价，请教师手动批改。'
+        : '基于题目、标准答案和评分规则模板，系统判定本次作答整体较好。\n\n优点：答案结构清晰。\n问题：个别题目仍有偏差。\n建议：对照标准答案检查第2题与第4题。';
       submission.aiReviewedAt = this.now();
       submission.aiReviewMetadata = {
-        modelUsed: 'doubao-lite',
-        processingTime: 1200,
-        tokenUsage: { total: 680 },
+        provider: 'doubao',
+        modelUsed: model?.modelName || 'doubao-seed-2-0-lite-260215',
+        processingTime: useFallbackReview ? 800 : 1200,
+        tokenUsage: { total: useFallbackReview ? 120 : 680 },
+        fallback: useFallbackReview,
       };
       const member = this.classMembers.find(
         (item) =>
           item.studentId === submission.studentId && item.classId === submission.classId,
       );
       if (member) {
-        member.totalSubmissions = (member.totalSubmissions || 0) + 1;
-        member.lastSubmissionTime = this.now();
+        member.totalSubmissions = submission.submissionCount;
+        member.lastSubmissionTime = submission.submittedAt || this.now();
+      }
+      if (model) {
+        model.totalUsage += 1;
+        model.totalTokens += submission.aiReviewMetadata.tokenUsage.total;
+        model.lastUsedAt = this.now();
       }
     }, 2500);
   }

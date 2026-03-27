@@ -5,7 +5,7 @@ export interface AiRule {
   id: string;
   name: string;
   description?: string;
-  modelType: "deepseek" | "doubao";
+  modelType: "doubao";
   prompt: string;
   status: "active" | "inactive";
   visibility: "private" | "public" | "system";
@@ -35,7 +35,7 @@ export interface AiRuleQueryParams {
 export interface CreateAiRuleDto {
   name: string;
   description?: string;
-  modelType: "deepseek" | "doubao";
+  modelType: "doubao";
   prompt: string;
   visibility?: "private" | "public" | "system";
   status?: "active" | "inactive";
