@@ -377,7 +377,7 @@ const handleCreateClass = () => {
 
 const handleViewClass = (classData: Class) => {
   router.push({
-    path: "/student/classesDetail",
+    path: "/teacher/classes-detail",
     query: { id: classData._id },
   });
 };

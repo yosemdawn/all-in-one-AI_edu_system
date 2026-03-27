@@ -146,11 +146,10 @@ const router = useRouter();
 // 查看作业提交
 const handleViewSubmission = (row: SubmissionRecord) => {
   router.push({
-    path: "/teacher/submissions/detail",
+    path: "/teacher/assignments/detail",
     query: {
+      id: row.assignmentId,
       submissionId: row._id,
-      studentId: row.studentId,
-      assignmentId: row.assignmentId,
     },
   });
 };
@@ -158,10 +157,11 @@ const handleViewSubmission = (row: SubmissionRecord) => {
 // 批改作业
 const handleGradeSubmission = (row: SubmissionRecord) => {
   router.push({
-    path: "/teacher/correcting/grading",
+    path: "/teacher/assignments/detail",
     query: {
+      id: row.assignmentId,
       submissionId: row._id,
-      assignmentId: row.assignmentId,
+      openFirstPending: "true",
     },
   });
 };

@@ -195,6 +195,7 @@ interface Props {
   maxHeight?: string;
   assignmentId: string;
   autoOpenFirstPending?: boolean;
+  targetSubmissionId?: string;
 }
 
 const props = defineProps<Props>();
@@ -333,17 +334,36 @@ const hasAutoOpenedOnce = ref(false);
 
 // 监听自动打开第一个待批改作业（只在首次且未打开过时执行）
 watch(
-  [() => props.autoOpenFirstPending, () => props.submissionData],
-  ([shouldOpen, submissionData]) => {
+  [
+    () => props.autoOpenFirstPending,
+    () => props.targetSubmissionId,
+    () => props.submissionData,
+  ],
+  ([shouldOpen, targetSubmissionId, submissionData]) => {
     if (
-      shouldOpen &&
-      submissionData &&
-      submissionData.length > 0 &&
-      !hasAutoOpenedOnce.value
+      !submissionData ||
+      submissionData.length === 0 ||
+      hasAutoOpenedOnce.value
     ) {
-      // 等待数据加载完成后自动打开第一个待批改的作业
-      nextTick(() => {
-        // 查找第一个可以批改的提交记录
+      return;
+    }
+
+    nextTick(() => {
+      if (targetSubmissionId) {
+        const targetSubmission = submissionData.find(
+          (item) => item._id === targetSubmissionId
+        );
+
+        if (targetSubmission && canGrade(targetSubmission.status)) {
+          currentSubmissionId.value = targetSubmission._id;
+          gradingDrawerVisible.value = true;
+          hasAutoOpenedOnce.value = true;
+          emit("autoOpened");
+          return;
+        }
+      }
+
+      if (shouldOpen) {
         const firstPendingSubmission = submissionData.find((item) =>
           canGrade(item.status)
         );
@@ -355,15 +375,15 @@ watch(
           );
           currentSubmissionId.value = firstPendingSubmission._id;
           gradingDrawerVisible.value = true;
-          hasAutoOpenedOnce.value = true; // 标记已经自动打开过
-          emit("autoOpened"); // 通知父组件已自动打开
+          hasAutoOpenedOnce.value = true;
+          emit("autoOpened");
         } else {
           ElMessage.info("暂无待批改的作业");
-          hasAutoOpenedOnce.value = true; // 即使没有可批改的也标记为已处理
-          emit("autoOpened"); // 通知父组件
+          hasAutoOpenedOnce.value = true;
+          emit("autoOpened");
         }
-      });
-    }
+      }
+    });
   },
   { immediate: true }
 );

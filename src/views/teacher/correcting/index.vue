@@ -210,6 +210,7 @@ const loadClassList = async () => {
 const loadAssignmentList = async (classId: string) => {
   try {
     const response = await getAssignmentList({
+      classId,
       className: undefined,
       page: 1,
       pageSize: 100, // 获取足够多的作业用于下拉选择

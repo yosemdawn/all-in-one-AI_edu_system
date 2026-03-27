@@ -26,6 +26,15 @@ export class AppController {
     return this.appService.login(body);
   }
 
+  @Post('auth/login')
+  loginCompat(@Body() body: any) {
+    return this.appService.login({
+      usernameOrEmailOrStudentId: body.usernameOrEmailOrStudentId || body.email || body.username,
+      password: body.password,
+      rememberMe: body.rememberMe,
+    });
+  }
+
   @Post('v1/auth/logout')
   logout() {
     return this.appService.logout();
@@ -64,6 +73,18 @@ export class AppController {
   @Post('v1/auth/register')
   register(@Body() body: any) {
     return this.appService.register(body);
+  }
+
+  @Post('auth/register')
+  registerCompat(@Body() body: any) {
+    return this.appService.register({
+      username: body.username || body.email || body.name,
+      email: body.email,
+      password: body.password,
+      confirmPassword: body.confirmPassword || body.password,
+      name: body.name,
+      classId: body.classId,
+    });
   }
 
   @Get('permissions/user-roles/users/:userId/resources')
@@ -173,16 +194,8 @@ export class AppController {
   }
 
   @Get('users')
-  getUsers() {
-    return this.appService.envelope(
-      {
-        items: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-      },
-      '获取成功',
-    );
+  getUsers(@Query() query: any) {
+    return this.appService.getUsers(query);
   }
 
   @Post('users')
@@ -196,56 +209,48 @@ export class AppController {
   }
 
   @Put('users/profile')
-  updateUserProfile(@Body() body: any) {
-    return this.appService.envelope(body, '更新成功');
+  updateUserProfile(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.updateProfile(authorization, body);
   }
 
   @Put('users/password')
-  updatePassword() {
-    return this.appService.envelope({ success: true }, '修改成功');
+  updatePassword(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.updatePassword(authorization, body);
   }
 
   @Get('users/:id')
   getUser(@Param('id') id: string) {
-    return this.appService.envelope({ id }, '获取成功');
+    return this.appService.getUser(id);
   }
 
   @Patch('users/:id')
   patchUser(@Param('id') id: string, @Body() body: any) {
-    return this.appService.envelope({ id, ...body }, '更新成功');
+    return this.appService.updateUser(id, body);
   }
 
   @Patch('users/:id/password')
-  patchUserPassword(@Param('id') id: string) {
-    return this.appService.envelope({ success: true, id }, '修改成功');
+  patchUserPassword(@Param('id') id: string, @Body() body: any) {
+    return this.appService.updateUserPassword(id, body);
   }
 
   @Post('users/:id/reset-password')
-  resetUserPassword(@Param('id') id: string) {
-    return this.appService.envelope({ success: true, id }, '重置成功');
+  resetUserPassword(@Param('id') id: string, @Body() body: any) {
+    return this.appService.resetUserPassword(id, body);
   }
 
   @Delete('users/:id')
   deleteUser(@Param('id') id: string) {
-    return this.appService.envelope({ success: true, id }, '删除成功');
+    return this.appService.deleteUser(id);
   }
 
   @Post('users/batch-import')
   importUsers(@Body() body: any) {
-    return this.appService.envelope({ success: true, items: body }, '导入成功');
+    return this.appService.importUsers(body);
   }
 
   @Post('users/batch-delete')
   deleteUsers(@Body() body: any) {
-    return this.appService.envelope(
-      {
-        success: true,
-        total: body.userIds?.length || 0,
-        successCount: body.userIds?.length || 0,
-        failureCount: 0,
-      },
-      '删除成功',
-    );
+    return this.appService.deleteUsers(body);
   }
 
   @Get('classes/list')
@@ -376,18 +381,21 @@ export class AppController {
   }
 
   @Get('teachers/submissions/list')
-  getSubmissionList(@Query() query: any) {
-    return this.appService.getSubmissionList(query);
+  getSubmissionList(@Headers('authorization') authorization: string | undefined, @Query() query: any) {
+    return this.appService.getSubmissionList(authorization, query);
   }
 
   @Get('teachers/submissions/detail/:submissionId')
-  getSubmissionDetail(@Param('submissionId') submissionId: string) {
-    return this.appService.getSubmissionDetail(submissionId);
+  getSubmissionDetail(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.appService.getSubmissionDetail(authorization, submissionId);
   }
 
   @Post('teachers/submissions/review')
-  teacherReview(@Body() body: any) {
-    return this.appService.teacherReview(body);
+  teacherReview(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.teacherReview(authorization, body);
   }
 
   @Get('v1/ai-rules')
@@ -522,13 +530,13 @@ export class AppController {
   }
 
   @Get('teacher/dashboard/performance-summary')
-  getTeacherPerformanceSummary() {
-    return this.appService.envelope({}, '获取成功');
+  getTeacherPerformanceSummary(@Headers('authorization') authorization?: string) {
+    return this.appService.getTeacherPerformanceSummary(authorization);
   }
 
   @Get('teacher/dashboard/quick-actions')
-  getTeacherQuickActions() {
-    return this.appService.envelope([], '获取成功');
+  getTeacherQuickActions(@Headers('authorization') authorization?: string) {
+    return this.appService.getTeacherQuickActions(authorization);
   }
 
   @Get('student/dashboard/stats')
@@ -537,18 +545,18 @@ export class AppController {
   }
 
   @Get('student/dashboard/learning-progress')
-  getStudentLearningProgress() {
-    return this.appService.envelope({}, '获取成功');
+  getStudentLearningProgress(@Headers('authorization') authorization?: string) {
+    return this.appService.getStudentLearningProgress(authorization);
   }
 
   @Get('student/dashboard/achievements')
-  getStudentAchievements() {
-    return this.appService.envelope({}, '获取成功');
+  getStudentAchievements(@Headers('authorization') authorization?: string) {
+    return this.appService.getStudentAchievements(authorization);
   }
 
   @Get('student/dashboard/study-recommendations')
-  getStudentRecommendations() {
-    return this.appService.envelope([], '获取成功');
+  getStudentRecommendations(@Headers('authorization') authorization?: string) {
+    return this.appService.getStudentStudyRecommendations(authorization);
   }
 
   @Get('logs')

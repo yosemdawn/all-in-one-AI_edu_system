@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen | Select-Object -ExpandProperty OwningProcess\")",
+      "Bash(git *)",
+      "Bash(powershell.exe *)",
+      "Bash(curl -s \"http://localhost:3000/api/users?role=student&page=1&limit=10\")"
     ]
   }
 }

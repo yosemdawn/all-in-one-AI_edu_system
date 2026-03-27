@@ -18,6 +18,9 @@ type User = {
   username: string;
   email: string;
   studentId?: string;
+  phone?: string;
+  avatar?: string;
+  meta?: Record<string, any>;
   name: string;
   role: RoleCode;
   status: 'active' | 'inactive' | 'locked';
@@ -356,6 +359,19 @@ export class AppService {
   }
 
   register(body: any) {
+    if (!body.email || !body.password) {
+      throw new BadRequestException('邮箱和密码不能为空');
+    }
+    if (this.users.some((item) => item.email === body.email)) {
+      throw new BadRequestException('邮箱已存在');
+    }
+    if (body.username && this.users.some((item) => item.username === body.username)) {
+      throw new BadRequestException('用户名已存在');
+    }
+    if (body.confirmPassword && body.password !== body.confirmPassword) {
+      throw new BadRequestException('两次输入的密码不一致');
+    }
+
     const classItem = body.classId
       ? this.classes.find((item) => item._id === body.classId)
       : undefined;
@@ -405,35 +421,57 @@ export class AppService {
       return [
         {
           _id: 'm-td',
-          name: '教学中心',
+          name: 'TeacherDashboard',
           path: '/teacher/dashboard',
+          component: 'dashboard/TeacherDashboard',
           type: 'menu',
           icon: 'House',
           meta: { title: '教学中心' },
         },
         {
           _id: 'm-tc',
-          name: '班级管理',
+          name: 'TeacherClasses',
           path: '/teacher/classes',
+          component: 'teacher/classes/index',
           type: 'menu',
           icon: 'Reading',
           meta: { title: '班级管理' },
         },
         {
+          _id: 'm-tc-detail',
+          name: 'TeacherClassDetail',
+          path: '/teacher/classes-detail',
+          component: 'teacher/classes/detail/index',
+          type: 'menu',
+          hidden: true,
+          meta: { title: '班级详情', hidden: true },
+        },
+        {
           _id: 'm-ta',
-          name: '作业管理',
+          name: 'TeacherAssignments',
           path: '/teacher/assignments',
+          component: 'teacher/assignments/index',
           type: 'menu',
           icon: 'EditPen',
           meta: { title: '作业管理' },
         },
         {
           _id: 'm-tr',
-          name: '评分规则模板',
+          name: 'TeacherAiRules',
           path: '/teacher/ai-rules',
+          component: 'teacher/ai-rules/index',
           type: 'menu',
           icon: 'Setting',
           meta: { title: '评分规则模板' },
+        },
+        {
+          _id: 'm-treview',
+          name: 'TeacherCorrecting',
+          path: '/teacher/correcting',
+          component: 'teacher/correcting/index',
+          type: 'menu',
+          icon: 'DocumentChecked',
+          meta: { title: '待批改' },
         },
       ];
     }
@@ -441,24 +479,27 @@ export class AppService {
       return [
         {
           _id: 'm-sd',
-          name: '学习中心',
+          name: 'StudentDashboard',
           path: '/student/dashboard',
+          component: 'dashboard/StudentDashboard',
           type: 'menu',
           icon: 'House',
           meta: { title: '学习中心' },
         },
         {
           _id: 'm-sc',
-          name: '我的班级',
+          name: 'StudentClasses',
           path: '/student/classes',
+          component: 'student/classes/index',
           type: 'menu',
           icon: 'Reading',
           meta: { title: '我的班级' },
         },
         {
           _id: 'm-sa',
-          name: '我的作业',
+          name: 'StudentAssignments',
           path: '/student/assignments',
+          component: 'student/assignments/index',
           type: 'menu',
           icon: 'EditPen',
           meta: { title: '我的作业' },
@@ -468,40 +509,45 @@ export class AppService {
     return [
       {
         _id: 'm-ad',
-        name: '系统控制台',
+        name: 'AdminDashboard',
         path: '/admin/dashboard',
+        component: 'dashboard/AdminDashboard',
         type: 'menu',
         icon: 'Setting',
         meta: { title: '系统控制台' },
       },
       {
         _id: 'm-au',
-        name: '用户管理',
+        name: 'SystemUsers',
         path: '/system/users',
+        component: 'system/users/index',
         type: 'menu',
         icon: 'User',
         meta: { title: '用户管理' },
       },
       {
         _id: 'm-am',
-        name: '菜单管理',
+        name: 'SystemMenus',
         path: '/system/menus',
+        component: 'system/menus/index',
         type: 'menu',
         icon: 'Menu',
         meta: { title: '菜单管理' },
       },
       {
         _id: 'm-ar',
-        name: '角色管理',
+        name: 'SystemRoles',
         path: '/system/roles',
+        component: 'system/roles/index',
         type: 'menu',
         icon: 'Avatar',
         meta: { title: '角色管理' },
       },
       {
         _id: 'm-ai',
-        name: '模型管理',
+        name: 'SystemAiModel',
         path: '/system/ai_model',
+        component: 'system/ai_model/index',
         type: 'menu',
         icon: 'Cpu',
         meta: { title: '模型管理' },
@@ -736,30 +782,75 @@ export class AppService {
       items = items.filter((item) => item.title.includes(params.search));
     if (params?.status)
       items = items.filter((item) => item.status === params.status);
+    if (params?.classId)
+      items = items.filter((item) => item.classes.some((cls) => cls.id === params.classId));
+    if (params?.className)
+      items = items.filter((item) =>
+        item.classes.some((cls) => cls.name.includes(params.className)),
+      );
+
+    const sort = params?.sort || 'createdAt';
+    const order = params?.order === 'asc' ? 1 : -1;
+    items.sort((a, b) => {
+      const getValue = (item: any) => {
+        switch (sort) {
+          case 'endDate':
+            return new Date(item.endDate).getTime();
+          case 'startDate':
+            return new Date(item.startDate).getTime();
+          case 'title':
+            return item.title || '';
+          case 'createdAt':
+          default:
+            return new Date(item.createdAt).getTime();
+        }
+      };
+
+      const valueA = getValue(a);
+      const valueB = getValue(b);
+      if (typeof valueA === 'string' && typeof valueB === 'string') {
+        return valueA.localeCompare(valueB) * order;
+      }
+      return ((valueA as number) - (valueB as number)) * order;
+    });
+
+    const page = Number(params?.page || 1);
+    const pageSize = Number(params?.pageSize || 10);
+    const start = (page - 1) * pageSize;
+    const pagedItems = items.slice(start, start + pageSize);
+
     return this.envelope(
       {
-        items: items.map((item) => ({
-          ...item,
-          submissionCount: this.submissions.filter(
-            (s) => s.assignmentId === item.id && !s.isDraft,
-          ).length,
-          totalStudents: this.classMembers.filter((m) =>
+        items: pagedItems.map((item) => {
+          const totalStudents = this.classMembers.filter((m) =>
             item.classes.some((c) => c.id === m.classId),
-          ).length,
-          totalSubmissions: this.submissions.filter((s) => s.assignmentId === item.id)
-            .length,
-          gradedSubmissions: this.submissions.filter(
+          ).length;
+          const submittedCount = this.submissions.filter(
+            (s) => s.assignmentId === item.id && !s.isDraft,
+          ).length;
+          const gradedCount = this.submissions.filter(
             (s) =>
               s.assignmentId === item.id &&
               ['ai_reviewed', 'teacher_reviewed'].includes(s.status),
-          ).length,
-          pendingSubmissions: this.submissions.filter(
-            (s) => s.assignmentId === item.id && s.status === 'submitted',
-          ).length,
-        })),
+          ).length;
+          const pendingCount = this.submissions.filter(
+            (s) => s.assignmentId === item.id && ['submitted', 'ai_reviewed'].includes(s.status),
+          ).length;
+
+          return {
+            ...item,
+            submissionCount: submittedCount,
+            totalStudents,
+            totalSubmissions: submittedCount,
+            gradedSubmissions: gradedCount,
+            reviewedSubmissions: gradedCount,
+            pendingSubmissions: pendingCount,
+          };
+        }),
         total: items.length,
-        page: Number(params?.page || 1),
-        pageSize: Number(params?.pageSize || 10),
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
       },
       '获取成功',
     );
@@ -768,23 +859,39 @@ export class AppService {
   getAssignment(id: string) {
     const item = this.assignments.find((assignment) => assignment.id === id);
     if (!item) throw new NotFoundException('作业不存在');
+
+    const totalStudents = this.classMembers.filter((m) =>
+      item.classes.some((c) => c.id === m.classId),
+    ).length;
+    const submittedCount = this.submissions.filter(
+      (s) => s.assignmentId === id && !s.isDraft,
+    ).length;
+    const reviewedCount = this.submissions.filter(
+      (s) => s.assignmentId === id && s.status === 'teacher_reviewed',
+    ).length;
+    const aiReviewedCount = this.submissions.filter(
+      (s) => s.assignmentId === id && ['ai_reviewed', 'teacher_reviewed'].includes(s.status),
+    ).length;
+    const pendingCount = this.submissions.filter(
+      (s) => s.assignmentId === id && ['submitted', 'ai_reviewed'].includes(s.status),
+    ).length;
+    const draftCount = this.submissions.filter(
+      (s) => s.assignmentId === id && s.status === 'draft',
+    ).length;
+
     return this.envelope(
       {
         ...item,
-        totalStudents: this.classMembers.filter((m) =>
-          item.classes.some((c) => c.id === m.classId),
-        ).length,
+        totalStudents,
         submissionStats: {
-          totalSubmissions: this.submissions.filter((s) => s.assignmentId === id).length,
-          reviewedSubmissions: this.submissions.filter(
-            (s) => s.assignmentId === id && s.status === 'teacher_reviewed',
-          ).length,
-          pendingSubmissions: this.submissions.filter(
-            (s) => s.assignmentId === id && ['submitted', 'ai_reviewed'].includes(s.status),
-          ).length,
-          draftSubmissions: this.submissions.filter(
-            (s) => s.assignmentId === id && s.status === 'draft',
-          ).length,
+          total: totalStudents,
+          submitted: submittedCount,
+          graded: aiReviewedCount,
+          pending: pendingCount,
+          totalSubmissions: submittedCount,
+          reviewedSubmissions: reviewedCount,
+          pendingSubmissions: pendingCount,
+          draftSubmissions: draftCount,
         },
       },
       '获取成功',
@@ -804,6 +911,10 @@ export class AppService {
           ? {
               ...submission,
               _id: submission.id,
+              contentPreview: submission.content?.replace(/<[^>]*>/g, '').slice(0, 80),
+              wordCount: submission.content
+                ? submission.content.replace(/<[^>]*>/g, '').replace(/\s/g, '').length
+                : 0,
             }
           : {
               _id: `virtual-${member.studentId}`,
@@ -814,17 +925,33 @@ export class AppService {
               className:
                 this.classes.find((c) => c._id === member.classId)?.name || '',
               status: 'not_submitted',
+              contentPreview: '',
+              wordCount: 0,
             };
       });
+
+    if (params?.classId)
+      items = items.filter((item) => item.classId === params.classId);
     if (params?.studentName)
       items = items.filter((item) => item.studentName?.includes(params.studentName));
+    if (params?.studentNumber)
+      items = items.filter((item) => item.studentNumber?.includes(params.studentNumber));
+
+    const status = params?.submissionStatus || params?.status;
+    if (status) items = items.filter((item) => item.status === status);
+
+    const page = Number(params?.page || 1);
+    const limit = Number(params?.limit || 20);
+    const start = (page - 1) * limit;
+    const pagedItems = items.slice(start, start + limit);
+
     return this.envelope(
       {
-        items,
+        items: pagedItems,
         total: items.length,
-        page: Number(params?.page || 1),
-        limit: Number(params?.limit || 20),
-        totalPages: 1,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(items.length / limit)),
       },
       '获取成功',
     );
@@ -864,7 +991,23 @@ export class AppService {
   updateAssignment(id: string, payload: any) {
     const item = this.assignments.find((assignment) => assignment.id === id);
     if (!item) throw new NotFoundException('作业不存在');
-    Object.assign(item, payload, { updatedAt: this.now() });
+
+    let classes = item.classes;
+    if (payload.classes) {
+      classes = payload.classes.map((classId: string) => {
+        const classItem = this.classes.find((cls) => cls._id === classId);
+        if (!classItem) throw new NotFoundException('班级不存在');
+        return { id: classItem._id, name: classItem.name };
+      });
+    }
+
+    Object.assign(item, {
+      ...payload,
+      classes,
+      allowAttachments:
+        payload.allowAttachments === undefined ? item.allowAttachments : !!payload.allowAttachments,
+      updatedAt: this.now(),
+    });
     return this.envelope(item, '更新成功');
   }
 
@@ -930,15 +1073,17 @@ export class AppService {
     const assignments = this.assignments.filter((item) =>
       item.classes.some((cls) => cls.id === user.classId),
     );
+    const mySubmissions = this.submissions.filter((s) => s.studentId === user.id && !s.isDraft);
+    const reviewedCount = mySubmissions.filter((s) =>
+      ['ai_reviewed', 'teacher_reviewed'].includes(s.status),
+    ).length;
+
     return this.envelope(
       {
         total: assignments.length,
-        pending: assignments.length,
-        reviewed: this.submissions.filter(
-          (s) =>
-            s.studentId === user.id &&
-            ['ai_reviewed', 'teacher_reviewed'].includes(s.status),
-        ).length,
+        pending: Math.max(assignments.length - reviewedCount, 0),
+        reviewed: reviewedCount,
+        submitted: mySubmissions.length,
       },
       '获取成功',
     );
@@ -1078,8 +1223,12 @@ export class AppService {
     );
   }
 
-  getSubmissionList(params?: any) {
-    let items = [...this.submissions];
+  getSubmissionList(auth: string | undefined, params?: any) {
+    const user = this.getUserByToken(auth);
+    const teacherAssignments = this.assignments.filter((assignment) => assignment.teacherId === user.id);
+    const teacherAssignmentIds = new Set(teacherAssignments.map((assignment) => assignment.id));
+
+    let items = this.submissions.filter((item) => teacherAssignmentIds.has(item.assignmentId));
     if (params?.assignmentId)
       items = items.filter((item) => item.assignmentId === params.assignmentId);
     if (params?.classId)
@@ -1088,26 +1237,88 @@ export class AppService {
       items = items.filter((item) => item.status === params.status);
     if (params?.studentName)
       items = items.filter((item) => item.studentName.includes(params.studentName));
+    if (params?.studentNumber)
+      items = items.filter((item) => item.studentNumber?.includes(params.studentNumber));
+    if (params?.minScore !== undefined)
+      items = items.filter((item) => (item.teacherScore ?? item.aiScore ?? 0) >= Number(params.minScore));
+    if (params?.maxScore !== undefined)
+      items = items.filter((item) => (item.teacherScore ?? item.aiScore ?? 0) <= Number(params.maxScore));
+
+    const sortBy = params?.sortBy || 'submittedAt';
+    const sortOrder = params?.sortOrder === 'asc' ? 1 : -1;
+    items.sort((a, b) => {
+      const getValue = (item: any) => {
+        switch (sortBy) {
+          case 'teacherScore':
+            return item.teacherScore ?? -1;
+          case 'aiScore':
+            return item.aiScore ?? -1;
+          case 'studentName':
+            return item.studentName || '';
+          case 'submittedAt':
+          default:
+            return new Date(item.submittedAt || item.createdAt).getTime();
+        }
+      };
+
+      const valueA = getValue(a);
+      const valueB = getValue(b);
+      if (typeof valueA === 'string' && typeof valueB === 'string') {
+        return valueA.localeCompare(valueB) * sortOrder;
+      }
+      return ((valueA as number) - (valueB as number)) * sortOrder;
+    });
+
+    const page = Number(params?.page || 1);
+    const pageSize = Number(params?.limit || 20);
+    const start = (page - 1) * pageSize;
+    const pagedItems = items.slice(start, start + pageSize);
+
     return this.envelope(
       {
-        items,
+        items: pagedItems.map((item) => ({
+          ...item,
+          _id: item.id,
+          assignmentTitle: this.assignments.find((assignment) => assignment.id === item.assignmentId)?.title || '',
+          teacherName: this.assignments.find((assignment) => assignment.id === item.assignmentId)?.teacherName || '',
+        })),
         total: items.length,
-        page: Number(params?.page || 1),
-        pageSize: Number(params?.limit || 20),
+        page,
+        pageSize,
       },
       '获取成功',
     );
   }
 
-  getSubmissionDetail(submissionId: string) {
+  getSubmissionDetail(auth: string | undefined, submissionId: string) {
+    const user = this.getUserByToken(auth);
     const item = this.submissions.find((submission) => submission.id === submissionId);
     if (!item) throw new NotFoundException('提交不存在');
-    return this.envelope({ ...item, _id: item.id }, '获取成功');
+
+    const assignment = this.assignments.find((submissionAssignment) => submissionAssignment.id === item.assignmentId);
+    if (!assignment || assignment.teacherId !== user.id) {
+      throw new UnauthorizedException('无权查看该提交');
+    }
+
+    return this.envelope(
+      {
+        ...item,
+        _id: item.id,
+      },
+      '获取成功',
+    );
   }
 
-  teacherReview(body: any) {
+  teacherReview(auth: string | undefined, body: any) {
+    const user = this.getUserByToken(auth);
     const item = this.submissions.find((submission) => submission.id === body.submissionId);
     if (!item) throw new NotFoundException('提交不存在');
+
+    const assignment = this.assignments.find((submissionAssignment) => submissionAssignment.id === item.assignmentId);
+    if (!assignment || assignment.teacherId !== user.id) {
+      throw new UnauthorizedException('无权批改该提交');
+    }
+
     item.teacherScore = body.teacherScore;
     item.teacherReviewContent = body.teacherReviewContent;
     item.teacherReviewedAt = this.now();
@@ -1382,17 +1593,33 @@ export class AppService {
     const myAssignments = this.assignments.filter((a) => a.teacherId === user.id);
     return this.envelope(
       {
-        assignments: myAssignments.map((assignment) => ({
-          id: assignment.id,
-          title: assignment.title,
-          classCount: assignment.classes.length,
-          submissionRate: 80,
-          status: assignment.status,
-          endDate: assignment.endDate,
-        })),
+        assignments: myAssignments.map((assignment) => {
+          const totalStudents = this.classMembers.filter((member) =>
+            assignment.classes.some((cls) => cls.id === member.classId),
+          ).length;
+          const submittedCount = this.submissions.filter(
+            (submission) => submission.assignmentId === assignment.id && !submission.isDraft,
+          ).length;
+
+          return {
+            id: assignment.id,
+            title: assignment.title,
+            classCount: assignment.classes.length,
+            submissionRate: totalStudents ? Math.round((submittedCount / totalStudents) * 100) : 0,
+            status: assignment.status,
+            endDate: assignment.endDate,
+          };
+        }),
         submissions: this.submissions
-          .filter((submission) =>
-            myAssignments.some((assignment) => assignment.id === submission.assignmentId),
+          .filter(
+            (submission) =>
+              myAssignments.some((assignment) => assignment.id === submission.assignmentId) &&
+              ['submitted', 'ai_reviewed'].includes(submission.status),
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.submittedAt || b.createdAt).getTime() -
+              new Date(a.submittedAt || a.createdAt).getTime(),
           )
           .map((submission) => ({
             id: submission.id,
@@ -1405,6 +1632,82 @@ export class AppService {
             aiScore: submission.aiScore,
           })),
       },
+      '获取成功',
+    );
+  }
+
+  getTeacherPerformanceSummary(auth?: string) {
+    const user = this.getUserByToken(auth);
+    const myAssignments = this.assignments.filter((item) => item.teacherId === user.id);
+    const relatedSubmissions = this.submissions.filter((item) =>
+      myAssignments.some((assignment) => assignment.id === item.assignmentId),
+    );
+    const scoredSubmissions = relatedSubmissions.filter(
+      (item) => item.teacherScore !== undefined || item.aiScore !== undefined,
+    );
+    const averageScore = scoredSubmissions.length
+      ? Math.round(
+          scoredSubmissions.reduce(
+            (sum, item) => sum + (item.teacherScore ?? item.aiScore ?? 0),
+            0,
+          ) / scoredSubmissions.length,
+        )
+      : 0;
+
+    return this.envelope(
+      {
+        averageScore,
+        reviewCompletionRate: relatedSubmissions.length
+          ? Math.round(
+              (relatedSubmissions.filter((item) => item.status === 'teacher_reviewed').length /
+                relatedSubmissions.length) *
+                100,
+            )
+          : 0,
+        aiReviewCoverage: relatedSubmissions.length
+          ? Math.round(
+              (relatedSubmissions.filter((item) => item.aiScore !== undefined).length /
+                relatedSubmissions.length) *
+                100,
+            )
+          : 0,
+        assignmentCount: myAssignments.length,
+      },
+      '获取成功',
+    );
+  }
+
+  getTeacherQuickActions(auth?: string) {
+    const user = this.getUserByToken(auth);
+    const myAssignments = this.assignments.filter((item) => item.teacherId === user.id);
+    const firstPendingAssignment = myAssignments.find((assignment) =>
+      this.submissions.some(
+        (submission) =>
+          submission.assignmentId === assignment.id &&
+          ['submitted', 'ai_reviewed'].includes(submission.status),
+      ),
+    );
+
+    return this.envelope(
+      [
+        {
+          key: 'classes',
+          title: '查看班级',
+          path: '/teacher/classes',
+        },
+        {
+          key: 'new-assignment',
+          title: '新建作业',
+          path: '/teacher/assignmentsEdit',
+        },
+        {
+          key: 'pending-review',
+          title: '进入待批改',
+          path: firstPendingAssignment
+            ? `/teacher/assignments/detail?id=${firstPendingAssignment.id}&openFirstPending=true`
+            : '/teacher/assignments',
+        },
+      ],
       '获取成功',
     );
   }
@@ -1426,9 +1729,11 @@ export class AppService {
         };
       });
     const mySubs = this.submissions.filter((s) => s.studentId === user.id);
+    const completedSubmissions = mySubs.filter((s) => !s.isDraft).length;
+
     return this.envelope(
       {
-        completedSubmissions: mySubs.filter((s) => !s.isDraft).length,
+        completedSubmissions,
         averageScore: mySubs.length
           ? Math.round(
               mySubs.reduce((sum, s) => sum + (s.teacherScore || s.aiScore || 0), 0) /
@@ -1442,30 +1747,44 @@ export class AppService {
           {
             status: 'draft',
             count: mySubs.filter((s) => s.status === 'draft').length,
-            percentage: 0,
+            percentage: mySubs.length
+              ? Math.round((mySubs.filter((s) => s.status === 'draft').length / mySubs.length) * 100)
+              : 0,
           },
           {
             status: 'submitted',
             count: mySubs.filter((s) => s.status === 'submitted').length,
-            percentage: 0,
+            percentage: mySubs.length
+              ? Math.round((mySubs.filter((s) => s.status === 'submitted').length / mySubs.length) * 100)
+              : 0,
           },
           {
             status: 'ai_reviewed',
             count: mySubs.filter((s) => s.status === 'ai_reviewed').length,
-            percentage: 0,
+            percentage: mySubs.length
+              ? Math.round((mySubs.filter((s) => s.status === 'ai_reviewed').length / mySubs.length) * 100)
+              : 0,
           },
           {
             status: 'teacher_reviewed',
             count: mySubs.filter((s) => s.status === 'teacher_reviewed').length,
-            percentage: 0,
+            percentage: mySubs.length
+              ? Math.round((mySubs.filter((s) => s.status === 'teacher_reviewed').length / mySubs.length) * 100)
+              : 0,
           },
         ],
         performanceAnalysis: {
-          excellentCount: 1,
-          goodCount: 0,
-          passCount: 0,
+          excellentCount: mySubs.filter((s) => (s.teacherScore || s.aiScore || 0) >= 90).length,
+          goodCount: mySubs.filter((s) => {
+            const score = s.teacherScore || s.aiScore || 0;
+            return score >= 80 && score < 90;
+          }).length,
+          passCount: mySubs.filter((s) => {
+            const score = s.teacherScore || s.aiScore || 0;
+            return score >= 60 && score < 80;
+          }).length,
           classRanking: '1/1',
-          perfectScoreCount: 0,
+          perfectScoreCount: mySubs.filter((s) => (s.teacherScore || s.aiScore || 0) === 100).length,
         },
         pendingAssignmentsList: myAssignments.filter((a) => !a.hasSubmitted).map((a) => ({
           assignmentId: a.id,
@@ -1475,16 +1794,366 @@ export class AppService {
           endDate: a.endDate,
           status: a.hasDraft ? 'draft' : 'not_started',
         })),
-        recentSubmissions: mySubs.map((s) => ({
-          id: s.id,
-          assignmentTitle: this.assignments.find((a) => a.id === s.assignmentId)?.title || '',
-          aiScore: s.aiScore,
-          teacherScore: s.teacherScore,
-          submittedAt: s.submittedAt || s.createdAt,
-          status: s.status,
-        })),
+        recentSubmissions: mySubs
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.submittedAt || b.createdAt).getTime() -
+              new Date(a.submittedAt || a.createdAt).getTime(),
+          )
+          .map((s) => ({
+            id: s.id,
+            assignmentTitle: this.assignments.find((a) => a.id === s.assignmentId)?.title || '',
+            aiScore: s.aiScore,
+            teacherScore: s.teacherScore,
+            submittedAt: s.submittedAt || s.createdAt,
+            status: s.status,
+          })),
       },
       '获取成功',
+    );
+  }
+
+  getStudentLearningProgress(auth?: string) {
+    const user = this.getUserByToken(auth);
+    const myAssignments = this.assignments.filter((item) =>
+      item.classes.some((cls) => cls.id === user.classId),
+    );
+    const mySubmissions = this.submissions.filter(
+      (item) => item.studentId === user.id && !item.isDraft,
+    );
+
+    return this.envelope(
+      {
+        totalAssignments: myAssignments.length,
+        completedAssignments: mySubmissions.length,
+        completionRate: myAssignments.length
+          ? Math.round((mySubmissions.length / myAssignments.length) * 100)
+          : 0,
+      },
+      '获取成功',
+    );
+  }
+
+  getStudentAchievements(auth?: string) {
+    const user = this.getUserByToken(auth);
+    const mySubmissions = this.submissions.filter(
+      (item) => item.studentId === user.id && !item.isDraft,
+    );
+
+    return this.envelope(
+      {
+        excellentCount: mySubmissions.filter((item) => (item.teacherScore || item.aiScore || 0) >= 90).length,
+        reviewedCount: mySubmissions.filter((item) =>
+          ['ai_reviewed', 'teacher_reviewed'].includes(item.status),
+        ).length,
+        streakDays: mySubmissions.length ? 1 : 0,
+      },
+      '获取成功',
+    );
+  }
+
+  getStudentStudyRecommendations(auth?: string) {
+    const user = this.getUserByToken(auth);
+    const pendingAssignments = this.assignments.filter(
+      (item) =>
+        item.classes.some((cls) => cls.id === user.classId) &&
+        !this.submissions.some(
+          (submission) =>
+            submission.assignmentId === item.id &&
+            submission.studentId === user.id &&
+            !submission.isDraft,
+        ),
+    );
+
+    return this.envelope(
+      pendingAssignments.slice(0, 3).map((item) => ({
+        assignmentId: item.id,
+        title: item.title,
+        recommendation: '建议优先完成这份作业，并根据标准答案检查易错点。',
+      })),
+      '获取成功',
+    );
+  }
+
+  getUsers(params?: any) {
+    let items = [...this.users];
+
+    if (params?.role) {
+      items = items.filter((item) => item.role === params.role);
+    }
+
+    if (params?.status) {
+      items = items.filter((item) => {
+        const status = item.status === 'locked' ? 'inactive' : item.status;
+        return status === params.status;
+      });
+    }
+
+    if (params?.keyword) {
+      const keyword = String(params.keyword).toLowerCase();
+      items = items.filter(
+        (item) =>
+          item.name.toLowerCase().includes(keyword) ||
+          item.email.toLowerCase().includes(keyword) ||
+          item.username.toLowerCase().includes(keyword) ||
+          item.studentId?.toLowerCase().includes(keyword) ||
+          item.phone?.toLowerCase().includes(keyword),
+      );
+    }
+
+    const page = Number(params?.page || 1);
+    const limit = Number(params?.limit || 10);
+    const start = (page - 1) * limit;
+    const pagedItems = items.slice(start, start + limit).map((item) => ({
+      _id: item.id,
+      username: item.username,
+      email: item.email,
+      name: item.name,
+      role: item.role,
+      status: item.status === 'locked' ? 'inactive' : item.status,
+      studentId: item.studentId,
+      phone: item.phone,
+      avatar: item.avatar,
+      meta: item.meta,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }));
+
+    return this.envelope(
+      {
+        items: pagedItems,
+        total: items.length,
+        page,
+        limit,
+      },
+      '获取成功',
+    );
+  }
+
+  getUser(id: string) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) throw new NotFoundException('用户不存在');
+
+    return this.envelope(
+      {
+        _id: user.id,
+        username: user.username,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status === 'locked' ? 'inactive' : user.status,
+        studentId: user.studentId,
+        phone: user.phone,
+        avatar: user.avatar,
+        meta: user.meta,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      '获取成功',
+    );
+  }
+
+  createUser(body: any) {
+    if (!body.username || !body.email || !body.password || !body.name) {
+      throw new BadRequestException('用户名、姓名、邮箱和密码不能为空');
+    }
+    if (this.users.some((item) => item.username === body.username)) {
+      throw new BadRequestException('用户名已存在');
+    }
+    if (this.users.some((item) => item.email === body.email)) {
+      throw new BadRequestException('邮箱已存在');
+    }
+    if (body.role === 'student' && body.studentId && this.users.some((item) => item.studentId === body.studentId)) {
+      throw new BadRequestException('学号已存在');
+    }
+
+    const now = this.now();
+    const user: User = {
+      id: `u-${Date.now()}`,
+      username: body.username,
+      email: body.email,
+      name: body.name,
+      role: body.role || 'student',
+      status: body.status || 'active',
+      password: body.password,
+      studentId: body.role === 'student' ? body.studentId || `${Math.floor(10000000 + Math.random() * 90000000)}` : undefined,
+      phone: body.phone,
+      avatar: body.avatar,
+      meta: body.meta,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.users.push(user);
+    return this.getUser(user.id);
+  }
+
+  updateUser(id: string, body: any) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) throw new NotFoundException('用户不存在');
+
+    if (body.email && this.users.some((item) => item.id !== id && item.email === body.email)) {
+      throw new BadRequestException('邮箱已存在');
+    }
+    if (body.studentId && this.users.some((item) => item.id !== id && item.studentId === body.studentId)) {
+      throw new BadRequestException('学号已存在');
+    }
+
+    Object.assign(user, {
+      email: body.email ?? user.email,
+      name: body.name ?? user.name,
+      role: body.role ?? user.role,
+      status: body.status ?? user.status,
+      studentId: body.role === 'student' || (!body.role && user.role === 'student') ? body.studentId ?? user.studentId : undefined,
+      phone: body.phone ?? user.phone,
+      avatar: body.avatar ?? user.avatar,
+      meta: body.meta ?? user.meta,
+      updatedAt: this.now(),
+    });
+
+    return this.getUser(id);
+  }
+
+  updateProfile(auth: string | undefined, body: any) {
+    const user = this.getUserByToken(auth);
+    if (body.email && this.users.some((item) => item.id !== user.id && item.email === body.email)) {
+      throw new BadRequestException('邮箱已存在');
+    }
+
+    Object.assign(user, {
+      email: body.email ?? user.email,
+      name: body.name ?? user.name,
+      phone: body.phone ?? user.phone,
+      avatar: body.avatar ?? user.avatar,
+      meta: body.meta ?? user.meta,
+      updatedAt: this.now(),
+    });
+
+    return this.getUser(user.id);
+  }
+
+  updatePassword(auth: string | undefined, body: any) {
+    const user = this.getUserByToken(auth);
+    if (!body?.currentPassword || user.password !== body.currentPassword) {
+      throw new BadRequestException('当前密码错误');
+    }
+    if (!body?.newPassword || String(body.newPassword).length < 6) {
+      throw new BadRequestException('新密码长度不能少于6位');
+    }
+
+    user.password = body.newPassword;
+    user.mustChangePassword = false;
+    user.updatedAt = this.now();
+    return this.envelope({ success: true }, '修改成功');
+  }
+
+  updateUserPassword(id: string, body: any) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) throw new NotFoundException('用户不存在');
+    if (!body?.newPassword || String(body.newPassword).length < 6) {
+      throw new BadRequestException('新密码长度不能少于6位');
+    }
+
+    user.password = body.newPassword;
+    user.updatedAt = this.now();
+    return this.envelope({ success: true, message: '修改成功' }, '修改成功');
+  }
+
+  resetUserPassword(id: string, body?: any) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) throw new NotFoundException('用户不存在');
+
+    const newPassword = body?.newPassword || '123456';
+    user.password = newPassword;
+    user.mustChangePassword = true;
+    user.updatedAt = this.now();
+    return this.envelope({ success: true, id, newPassword }, '重置成功');
+  }
+
+  deleteUser(id: string) {
+    const index = this.users.findIndex((item) => item.id === id);
+    if (index < 0) throw new NotFoundException('用户不存在');
+
+    const user = this.users[index];
+    if (user.role === 'superadmin') {
+      throw new BadRequestException('超级管理员不能删除');
+    }
+
+    this.users.splice(index, 1);
+
+    if (user.classId) {
+      const classItem = this.classes.find((item) => item._id === user.classId);
+      if (classItem && classItem.studentCount > 0) classItem.studentCount -= 1;
+    }
+
+    for (let i = this.classMembers.length - 1; i >= 0; i -= 1) {
+      if (this.classMembers[i].studentId === id) {
+        this.classMembers.splice(i, 1);
+      }
+    }
+
+    return this.envelope({ success: true, id }, '删除成功');
+  }
+
+  importUsers(body: any[]) {
+    const items = Array.isArray(body) ? body : [];
+    const success: any[] = [];
+    const failed: Array<{ index: number; reason: string }> = [];
+
+    items.forEach((item, index) => {
+      try {
+        this.createUser({
+          username: item.username || item.email || `user${Date.now()}${index}`,
+          email: item.email,
+          password: item.password || '123456',
+          name: item.name || item.username || `用户${index + 1}`,
+          role: item.role || 'student',
+          studentId: item.studentId,
+          phone: item.phone,
+          status: item.status || 'active',
+        });
+        success.push(item);
+      } catch (error: any) {
+        failed.push({ index, reason: error?.message || '导入失败' });
+      }
+    });
+
+    return this.envelope(
+      {
+        success: failed.length === 0,
+        total: items.length,
+        successCount: success.length,
+        failureCount: failed.length,
+        failures: failed,
+      },
+      '导入成功',
+    );
+  }
+
+  deleteUsers(body: any) {
+    const userIds = Array.isArray(body?.userIds) ? body.userIds : [];
+    const failures: Array<{ userId: string; reason: string }> = [];
+    let successCount = 0;
+
+    userIds.forEach((userId) => {
+      try {
+        this.deleteUser(userId);
+        successCount += 1;
+      } catch (error: any) {
+        failures.push({ userId, reason: error?.message || '删除失败' });
+      }
+    });
+
+    return this.envelope(
+      {
+        success: failures.length === 0,
+        total: userIds.length,
+        successCount,
+        failureCount: failures.length,
+        failures,
+      },
+      '删除成功',
     );
   }
 

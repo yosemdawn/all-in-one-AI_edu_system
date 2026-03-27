@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
 import { ElMessage } from "element-plus";
@@ -288,6 +288,8 @@ const handleForgotPassword = () => {
 };
 
 const loadAvailableClasses = async () => {
+  if (classLoading.value || availableClasses.value.length > 0) return;
+
   classLoading.value = true;
   try {
     const response = await getClassList({ page: 1, limit: 100, status: "active" });
@@ -298,6 +300,12 @@ const loadAvailableClasses = async () => {
     classLoading.value = false;
   }
 };
+
+watch(isRegister, (value) => {
+  if (value) {
+    loadAvailableClasses();
+  }
+});
 
 // 提交表单
 const submitForm = async () => {
@@ -358,10 +366,6 @@ const submitForm = async () => {
   });
 };
 
-// 检查当前用户是否已登录
-onMounted(() => {
-  loadAvailableClasses();
-});
 </script>
 
 <style scoped>

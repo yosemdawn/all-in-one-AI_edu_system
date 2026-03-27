@@ -36,6 +36,7 @@
         <assignment-detail-table
           :submission-data="submissionList"
           :assignment-id="assignmentId"
+          :target-submission-id="targetSubmissionId"
           :auto-open-first-pending="openFirstPending"
           @refresh="handleRefresh"
           @auto-opened="clearAutoOpenParam"
@@ -90,6 +91,9 @@ const router = useRouter();
 
 // 作业ID和其他查询参数
 const assignmentId = computed(() => route.query.id as string);
+const targetSubmissionId = computed(() =>
+  route.query.submissionId ? String(route.query.submissionId) : ""
+);
 // 作业是否自动打开第一个待批改作业
 const openFirstPending = computed(
   () => route.query.openFirstPending === "true"
@@ -191,12 +195,13 @@ const handleRefresh = () => {
 
 // 清除自动打开参数（避免后续操作重复触发）
 const clearAutoOpenParam = () => {
-  if (route.query.openFirstPending) {
+  if (route.query.openFirstPending || route.query.submissionId) {
     router.replace({
       path: route.path,
       query: {
         ...route.query,
         openFirstPending: undefined,
+        submissionId: undefined,
       },
     });
   }

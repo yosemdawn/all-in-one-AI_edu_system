@@ -69,6 +69,17 @@ export const constantRoutes: Array<RouteRecordRaw> = [
           roles: ["teacher"],
         },
       },
+      {
+        path: "classes-detail",
+        name: "TeacherClassDetail",
+        component: () => import("@/views/teacher/classes/detail/index.vue"),
+        meta: {
+          title: "班级详情",
+          requiresAuth: true,
+          roles: ["teacher"],
+          hidden: true,
+        },
+      },
     ],
   },
   {

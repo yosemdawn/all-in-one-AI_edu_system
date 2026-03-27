@@ -5,8 +5,13 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false
+  },
   plugins: [
     vue(),
     AutoImport({
