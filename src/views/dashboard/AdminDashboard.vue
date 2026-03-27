@@ -85,55 +85,12 @@
         <h2 class="section-title">🤖 AI模型状态监控</h2>
         <div class="model-status-summary">
           <el-tag :type="allModelsOnline ? 'success' : 'warning'" size="small">
-            {{ allModelsOnline ? "✅ 所有模型正常" : "⚠️ 部分模型异常" }}
+            {{ allModelsOnline ? "✅ 豆包模型正常" : "⚠️ 豆包模型异常" }}
           </el-tag>
         </div>
       </div>
 
       <div class="ai-models-grid">
-        <!-- DeepSeek 模型卡片 -->
-        <div class="ai-model-card" v-if="aiModelStats?.deepseek">
-          <div class="model-header">
-            <div class="model-info">
-              <h3 class="model-name">🧠 DeepSeek</h3>
-              <el-tag
-                :type="aiModelStats.deepseek.isOnline ? 'success' : 'danger'"
-                size="small"
-              >
-                {{ aiModelStats.deepseek.isOnline ? "在线" : "离线" }}
-              </el-tag>
-            </div>
-            <div class="model-balance">
-              <span class="balance-label">余额</span>
-              <span class="balance-value"
-                >{{ aiModelStats.deepseek.balance
-                }}{{ aiModelStats.deepseek.balanceCurrency || "" }}</span
-              >
-            </div>
-          </div>
-          <div class="model-stats">
-            <div class="stat-item">
-              <div class="stat-label">今日使用</div>
-              <div class="stat-value">
-                {{ aiModelStats.deepseek.todayUsage }}次
-              </div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">总使用量</div>
-              <div class="stat-value">
-                {{ formatNumber(aiModelStats.deepseek.totalUsage) }}次
-              </div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">总Token</div>
-              <div class="stat-value">
-                {{ formatNumber(aiModelStats.deepseek.totalTokens) }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 豆包模型卡片 -->
         <div class="ai-model-card" v-if="aiModelStats?.doubao">
           <div class="model-header">
             <div class="model-info">

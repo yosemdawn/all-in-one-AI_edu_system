@@ -48,15 +48,6 @@ export interface StatusDistribution {
 }
 
 export interface AiModelStatsResponse {
-  deepseek?: {
-    isOnline: boolean;
-    balance: string;
-    balanceCurrency?: string;
-    totalUsage: number;
-    totalTokens: number;
-    todayUsage: number;
-    lastBalanceCheck?: string;
-  };
   doubao?: {
     isOnline: boolean;
     balance: number;

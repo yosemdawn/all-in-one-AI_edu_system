@@ -49,7 +49,6 @@
           style="width: 140px"
         >
           <el-option label="全部" value="" />
-          <el-option label="DeepSeek" value="deepseek" />
           <el-option label="豆包" value="doubao" />
         </el-select>
       </el-form-item>

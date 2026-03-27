@@ -184,7 +184,7 @@ const ruleData = reactive({
 // 获取模型类型显示名称
 const getModelTypeName = (modelType) => {
   const typeMap = {
-    deepseek: "DeepSeek",
+    doubao: "豆包",
   };
   return typeMap[modelType] || modelType;
 };
@@ -192,7 +192,7 @@ const getModelTypeName = (modelType) => {
 // 获取模型类型颜色
 const getModelTypeColor = (modelType) => {
   const colorMap = {
-    deepseek: "primary",
+    doubao: "primary",
   };
   return colorMap[modelType] || "primary";
 };

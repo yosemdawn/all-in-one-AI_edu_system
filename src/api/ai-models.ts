@@ -2,10 +2,10 @@ import request from "@/utils/request";
 
 // AI模型接口
 export interface AiModel {
-  code: string; // 'deepseek' | 'doubao'
-  name: string; // 'DeepSeek' | '豆包'
-  provider: string; // 'DeepSeek' | 'ByteDance'
-  modelName: string; // 'deepseek-chat' | 'doubao-pro-32k-240615'
+  code: string; // 'doubao'
+  name: string; // '豆包'
+  provider: string; // 'ByteDance'
+  modelName: string; // 'doubao-seed-2-0-lite-260215'
   baseUrl: string; // API地址（只读）
   apiKey: string; // API密钥（可编辑）
   accessKey?: string; // 访问密钥（豆包必填）
