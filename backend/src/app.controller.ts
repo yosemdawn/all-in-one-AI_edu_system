@@ -254,13 +254,13 @@ export class AppController {
   }
 
   @Get('classes/list')
-  getClasses(@Query() query: any) {
-    return this.appService.getClasses(query);
+  getClasses(@Headers('authorization') authorization: string | undefined, @Query() query: any) {
+    return this.appService.getClasses(authorization, query);
   }
 
   @Get('classes/:id')
-  getClass(@Param('id') id: string) {
-    return this.appService.getClass(id);
+  getClass(@Headers('authorization') authorization: string | undefined, @Param('id') id: string) {
+    return this.appService.getClass(authorization, id);
   }
 
   @Post('classes/create')
@@ -344,13 +344,19 @@ export class AppController {
   }
 
   @Get('student/assignments')
-  getStudentAssignments(@Headers('authorization') authorization: string | undefined) {
-    return this.appService.getStudentAssignments(authorization);
+  getStudentAssignments(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: any,
+  ) {
+    return this.appService.getStudentAssignments(authorization, query);
   }
 
   @Get('student/assignments/statistics')
-  getStudentAssignmentStatistics(@Headers('authorization') authorization: string | undefined) {
-    return this.appService.getStudentAssignmentStatistics(authorization);
+  getStudentAssignmentStatistics(
+    @Headers('authorization') authorization: string | undefined,
+    @Query('classId') classId?: string,
+  ) {
+    return this.appService.getStudentAssignmentStatistics(authorization, classId);
   }
 
   @Get('student/assignments/:assignmentId')
@@ -376,8 +382,8 @@ export class AppController {
   }
 
   @Post('students/submissions/delete')
-  deleteSubmission(@Body() body: any) {
-    return this.appService.deleteSubmission(body);
+  deleteSubmission(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.deleteSubmission(authorization, body);
   }
 
   @Get('teachers/submissions/list')
