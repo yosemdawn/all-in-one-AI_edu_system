@@ -622,8 +622,19 @@ export class AppService {
     return this.envelope([...this.getMenusByRole('superadmin')], '获取成功');
   }
 
-  getClasses(params?: any) {
+  getClasses(auth?: string, params?: any) {
+    const currentUser = auth ? this.getUserByToken(auth) : null;
     let items = [...this.classes];
+
+    if (currentUser?.role === 'student') {
+      const joinedClassIds = new Set(
+        this.classMembers
+          .filter((member) => member.studentId === currentUser.id)
+          .map((member) => member.classId),
+      );
+      items = items.filter((item) => joinedClassIds.has(item._id));
+    }
+
     if (params?.status) items = items.filter((item) => item.status === params.status);
     if (params?.search)
       items = items.filter((item) => item.name.includes(params.search));
@@ -638,9 +649,18 @@ export class AppService {
     );
   }
 
-  getClass(id: string) {
+  getClass(auth: string | undefined, id: string) {
+    const currentUser = auth ? this.getUserByToken(auth) : null;
     const item = this.classes.find((cls) => cls._id === id);
     if (!item) throw new NotFoundException('班级不存在');
+
+    if (currentUser?.role === 'student') {
+      const joined = this.classMembers.some(
+        (member) => member.classId === id && member.studentId === currentUser.id,
+      );
+      if (!joined) throw new UnauthorizedException('无权查看该班级');
+    }
+
     return this.envelope(item, '获取成功');
   }
 
@@ -740,6 +760,21 @@ export class AppService {
     const user = this.getUserByToken(auth);
     const classItem = this.classes.find((item) => item.code === code);
     if (!classItem) throw new NotFoundException('班级邀请码不存在');
+
+    const exists = this.classMembers.find(
+      (member) => member.classId === classItem._id && member.studentId === user.id,
+    );
+    if (exists) {
+      if (exists.status !== 'active') {
+        exists.status = 'active';
+        exists.joinMethod = 'code';
+        exists.joinedAt = this.now();
+      }
+      user.classId = classItem._id;
+      user.className = classItem.name;
+      return this.envelope({ success: true, message: '你已在该班级中' }, '加入成功');
+    }
+
     user.classId = classItem._id;
     user.className = classItem.name;
     this.classMembers.push({
@@ -772,7 +807,26 @@ export class AppService {
     const index = this.classMembers.findIndex(
       (item) => item.classId === classId && item.studentId === user.id,
     );
-    if (index >= 0) this.classMembers.splice(index, 1);
+    if (index < 0) {
+      throw new NotFoundException('你当前不在该班级中');
+    }
+
+    this.classMembers.splice(index, 1);
+
+    const classItem = this.classes.find((item) => item._id === classId);
+    if (classItem && classItem.studentCount > 0) {
+      classItem.studentCount -= 1;
+      classItem.updatedAt = this.now();
+    }
+
+    const remainingMembership = this.classMembers.find(
+      (item) => item.studentId === user.id && item.status === 'active',
+    );
+    user.classId = remainingMembership?.classId;
+    user.className = remainingMembership
+      ? this.classes.find((item) => item._id === remainingMembership.classId)?.name
+      : undefined;
+
     return this.envelope({ success: true, message: '已退出班级' }, '退出成功');
   }
 
@@ -1024,66 +1078,180 @@ export class AppService {
     return this.envelope(null, '删除成功');
   }
 
-  getStudentAssignments(auth?: string) {
+  getStudentAssignments(auth?: string, params?: any) {
     const user = this.getUserByToken(auth);
-    const items = this.assignments
-      .filter((item) => item.classes.some((cls) => cls.id === user.classId))
+    const memberClassIds = this.classMembers
+      .filter((member) => member.studentId === user.id && member.status === 'active')
+      .map((member) => member.classId);
+    const requestedClassId = params?.classId;
+    const visibleClassIds = requestedClassId
+      ? memberClassIds.filter((classId) => classId === requestedClassId)
+      : memberClassIds;
+
+    let items = this.assignments
+      .filter((item) => item.classes.some((cls) => visibleClassIds.includes(cls.id)))
       .map((item) => {
+        const matchedClass = item.classes.find((cls) => visibleClassIds.includes(cls.id));
         const submission = this.submissions.find(
-          (s) => s.assignmentId === item.id && s.studentId === user.id,
+          (s) =>
+            s.assignmentId === item.id &&
+            s.studentId === user.id &&
+            (!matchedClass || s.classId === matchedClass.id),
         );
+        const hasSubmitted = !!submission && !submission.isDraft;
+        const hasDraft = !!submission && submission.isDraft;
+        const isExpired = new Date(item.endDate).getTime() < Date.now() || item.status === 'terminated';
+        const businessStatus = hasDraft
+          ? 'draft'
+          : hasSubmitted
+            ? 'completed'
+            : isExpired
+              ? 'expired'
+              : 'todo';
+
         return {
           ...item,
-          classId: user.classId,
-          className: user.className,
-          hasSubmitted: !!submission && !submission.isDraft,
-          hasDraft: !!submission && submission.isDraft,
+          _id: item.id,
+          classId: matchedClass?.id || user.classId,
+          className: matchedClass?.name || user.className,
+          hasSubmitted,
+          hasDraft,
           submissionStatus: submission?.status,
           submissionId: submission?.id,
-          canSubmit: item.status === 'published',
+          canSubmit: item.status === 'published' && !isExpired,
+          isExpired,
+          businessStatus,
+          hasSubmittedInOtherClass: false,
+          otherClassSubmission: null,
         };
       });
-    return this.envelope(items, '获取成功');
+
+    if (params?.search) {
+      items = items.filter((item) => item.title.includes(params.search));
+    }
+    if (params?.businessStatus) {
+      items = items.filter((item) => item.businessStatus === params.businessStatus);
+    }
+    if (params?.status) {
+      items = items.filter((item) => item.status === params.status);
+    }
+
+    const sortField = params?.sort || 'startDate';
+    const sortOrder = params?.order === 'asc' ? 1 : -1;
+    items.sort((a, b) => {
+      const valueA =
+        sortField === 'createdAt'
+          ? new Date(a.createdAt).getTime()
+          : sortField === 'endDate'
+            ? new Date(a.endDate).getTime()
+            : new Date(a.startDate).getTime();
+      const valueB =
+        sortField === 'createdAt'
+          ? new Date(b.createdAt).getTime()
+          : sortField === 'endDate'
+            ? new Date(b.endDate).getTime()
+            : new Date(b.startDate).getTime();
+      return (valueA - valueB) * sortOrder;
+    });
+
+    const page = Number(params?.page || 1);
+    const pageSize = Number(params?.pageSize || 10);
+    const start = (page - 1) * pageSize;
+    const pagedItems = items.slice(start, start + pageSize);
+
+    return this.envelope(
+      {
+        items: pagedItems,
+        total: items.length,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
+      },
+      '获取成功',
+    );
   }
 
   getStudentAssignment(auth: string | undefined, assignmentId: string, classId?: string) {
     const user = this.getUserByToken(auth);
     const assignment = this.assignments.find((item) => item.id === assignmentId);
     if (!assignment) throw new NotFoundException('作业不存在');
+
+    const memberClassIds = this.classMembers
+      .filter((member) => member.studentId === user.id && member.status === 'active')
+      .map((member) => member.classId);
+    const targetClassId = classId || memberClassIds.find((id) => assignment.classes.some((cls) => cls.id === id));
+    if (!targetClassId || !assignment.classes.some((cls) => cls.id === targetClassId)) {
+      throw new UnauthorizedException('无权查看该作业');
+    }
+
+    const classInfo = assignment.classes.find((cls) => cls.id === targetClassId);
     const submission = this.submissions.find(
-      (s) => s.assignmentId === assignmentId && s.studentId === user.id,
+      (s) => s.assignmentId === assignmentId && s.studentId === user.id && s.classId === targetClassId,
     );
+    const isExpired = new Date(assignment.endDate).getTime() < Date.now() || assignment.status === 'terminated';
+
     return this.envelope(
       {
         ...assignment,
-        classId: classId || user.classId,
-        className: user.className,
+        _id: assignment.id,
+        classId: targetClassId,
+        className: classInfo?.name,
+        dueDate: assignment.endDate,
+        deadline: assignment.endDate,
+        subject: classInfo?.name || '综合作业',
+        totalPoints: 100,
+        attachments: [],
         hasSubmitted: !!submission && !submission.isDraft,
         hasDraft: !!submission && submission.isDraft,
         submissionStatus: submission?.status,
         submissionId: submission?.id,
-        canSubmit: assignment.status === 'published',
+        canSubmit: assignment.status === 'published' && !isExpired,
+        isExpired,
       },
       '获取成功',
     );
   }
 
-  getStudentAssignmentStatistics(auth?: string) {
+  getStudentAssignmentStatistics(auth?: string, classId?: string) {
     const user = this.getUserByToken(auth);
+    const memberClassIds = this.classMembers
+      .filter((member) => member.studentId === user.id && member.status === 'active')
+      .map((member) => member.classId);
+    const visibleClassIds = classId ? memberClassIds.filter((id) => id === classId) : memberClassIds;
+
     const assignments = this.assignments.filter((item) =>
-      item.classes.some((cls) => cls.id === user.classId),
+      item.classes.some((cls) => visibleClassIds.includes(cls.id)),
     );
-    const mySubmissions = this.submissions.filter((s) => s.studentId === user.id && !s.isDraft);
-    const reviewedCount = mySubmissions.filter((s) =>
-      ['ai_reviewed', 'teacher_reviewed'].includes(s.status),
+    const mySubmissions = this.submissions.filter(
+      (s) => s.studentId === user.id && visibleClassIds.includes(s.classId),
+    );
+
+    const submittedCount = mySubmissions.filter((s) => !s.isDraft).length;
+    const draftCount = mySubmissions.filter((s) => s.isDraft).length;
+    const reviewedCount = mySubmissions.filter((s) => s.status === 'teacher_reviewed').length;
+    const expiredCount = assignments.filter(
+      (item) => new Date(item.endDate).getTime() < Date.now() || item.status === 'terminated',
     ).length;
+    const todoCount = assignments.filter((item) => {
+      const submission = mySubmissions.find(
+        (s) => s.assignmentId === item.id && !s.isDraft,
+      );
+      const isExpired = new Date(item.endDate).getTime() < Date.now() || item.status === 'terminated';
+      return !submission && !isExpired;
+    }).length;
 
     return this.envelope(
       {
+        totalAssignments: assignments.length,
+        submittedCount,
+        todoCount,
+        draftCount,
+        expiredCount,
+        reviewedCount,
         total: assignments.length,
-        pending: Math.max(assignments.length - reviewedCount, 0),
+        pending: todoCount,
         reviewed: reviewedCount,
-        submitted: mySubmissions.length,
+        submitted: submittedCount,
       },
       '获取成功',
     );
@@ -1259,9 +1427,21 @@ export class AppService {
     );
   }
 
-  deleteSubmission(body: any) {
-    const index = this.submissions.findIndex((item) => item.id === body.submissionId);
-    if (index >= 0) this.submissions.splice(index, 1);
+  deleteSubmission(auth: string | undefined, body: any) {
+    const user = this.getUserByToken(auth);
+    const index = this.submissions.findIndex(
+      (item) => item.id === body.submissionId && item.studentId === user.id,
+    );
+    if (index < 0) {
+      throw new NotFoundException('提交记录不存在');
+    }
+
+    const submission = this.submissions[index];
+    if (!submission.isDraft || submission.status !== 'draft') {
+      throw new BadRequestException('只有草稿可以删除');
+    }
+
+    this.submissions.splice(index, 1);
     return this.envelope(
       {
         success: true,
