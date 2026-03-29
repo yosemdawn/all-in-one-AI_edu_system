@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --prefix \"e:/我的开发/1/backend\" install)"
+    ]
+  }
+}

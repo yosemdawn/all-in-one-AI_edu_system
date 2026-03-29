@@ -10,11 +10,40 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { AssignmentQueryDto } from './assignments/dto/assignment-query.dto';
+import { CreateAssignmentDto } from './assignments/dto/create-assignment.dto';
+import { UpdateAssignmentStatusDto } from './assignments/dto/update-assignment-status.dto';
+import { UpdateAssignmentDto } from './assignments/dto/update-assignment.dto';
+import { AssignmentsService } from './assignments/assignments.service';
+import { AuthService } from './auth/auth.service';
+import { ChangePasswordDto } from './auth/dto/change-password.dto';
+import { LoginDto } from './auth/dto/login.dto';
+import { RefreshTokenDto } from './auth/dto/refresh-token.dto';
+import { RegisterDto } from './auth/dto/register.dto';
+import { AddStudentsDto } from './classes/dto/add-students.dto';
+import { ClassListQueryDto } from './classes/dto/class-list-query.dto';
+import { ClassStudentsQueryDto } from './classes/dto/class-students-query.dto';
+import { CreateClassDto } from './classes/dto/create-class.dto';
+import { JoinClassDto } from './classes/dto/join-class.dto';
+import { UpdateClassDto } from './classes/dto/update-class.dto';
+import { UpdateStudentStatusDto } from './classes/dto/update-student-status.dto';
+import { ClassesService } from './classes/classes.service';
 import { AppService } from './app.service';
+import { DeleteSubmissionDto } from './submissions/dto/delete-submission.dto';
+import { SubmissionQueryDto } from './submissions/dto/submission-query.dto';
+import { SubmitAssignmentDto } from './submissions/dto/submit-assignment.dto';
+import { TeacherReviewDto } from './submissions/dto/teacher-review.dto';
+import { SubmissionsService } from './submissions/submissions.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly authService: AuthService,
+    private readonly classesService: ClassesService,
+    private readonly assignmentsService: AssignmentsService,
+    private readonly submissionsService: SubmissionsService,
+  ) {}
 
   @Get()
   getHello() {
@@ -22,14 +51,15 @@ export class AppController {
   }
 
   @Post('v1/auth/login')
-  login(@Body() body: any) {
-    return this.appService.login(body);
+  login(@Body() body: LoginDto) {
+    return this.authService.login(body);
   }
 
   @Post('auth/login')
   loginCompat(@Body() body: any) {
-    return this.appService.login({
-      usernameOrEmailOrStudentId: body.usernameOrEmailOrStudentId || body.email || body.username,
+    return this.authService.login({
+      usernameOrEmailOrStudentId:
+        body.usernameOrEmailOrStudentId || body.email || body.username,
       password: body.password,
       rememberMe: body.rememberMe,
     });
@@ -37,47 +67,53 @@ export class AppController {
 
   @Post('v1/auth/logout')
   logout() {
-    return this.appService.logout();
+    return this.authService.logout();
   }
 
   @Post('v1/auth/refresh-token')
-  refresh(@Body() body: any) {
-    return this.appService.refresh(body);
+  refresh(@Body() body: RefreshTokenDto) {
+    return this.authService.refresh(body);
   }
 
   @Get('v1/auth/profile')
   profile(@Headers('authorization') authorization?: string) {
-    return this.appService.profile(authorization);
+    return this.authService.profile(authorization);
   }
 
   @Put('v1/auth/password')
-  changePassword() {
-    return this.appService.changePassword();
+  changePassword(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(authorization, body);
   }
 
   @Put('v1/auth/first-password-change')
-  firstChangePassword() {
-    return this.appService.changePassword();
+  firstChangePassword(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.firstChangePassword(authorization, body);
   }
 
   @Post('v1/auth/forgot-password')
   forgotPassword() {
-    return this.appService.envelope({ success: true }, '邮件已发送');
+    return this.authService.forgotPassword();
   }
 
   @Post('v1/auth/reset-password')
   resetPassword() {
-    return this.appService.envelope({ success: true }, '重置成功');
+    return this.authService.resetPassword();
   }
 
   @Post('v1/auth/register')
-  register(@Body() body: any) {
-    return this.appService.register(body);
+  register(@Body() body: RegisterDto) {
+    return this.authService.register(body);
   }
 
   @Post('auth/register')
   registerCompat(@Body() body: any) {
-    return this.appService.register({
+    return this.authService.register({
       username: body.username || body.email || body.name,
       email: body.email,
       password: body.password,
@@ -254,109 +290,121 @@ export class AppController {
   }
 
   @Get('classes/list')
-  getClasses(@Headers('authorization') authorization: string | undefined, @Query() query: any) {
-    return this.appService.getClasses(authorization, query);
+  getClasses(@Query() query: ClassListQueryDto) {
+    return this.classesService.getClasses(query);
   }
 
   @Get('classes/:id')
-  getClass(@Headers('authorization') authorization: string | undefined, @Param('id') id: string) {
-    return this.appService.getClass(authorization, id);
+  getClass(@Param('id') id: string) {
+    return this.classesService.getClass(id);
   }
 
   @Post('classes/create')
-  createClass(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.createClass(authorization, body);
+  createClass(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: CreateClassDto,
+  ) {
+    return this.classesService.createClass(authorization, body);
   }
 
   @Post('classes/:id/edit')
-  editClass(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateClass(id, body);
+  editClass(@Param('id') id: string, @Body() body: UpdateClassDto) {
+    return this.classesService.updateClass(id, body);
   }
 
   @Post('classes/:id/close')
   closeClass(@Param('id') id: string) {
-    return this.appService.closeClass(id);
+    return this.classesService.closeClass(id);
   }
 
   @Post('classes/:id/regenerate-code')
   regenerateCode(@Param('id') id: string) {
-    return this.appService.regenerateCode(id);
+    return this.classesService.regenerateCode(id);
   }
 
   @Get('classes/:id/students')
-  getClassStudents(@Param('id') id: string, @Query() query: any) {
-    return this.appService.getClassStudents(id, query);
+  getClassStudents(@Param('id') id: string, @Query() query: ClassStudentsQueryDto) {
+    return this.classesService.getClassStudents(id, query);
   }
 
   @Post('classes/:id/students')
-  addStudents(@Param('id') id: string, @Body() body: any) {
-    return this.appService.addStudents(id, body);
+  addStudents(@Param('id') id: string, @Body() body: AddStudentsDto) {
+    return this.classesService.addStudents(id, body);
   }
 
   @Post('classes/join')
-  joinClass(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.joinClass(authorization, body.code);
+  joinClass(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: JoinClassDto,
+  ) {
+    return this.classesService.joinClass(authorization, body);
   }
 
   @Post('classes/:id/students/status')
-  updateStudentStatus(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateStudentStatus(id, body);
+  updateStudentStatus(@Param('id') id: string, @Body() body: UpdateStudentStatusDto) {
+    return this.classesService.updateStudentStatus(id, body);
   }
 
   @Post('classes/:id/leave')
-  leaveClass(@Headers('authorization') authorization: string | undefined, @Param('id') id: string) {
-    return this.appService.leaveClass(authorization, id);
+  leaveClass(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.classesService.leaveClass(authorization, id);
   }
 
   @Get('teacher/assignments')
-  getTeacherAssignments(@Query() query: any) {
-    return this.appService.listAssignments(query);
+  getTeacherAssignments(@Query() query: AssignmentQueryDto) {
+    return this.assignmentsService.listAssignments(query);
   }
 
   @Get('teacher/assignments/:id')
   getTeacherAssignment(@Param('id') id: string) {
-    return this.appService.getAssignment(id);
+    return this.assignmentsService.getAssignment(id);
   }
 
   @Get('teacher/assignments/:id/students')
   getTeacherAssignmentStudents(@Param('id') id: string, @Query() query: any) {
-    return this.appService.getAssignmentStudents(id, query);
+    return this.assignmentsService.getAssignmentStudents(id, query);
   }
 
   @Post('teacher/assignments')
-  createTeacherAssignment(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.createAssignment(authorization, body);
+  createTeacherAssignment(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: CreateAssignmentDto,
+  ) {
+    return this.assignmentsService.createAssignment(authorization, body);
   }
 
   @Post('teacher/assignments/:id/update')
-  updateTeacherAssignment(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateAssignment(id, body);
+  updateTeacherAssignment(@Param('id') id: string, @Body() body: UpdateAssignmentDto) {
+    return this.assignmentsService.updateAssignment(id, body);
   }
 
   @Post('teacher/assignments/:id/status')
-  updateTeacherAssignmentStatus(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateAssignmentStatus(id, body);
+  updateTeacherAssignmentStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateAssignmentStatusDto,
+  ) {
+    return this.assignmentsService.updateAssignmentStatus(id, body);
   }
 
   @Post('teacher/assignments/:id/delete')
   deleteTeacherAssignment(@Param('id') id: string) {
-    return this.appService.deleteAssignment(id);
+    return this.assignmentsService.deleteAssignment(id);
   }
 
   @Get('student/assignments')
   getStudentAssignments(
     @Headers('authorization') authorization: string | undefined,
-    @Query() query: any,
+    @Query() query: AssignmentQueryDto,
   ) {
-    return this.appService.getStudentAssignments(authorization, query);
+    return this.assignmentsService.getStudentAssignments(authorization, query);
   }
 
   @Get('student/assignments/statistics')
-  getStudentAssignmentStatistics(
-    @Headers('authorization') authorization: string | undefined,
-    @Query('classId') classId?: string,
-  ) {
-    return this.appService.getStudentAssignmentStatistics(authorization, classId);
+  getStudentAssignmentStatistics(@Headers('authorization') authorization: string | undefined) {
+    return this.assignmentsService.getStudentAssignmentStatistics(authorization);
   }
 
   @Get('student/assignments/:assignmentId')
@@ -365,12 +413,15 @@ export class AppController {
     @Param('assignmentId') assignmentId: string,
     @Query('classId') classId?: string,
   ) {
-    return this.appService.getStudentAssignment(authorization, assignmentId, classId);
+    return this.assignmentsService.getStudentAssignment(authorization, assignmentId, classId);
   }
 
   @Post('students/submissions/submit')
-  submit(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.submit(authorization, body);
+  submit(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: SubmitAssignmentDto,
+  ) {
+    return this.submissionsService.submit(authorization, body);
   }
 
   @Get('students/submissions/my/:assignmentId')
@@ -378,17 +429,20 @@ export class AppController {
     @Headers('authorization') authorization: string | undefined,
     @Param('assignmentId') assignmentId: string,
   ) {
-    return this.appService.getMySubmission(authorization, assignmentId);
+    return this.submissionsService.getMySubmission(authorization, assignmentId);
   }
 
   @Post('students/submissions/delete')
-  deleteSubmission(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.deleteSubmission(authorization, body);
+  deleteSubmission(@Body() body: DeleteSubmissionDto) {
+    return this.submissionsService.deleteSubmission(body);
   }
 
   @Get('teachers/submissions/list')
-  getSubmissionList(@Headers('authorization') authorization: string | undefined, @Query() query: any) {
-    return this.appService.getSubmissionList(authorization, query);
+  getSubmissionList(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: SubmissionQueryDto,
+  ) {
+    return this.submissionsService.getSubmissionList(authorization, query);
   }
 
   @Get('teachers/submissions/detail/:submissionId')
@@ -396,12 +450,15 @@ export class AppController {
     @Headers('authorization') authorization: string | undefined,
     @Param('submissionId') submissionId: string,
   ) {
-    return this.appService.getSubmissionDetail(authorization, submissionId);
+    return this.submissionsService.getSubmissionDetail(authorization, submissionId);
   }
 
   @Post('teachers/submissions/review')
-  teacherReview(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.teacherReview(authorization, body);
+  teacherReview(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: TeacherReviewDto,
+  ) {
+    return this.submissionsService.teacherReview(authorization, body);
   }
 
   @Get('v1/ai-rules')
