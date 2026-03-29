@@ -5,7 +5,9 @@
       "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen | Select-Object -ExpandProperty OwningProcess\")",
       "Bash(git *)",
       "Bash(powershell.exe *)",
-      "Bash(curl -s \"http://localhost:3000/api/users?role=student&page=1&limit=10\")"
+      "Bash(curl -s \"http://localhost:3000/api/users?role=student&page=1&limit=10\")",
+      "Bash(npm --prefix \"e:/我的开发/1/backend\" run build)",
+      "Bash(npm --prefix \"e:/我的开发/1/backend\" test -- --runInBand)"
     ]
   }
 }
