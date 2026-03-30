@@ -34,6 +34,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",
     "ioredis": "^5.10.1",
+    "mongodb-memory-server": "^11.0.1",
     "mongoose": "^9.3.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Param,
-  Patch,
-  Post,
-  Put,
-  Query,
-} from '@nestjs/common';
+import { Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Body } from '@nestjs/common';
 import { AssignmentQueryDto } from './assignments/dto/assignment-query.dto';
 import { CreateAssignmentDto } from './assignments/dto/create-assignment.dto';
 import { UpdateAssignmentStatusDto } from './assignments/dto/update-assignment-status.dto';
@@ -124,38 +113,56 @@ export class AppController {
   }
 
   @Get('permissions/user-roles/users/:userId/resources')
-  getResources(
+  async getResources(
     @Param('userId') _userId: string,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.appService.getResources(authorization);
+    return this.authService.profile(authorization).then((profile) => {
+      const role = profile.data.user.role;
+      const roles = [
+        {
+          _id: `${role}-role`,
+          id: `${role}-role`,
+          name: role,
+          code: role,
+        },
+      ];
+      const permissions =
+        role === 'teacher'
+          ? ['class:view', 'assignment:create', 'submission:review']
+          : role === 'student'
+            ? ['assignment:view', 'submission:create']
+            : ['system:manage'];
+      const menus = this.appService.getMenusByRole(role as any);
+      return this.appService.envelope({ roles, permissions, menus }, '获取成功');
+    });
   }
 
   @Get('permissions/user-roles/users/:userId/roles')
-  getUserRoles(
+  async getUserRoles(
     @Param('userId') _userId: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const data = this.appService.getResources(authorization).data.roles;
-    return this.appService.envelope(data, '获取成功');
+    const resources = await this.getResources(_userId, authorization);
+    return this.appService.envelope(resources.data.roles, '获取成功');
   }
 
   @Get('permissions/user-roles/users/:userId/permissions')
-  getUserPermissions(
+  async getUserPermissions(
     @Param('userId') _userId: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const data = this.appService.getResources(authorization).data.permissions;
-    return this.appService.envelope(data, '获取成功');
+    const resources = await this.getResources(_userId, authorization);
+    return this.appService.envelope(resources.data.permissions, '获取成功');
   }
 
   @Get('permissions/user-roles/users/:userId/menus')
-  getUserMenus(
+  async getUserMenus(
     @Param('userId') _userId: string,
     @Headers('authorization') authorization?: string,
   ) {
-    const data = this.appService.getResources(authorization).data.menus;
-    return this.appService.envelope(data, '获取成功');
+    const resources = await this.getResources(_userId, authorization);
+    return this.appService.envelope(resources.data.menus, '获取成功');
   }
 
   @Put('permissions/user-roles/users/:userId/roles')

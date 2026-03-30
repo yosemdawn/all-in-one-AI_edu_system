@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -33,8 +34,9 @@ export class SubmissionsService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly tokenService: TokenService,
-    private readonly aiReviewQueueService: AiReviewQueueService,
     private readonly appService: AppService,
+    @Optional()
+    private readonly aiReviewQueueService?: AiReviewQueueService,
   ) {}
 
   async submit(authorization: string | undefined, payload: SubmitAssignmentDto) {
@@ -294,6 +296,29 @@ export class SubmissionsService {
   }
 
   private async markAiReviewQueued(item: SubmissionDocument) {
+    if (!this.aiReviewQueueService) {
+      item.status = 'submitted';
+      item.aiReviewMetadata = {
+        provider: 'doubao',
+        modelUsed: 'doubao-seed-2-0-lite-260215',
+        queueStatus: 'skipped',
+        skippedReason: 'queue_disabled',
+        skippedAt: new Date().toISOString(),
+      };
+      await item.save();
+
+      await this.membershipModel.findOneAndUpdate(
+        { classId: item.classId, studentId: item.studentId },
+        {
+          $set: {
+            totalSubmissions: item.submissionCount,
+            lastSubmissionTime: item.submittedAt || new Date(),
+          },
+        },
+      );
+      return;
+    }
+
     item.status = 'ai_review_queued';
     item.aiReviewMetadata = {
       queuedAt: new Date().toISOString(),

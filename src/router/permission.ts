@@ -112,6 +112,7 @@ async function loadDynamicRoutes(
     console.error("生成动态路由失败:", error);
     // 出错时清除token
     localStorage.removeItem("token");
+    next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   } finally {
     NProgress.done();
   }
