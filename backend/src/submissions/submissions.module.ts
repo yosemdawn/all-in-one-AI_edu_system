@@ -15,12 +15,23 @@ import { DoubaoAiReviewService } from './doubao-ai-review.service';
 import { Submission, SubmissionSchema } from './schemas/submission.schema';
 import { SubmissionsService } from './submissions.service';
 
+const redisUrl = process.env.REDIS_URL;
+const queueImports = redisUrl
+  ? [
+      BullModule.registerQueue({
+        name: AI_REVIEW_QUEUE,
+      }),
+    ]
+  : [];
+
+const queueProviders = redisUrl
+  ? [AiReviewQueueService, AiReviewProcessor]
+  : [];
+
 @Module({
   imports: [
     AuthModule,
-    BullModule.registerQueue({
-      name: AI_REVIEW_QUEUE,
-    }),
+    ...queueImports,
     MongooseModule.forFeature([
       { name: Submission.name, schema: SubmissionSchema },
       { name: Assignment.name, schema: AssignmentSchema },
@@ -34,8 +45,7 @@ import { SubmissionsService } from './submissions.service';
     AppService,
     AiReviewConfigService,
     DoubaoAiReviewService,
-    AiReviewQueueService,
-    AiReviewProcessor,
+    ...queueProviders,
   ],
   exports: [SubmissionsService],
 })

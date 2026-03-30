@@ -19,6 +19,20 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { User, UserSchema } from './users/schemas/user.schema';
 import { UsersModule } from './users/users.module';
 
+const redisUrl = process.env.REDIS_URL;
+const queueImports = redisUrl
+  ? [
+      BullModule.forRootAsync({
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          connection: {
+            url: configService.get<string>('REDIS_URL') || 'redis://127.0.0.1:6379',
+          },
+        }),
+      }),
+    ]
+  : [];
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,14 +40,7 @@ import { UsersModule } from './users/users.module';
       envFilePath: ['.env.local', '.env'],
       validate: validateEnvironment,
     }),
-    BullModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          url: configService.get<string>('REDIS_URL') || 'redis://127.0.0.1:6379',
-        },
-      }),
-    }),
+    ...queueImports,
     DatabaseModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
