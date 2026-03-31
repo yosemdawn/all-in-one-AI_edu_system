@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: nengdouai-dev
+    working_dir: /workspace
+    ports:
+      - '8080:8080'
+      - '3000:3000'
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: 'true'
+      WATCHPACK_POLLING: 'true'
+    volumes:
+      - ./:/workspace
+      - root_node_modules:/workspace/node_modules
+      - backend_node_modules:/workspace/backend/node_modules
+    stdin_open: true
+    tty: true
+    command: >
+      bash -lc "npm --prefix /workspace/backend install &&
+      npm install &&
+      npm --prefix /workspace/backend run start:dev &
+      npm run dev -- --host 0.0.0.0"
+
+volumes:
+  root_node_modules:
+  backend_node_modules:
