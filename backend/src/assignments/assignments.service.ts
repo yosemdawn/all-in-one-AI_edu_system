@@ -18,6 +18,8 @@ import { Assignment, AssignmentDocument } from './schemas/assignment.schema';
 
 @Injectable()
 export class AssignmentsService {
+  private ensureSeedDataPromise?: Promise<void>;
+
   constructor(
     @InjectModel(Assignment.name)
     private readonly assignmentModel: Model<AssignmentDocument>,
@@ -32,46 +34,53 @@ export class AssignmentsService {
   ) {}
 
   async ensureSeedData() {
-    const existing = await this.assignmentModel.countDocuments();
-    if (existing > 0) {
-      return;
+    if (this.ensureSeedDataPromise) {
+      return this.ensureSeedDataPromise;
     }
 
-    const teacher = await this.userModel.findOne({ username: 'teacher1' });
-    const classItem = await this.classModel.findOne({ _id: 'c-1' });
+    this.ensureSeedDataPromise = (async () => {
+      const existing = await this.assignmentModel.countDocuments();
+      if (existing > 0) {
+        return;
+      }
 
-    if (!teacher || !classItem) {
-      return;
-    }
+      const teacher = await this.userModel.findOne({ username: 'teacher1' });
+      const classItem = await this.classModel.findOne({ code: 'A1001' });
 
-    await this.assignmentModel.create({
-      _id: 'a-1',
-      title: '英语阅读理解训练 1',
-      description: '<p>请完成阅读理解并提交答案。</p>',
-      teacherId: teacher.id,
-      teacherName: teacher.name,
-      classes: [{ id: classItem.id, name: classItem.name }],
-      aiRule: {
-        id: 'rule-1',
-        name: '标准答题批改模板',
-        modelType: 'doubao',
-        prompt: '请根据题目、标准答案和学生答案进行评分，返回总分、问题、建议。',
-        originalRuleId: 'rule-1',
-        snapshotAt: new Date().toISOString(),
-      },
-      questionMaterial: {
-        content: '<p>题目原文：请根据文章回答 5 个问题。</p>',
-      },
-      referenceAnswer: {
-        content: '<p>标准答案：1.A 2.C 3.B 4.D 5.A</p>',
-      },
-      gradingNotes: '按题号逐项给分，错题说明原因。',
-      submissionFormat: 'answers_only',
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      allowAttachments: true,
-      status: 'published',
-    });
+      if (!teacher || !classItem) {
+        return;
+      }
+
+      await this.assignmentModel.create({
+        title: '英语阅读理解训练 1',
+        description: '<p>请完成阅读理解并提交答案。</p>',
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        classes: [{ id: classItem.id, name: classItem.name }],
+        aiRule: {
+          id: 'rule-1',
+          name: '标准答题批改模板',
+          modelType: 'doubao',
+          prompt: '请根据题目、标准答案和学生答案进行评分，返回总分、问题、建议。',
+          originalRuleId: 'rule-1',
+          snapshotAt: new Date().toISOString(),
+        },
+        questionMaterial: {
+          content: '<p>题目原文：请根据文章回答 5 个问题。</p>',
+        },
+        referenceAnswer: {
+          content: '<p>标准答案：1.A 2.C 3.B 4.D 5.A</p>',
+        },
+        gradingNotes: '按题号逐项给分，错题说明原因。',
+        submissionFormat: 'answers_only',
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        allowAttachments: true,
+        status: 'published',
+      });
+    })();
+
+    return this.ensureSeedDataPromise;
   }
 
   async listAssignments(query: AssignmentQueryDto) {
