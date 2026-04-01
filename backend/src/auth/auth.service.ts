@@ -16,6 +16,8 @@ import { PasswordService, TokenService } from './auth.helpers';
 
 @Injectable()
 export class AuthService {
+  private ensureSeedDataPromise?: Promise<void>;
+
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(AuthSession.name)
@@ -26,42 +28,50 @@ export class AuthService {
   ) {}
 
   async ensureSeedData() {
-    const existing = await this.userModel.countDocuments();
-    if (existing > 0) {
-      return;
+    if (this.ensureSeedDataPromise) {
+      return this.ensureSeedDataPromise;
     }
 
-    const passwordHash = await this.passwordService.hash('123456');
+    this.ensureSeedDataPromise = (async () => {
+      const existing = await this.userModel.countDocuments();
+      if (existing > 0) {
+        return;
+      }
 
-    await this.userModel.insertMany([
-      {
-        username: 'admin',
-        email: 'admin@nengdou.local',
-        name: '管理员',
-        role: 'superadmin',
-        status: 'active',
-        passwordHash,
-      },
-      {
-        username: 'teacher1',
-        email: 'teacher@nengdou.local',
-        name: '王老师',
-        role: 'teacher',
-        status: 'active',
-        passwordHash,
-      },
-      {
-        username: 'student1',
-        email: 'student@nengdou.local',
-        studentId: '20250001',
-        name: '张同学',
-        role: 'student',
-        status: 'active',
-        passwordHash,
-        classId: 'c-1',
-        className: '高一(1)班',
-      },
-    ]);
+      const passwordHash = await this.passwordService.hash('123456');
+
+      await this.userModel.insertMany([
+        {
+          username: 'admin',
+          email: 'admin@nengdou.local',
+          name: '管理员',
+          role: 'superadmin',
+          status: 'active',
+          passwordHash,
+        },
+        {
+          username: 'teacher1',
+          email: 'teacher@nengdou.local',
+          name: '王老师',
+          role: 'teacher',
+          status: 'active',
+          passwordHash,
+        },
+        {
+          username: 'student1',
+          email: 'student@nengdou.local',
+          studentId: '20250001',
+          name: '张同学',
+          role: 'student',
+          status: 'active',
+          passwordHash,
+          classId: 'c-1',
+          className: '高一(1)班',
+        },
+      ]);
+    })();
+
+    return this.ensureSeedDataPromise;
   }
 
   async login(body: LoginDto) {

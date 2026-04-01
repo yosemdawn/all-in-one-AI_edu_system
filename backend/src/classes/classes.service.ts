@@ -21,6 +21,8 @@ import { ClassDocument, ClassEntity } from './schemas/class.schema';
 
 @Injectable()
 export class ClassesService {
+  private ensureSeedDataPromise?: Promise<void>;
+
   constructor(
     @InjectModel(ClassEntity.name)
     private readonly classModel: Model<ClassDocument>,
@@ -33,45 +35,52 @@ export class ClassesService {
   ) {}
 
   async ensureSeedData() {
-    const existing = await this.classModel.countDocuments();
-    if (existing > 0) {
-      return;
+    if (this.ensureSeedDataPromise) {
+      return this.ensureSeedDataPromise;
     }
 
-    const teacher = await this.userModel.findOne({ username: 'teacher1' });
-    const student = await this.userModel.findOne({ username: 'student1' });
+    this.ensureSeedDataPromise = (async () => {
+      const existing = await this.classModel.countDocuments();
+      if (existing > 0) {
+        return;
+      }
 
-    if (!teacher || !student) {
-      return;
-    }
+      const teacher = await this.userModel.findOne({ username: 'teacher1' });
+      const student = await this.userModel.findOne({ username: 'student1' });
 
-    const classItem = await this.classModel.create({
-      _id: 'c-1',
-      name: '高一(1)班',
-      code: 'A1001',
-      teacherId: teacher.id,
-      teacherName: teacher.name,
-      status: 'active',
-      studentCount: 1,
-      maxStudents: 60,
-      description: '英语写作提升班',
-    });
+      if (!teacher || !student) {
+        return;
+      }
 
-    await this.membershipModel.create({
-      classId: classItem.id,
-      studentId: student.id,
-      studentName: student.name,
-      studentNumber: student.studentId,
-      status: 'active',
-      joinMethod: 'code',
-      joinedAt: new Date(),
-      totalSubmissions: 0,
-      lastSubmissionTime: null,
-    });
+      const classItem = await this.classModel.create({
+        name: '高一(1)班',
+        code: 'A1001',
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        status: 'active',
+        studentCount: 1,
+        maxStudents: 60,
+        description: '英语写作提升班',
+      });
 
-    student.classId = classItem.id;
-    student.className = classItem.name;
-    await student.save();
+      await this.membershipModel.create({
+        classId: classItem.id,
+        studentId: student.id,
+        studentName: student.name,
+        studentNumber: student.studentId,
+        status: 'active',
+        joinMethod: 'code',
+        joinedAt: new Date(),
+        totalSubmissions: 0,
+        lastSubmissionTime: null,
+      });
+
+      student.classId = classItem.id;
+      student.className = classItem.name;
+      await student.save();
+    })();
+
+    return this.ensureSeedDataPromise;
   }
 
   async getClasses(query: ClassListQueryDto) {

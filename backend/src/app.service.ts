@@ -456,6 +456,24 @@ export class AppService {
           meta: { title: '作业管理' },
         },
         {
+          _id: 'm-ta-edit',
+          name: 'TeacherAssignmentEdit',
+          path: '/teacher/assignmentsEdit',
+          component: 'teacher/assignments/assigmentsEidt/index',
+          type: 'menu',
+          hidden: true,
+          meta: { title: '创建作业', hidden: true },
+        },
+        {
+          _id: 'm-ta-detail',
+          name: 'TeacherAssignmentDetail',
+          path: '/teacher/assignments/detail',
+          component: 'teacher/assignments/detail/index',
+          type: 'menu',
+          hidden: true,
+          meta: { title: '作业详情', hidden: true },
+        },
+        {
           _id: 'm-tr',
           name: 'TeacherAiRules',
           path: '/teacher/ai-rules',
@@ -504,6 +522,24 @@ export class AppService {
           icon: 'EditPen',
           meta: { title: '我的作业' },
         },
+        {
+          _id: 'm-sa-detail',
+          name: 'StudentAssignmentDetail',
+          path: '/student/assignments/detail',
+          component: 'student/assignments/detail',
+          type: 'menu',
+          hidden: true,
+          meta: { title: '作业详情', hidden: true },
+        },
+        {
+          _id: 'm-ss',
+          name: 'StudentSubmissions',
+          path: '/student/submissions',
+          component: 'student/submissions/index',
+          type: 'menu',
+          hidden: true,
+          meta: { title: '提交作业', hidden: true },
+        }
       ];
     }
     return [
@@ -1758,8 +1794,16 @@ export class AppService {
 
   getTeacherDashboard(auth?: string) {
     const user = this.getUserByToken(auth);
-    const myClasses = this.classes.filter((c) => c.teacherId === user.id);
-    const myAssignments = this.assignments.filter((a) => a.teacherId === user.id);
+    return this.getTeacherDashboardForUserId(user.id);
+  }
+
+  getTeacherDashboardByUserId(userId: string) {
+    return this.getTeacherDashboardForUserId(userId);
+  }
+
+  private getTeacherDashboardForUserId(userId: string) {
+    const myClasses = this.classes.filter((c) => c.teacherId === userId);
+    const myAssignments = this.assignments.filter((a) => a.teacherId === userId);
     const relevantSubmissions = this.submissions.filter((s) =>
       myAssignments.some((a) => a.id === s.assignmentId),
     );
@@ -1819,7 +1863,11 @@ export class AppService {
 
   getTeacherPendingTasks(auth?: string) {
     const user = this.getUserByToken(auth);
-    const myAssignments = this.assignments.filter((a) => a.teacherId === user.id);
+    return this.getTeacherPendingTasksByUserId(user.id);
+  }
+
+  getTeacherPendingTasksByUserId(userId: string) {
+    const myAssignments = this.assignments.filter((a) => a.teacherId === userId);
     return this.envelope(
       {
         assignments: myAssignments.map((assignment) => {
@@ -1867,7 +1915,11 @@ export class AppService {
 
   getTeacherPerformanceSummary(auth?: string) {
     const user = this.getUserByToken(auth);
-    const myAssignments = this.assignments.filter((item) => item.teacherId === user.id);
+    return this.getTeacherPerformanceSummaryByUserId(user.id);
+  }
+
+  getTeacherPerformanceSummaryByUserId(userId: string) {
+    const myAssignments = this.assignments.filter((item) => item.teacherId === userId);
     const relatedSubmissions = this.submissions.filter((item) =>
       myAssignments.some((assignment) => assignment.id === item.assignmentId),
     );
@@ -1908,7 +1960,11 @@ export class AppService {
 
   getTeacherQuickActions(auth?: string) {
     const user = this.getUserByToken(auth);
-    const myAssignments = this.assignments.filter((item) => item.teacherId === user.id);
+    return this.getTeacherQuickActionsByUserId(user.id);
+  }
+
+  getTeacherQuickActionsByUserId(userId: string) {
+    const myAssignments = this.assignments.filter((item) => item.teacherId === userId);
     const firstPendingAssignment = myAssignments.find((assignment) =>
       this.submissions.some(
         (submission) =>
@@ -1943,6 +1999,14 @@ export class AppService {
 
   getStudentDashboard(auth?: string) {
     const user = this.getUserByToken(auth);
+    return this.getStudentDashboardByUserId(user.id);
+  }
+
+  getStudentDashboardByUserId(userId: string) {
+    const user =
+      this.users.find((item) => item.id === userId) ||
+      this.users.find((item) => item.role === 'student');
+    if (!user) throw new UnauthorizedException('登录失效');
     const myAssignments = this.assignments
       .filter((item) => item.classes.some((cls) => cls.id === user.classId))
       .map((item) => {
@@ -2045,6 +2109,14 @@ export class AppService {
 
   getStudentLearningProgress(auth?: string) {
     const user = this.getUserByToken(auth);
+    return this.getStudentLearningProgressByUserId(user.id);
+  }
+
+  getStudentLearningProgressByUserId(userId: string) {
+    const user =
+      this.users.find((item) => item.id === userId) ||
+      this.users.find((item) => item.role === 'student');
+    if (!user) throw new UnauthorizedException('登录失效');
     const myAssignments = this.assignments.filter((item) =>
       item.classes.some((cls) => cls.id === user.classId),
     );
@@ -2066,6 +2138,14 @@ export class AppService {
 
   getStudentAchievements(auth?: string) {
     const user = this.getUserByToken(auth);
+    return this.getStudentAchievementsByUserId(user.id);
+  }
+
+  getStudentAchievementsByUserId(userId: string) {
+    const user =
+      this.users.find((item) => item.id === userId) ||
+      this.users.find((item) => item.role === 'student');
+    if (!user) throw new UnauthorizedException('登录失效');
     const mySubmissions = this.submissions.filter(
       (item) => item.studentId === user.id && !item.isDraft,
     );
@@ -2084,6 +2164,14 @@ export class AppService {
 
   getStudentStudyRecommendations(auth?: string) {
     const user = this.getUserByToken(auth);
+    return this.getStudentStudyRecommendationsByUserId(user.id);
+  }
+
+  getStudentStudyRecommendationsByUserId(userId: string) {
+    const user =
+      this.users.find((item) => item.id === userId) ||
+      this.users.find((item) => item.role === 'student');
+    if (!user) throw new UnauthorizedException('登录失效');
     const pendingAssignments = this.assignments.filter(
       (item) =>
         item.classes.some((cls) => cls.id === user.classId) &&

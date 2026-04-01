@@ -590,43 +590,51 @@ export class AppController {
   }
 
   @Get('teacher/dashboard/stats')
-  getTeacherDashboard(@Headers('authorization') authorization?: string) {
-    return this.appService.getTeacherDashboard(authorization);
+  async getTeacherDashboard(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getTeacherDashboardByUserId(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/pending-tasks')
-  getTeacherPendingTasks(@Headers('authorization') authorization?: string) {
-    return this.appService.getTeacherPendingTasks(authorization);
+  async getTeacherPendingTasks(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getTeacherPendingTasksByUserId(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/performance-summary')
-  getTeacherPerformanceSummary(@Headers('authorization') authorization?: string) {
-    return this.appService.getTeacherPerformanceSummary(authorization);
+  async getTeacherPerformanceSummary(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getTeacherPerformanceSummaryByUserId(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/quick-actions')
-  getTeacherQuickActions(@Headers('authorization') authorization?: string) {
-    return this.appService.getTeacherQuickActions(authorization);
+  async getTeacherQuickActions(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getTeacherQuickActionsByUserId(profile.data.user.id);
   }
 
   @Get('student/dashboard/stats')
-  getStudentDashboard(@Headers('authorization') authorization?: string) {
-    return this.appService.getStudentDashboard(authorization);
+  async getStudentDashboard(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getStudentDashboardByUserId(profile.data.user.id);
   }
 
   @Get('student/dashboard/learning-progress')
-  getStudentLearningProgress(@Headers('authorization') authorization?: string) {
-    return this.appService.getStudentLearningProgress(authorization);
+  async getStudentLearningProgress(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getStudentLearningProgressByUserId(profile.data.user.id);
   }
 
   @Get('student/dashboard/achievements')
-  getStudentAchievements(@Headers('authorization') authorization?: string) {
-    return this.appService.getStudentAchievements(authorization);
+  async getStudentAchievements(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getStudentAchievementsByUserId(profile.data.user.id);
   }
 
   @Get('student/dashboard/study-recommendations')
-  getStudentRecommendations(@Headers('authorization') authorization?: string) {
-    return this.appService.getStudentStudyRecommendations(authorization);
+  async getStudentRecommendations(@Headers('authorization') authorization?: string) {
+    const profile = await this.authService.profile(authorization);
+    return this.appService.getStudentStudyRecommendationsByUserId(profile.data.user.id);
   }
 
   @Get('logs')
