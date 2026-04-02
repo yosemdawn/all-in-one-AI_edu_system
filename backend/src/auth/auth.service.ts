@@ -6,6 +6,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
+import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AuthSession, AuthSessionDocument } from './schemas/auth-session.schema';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -16,67 +18,20 @@ import { PasswordService, TokenService } from './auth.helpers';
 
 @Injectable()
 export class AuthService {
-  private ensureSeedDataPromise?: Promise<void>;
-
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(AuthSession.name)
     private readonly authSessionModel: Model<AuthSessionDocument>,
+    @InjectModel(ClassEntity.name)
+    private readonly classModel: Model<ClassDocument>,
+    @InjectModel(ClassMembership.name)
+    private readonly membershipModel: Model<ClassMembershipDocument>,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly appService: AppService,
   ) {}
 
-  async ensureSeedData() {
-    if (this.ensureSeedDataPromise) {
-      return this.ensureSeedDataPromise;
-    }
-
-    this.ensureSeedDataPromise = (async () => {
-      const existing = await this.userModel.countDocuments();
-      if (existing > 0) {
-        return;
-      }
-
-      const passwordHash = await this.passwordService.hash('123456');
-
-      await this.userModel.insertMany([
-        {
-          username: 'admin',
-          email: 'admin@nengdou.local',
-          name: '管理员',
-          role: 'superadmin',
-          status: 'active',
-          passwordHash,
-        },
-        {
-          username: 'teacher1',
-          email: 'teacher@nengdou.local',
-          name: '王老师',
-          role: 'teacher',
-          status: 'active',
-          passwordHash,
-        },
-        {
-          username: 'student1',
-          email: 'student@nengdou.local',
-          studentId: '20250001',
-          name: '张同学',
-          role: 'student',
-          status: 'active',
-          passwordHash,
-          classId: 'c-1',
-          className: '高一(1)班',
-        },
-      ]);
-    })();
-
-    return this.ensureSeedDataPromise;
-  }
-
   async login(body: LoginDto) {
-    await this.ensureSeedData();
-
     const user = await this.userModel.findOne({
       $or: [
         { email: body.usernameOrEmailOrStudentId },
@@ -128,8 +83,6 @@ export class AuthService {
   }
 
   async refresh(body: RefreshTokenDto) {
-    await this.ensureSeedData();
-
     const sessions = await this.authSessionModel
       .find({ revokedAt: null, expiresAt: { $gt: new Date() } })
       .sort({ createdAt: -1 });
@@ -154,6 +107,8 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('用户不存在');
     }
+
+    this.assertTokenFreshForUser(user, matchedSession.createdAt);
 
     matchedSession.revokedAt = new Date();
     await matchedSession.save();
@@ -181,7 +136,20 @@ export class AuthService {
     );
   }
 
-  logout() {
+  async logout(authorization?: string) {
+    if (!authorization) {
+      return this.appService.envelope({ success: true }, '退出成功');
+    }
+
+    const user = await this.getUserFromAuthorization(authorization);
+    user.lastLogoutAt = new Date();
+    await user.save();
+
+    await this.authSessionModel.updateMany(
+      { userId: user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+
     return this.appService.envelope({ success: true }, '退出成功');
   }
 
@@ -191,8 +159,6 @@ export class AuthService {
   }
 
   async register(body: RegisterDto) {
-    await this.ensureSeedData();
-
     if (body.password !== body.confirmPassword) {
       throw new BadRequestException('两次输入的密码不一致');
     }
@@ -208,6 +174,20 @@ export class AuthService {
       throw new BadRequestException('用户名已存在');
     }
 
+    let classItem: ClassDocument | null = null;
+    if (body.classId) {
+      classItem = await this.classModel.findById(body.classId);
+      if (!classItem) {
+        throw new BadRequestException('班级不存在');
+      }
+      if (classItem.status !== 'active') {
+        throw new BadRequestException('当前班级不可加入');
+      }
+      if ((classItem.studentCount || 0) >= (classItem.maxStudents || 60)) {
+        throw new BadRequestException('班级人数已满');
+      }
+    }
+
     const passwordHash = await this.passwordService.hash(body.password);
 
     const user = await this.userModel.create({
@@ -218,17 +198,44 @@ export class AuthService {
       role: 'student',
       status: 'active',
       passwordHash,
-      classId: body.classId,
+      classId: classItem?.id,
+      className: classItem?.name,
     });
+
+    if (classItem) {
+      await this.membershipModel.create({
+        classId: classItem.id,
+        studentId: user.id,
+        studentName: user.name,
+        studentNumber: user.studentId,
+        status: 'active',
+        joinMethod: 'register',
+        joinedAt: new Date(),
+        totalSubmissions: 0,
+        lastSubmissionTime: null,
+      });
+
+      classItem.studentCount += 1;
+      await classItem.save();
+    }
 
     const token = this.tokenService.issueAccessToken({
       sub: user.id,
       role: user.role,
     });
+    const refreshToken = this.tokenService.issueRefreshToken();
+    const refreshTokenHash = await this.passwordService.hash(refreshToken);
+
+    await this.authSessionModel.create({
+      userId: user._id,
+      refreshTokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
 
     return this.appService.envelope(
       {
         token,
+        refreshToken,
         success: true,
         message: '注册成功',
         userId: user.id,
@@ -256,10 +263,16 @@ export class AuthService {
     user.passwordHash = await this.passwordService.hash(body.newPassword);
     user.mustChangePassword = false;
     user.passwordChangedAt = new Date();
+    user.lastLogoutAt = new Date();
     if (!user.firstLoginAt) {
       user.firstLoginAt = new Date();
     }
     await user.save();
+
+    await this.authSessionModel.updateMany(
+      { userId: user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
 
     return this.appService.envelope({ message: '修改成功' }, '修改成功');
   }
@@ -288,7 +301,33 @@ export class AuthService {
       throw new UnauthorizedException('登录失效');
     }
 
+    this.assertTokenFreshForUser(user, decoded.iat);
     return user;
+  }
+
+  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number | Date) {
+    const issuedAtDate =
+      issuedAt instanceof Date
+        ? issuedAt
+        : issuedAt
+          ? new Date(issuedAt * 1000)
+          : null;
+
+    if (
+      issuedAtDate &&
+      user.lastLogoutAt &&
+      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
+
+    if (
+      issuedAtDate &&
+      user.passwordChangedAt &&
+      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
   }
 
   private toUserPayload(user: UserDocument) {

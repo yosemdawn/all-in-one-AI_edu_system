@@ -22,6 +22,10 @@ export class AuthSession {
 
   @Prop()
   revokedAt?: Date;
+
+  createdAt?: Date;
+
+  updatedAt?: Date;
 }
 
 export const AuthSessionSchema = SchemaFactory.createForClass(AuthSession);

@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -9,6 +11,7 @@ import { AppService } from '../app.service';
 import { TokenService } from '../auth/auth.helpers';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
+import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AssignmentQueryDto } from './dto/assignment-query.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
@@ -16,10 +19,15 @@ import { UpdateAssignmentStatusDto } from './dto/update-assignment-status.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { Assignment, AssignmentDocument } from './schemas/assignment.schema';
 
+type NormalizedSubmissionStatus =
+  | 'draft'
+  | 'submitted'
+  | 'ai_reviewed'
+  | 'teacher_reviewed'
+  | 'ai_review_failed';
+
 @Injectable()
 export class AssignmentsService {
-  private ensureSeedDataPromise?: Promise<void>;
-
   constructor(
     @InjectModel(Assignment.name)
     private readonly assignmentModel: Model<AssignmentDocument>,
@@ -27,88 +35,24 @@ export class AssignmentsService {
     private readonly classModel: Model<ClassDocument>,
     @InjectModel(ClassMembership.name)
     private readonly membershipModel: Model<ClassMembershipDocument>,
+    @InjectModel(Submission.name)
+    private readonly submissionModel: Model<SubmissionDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly tokenService: TokenService,
     private readonly appService: AppService,
   ) {}
 
-  async ensureSeedData() {
-    if (this.ensureSeedDataPromise) {
-      return this.ensureSeedDataPromise;
-    }
+  async listAssignments(authorization: string | undefined, query: AssignmentQueryDto) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
-    this.ensureSeedDataPromise = (async () => {
-      const existing = await this.assignmentModel.countDocuments();
-      if (existing > 0) {
-        return;
-      }
-
-      const teacher = await this.userModel.findOne({ username: 'teacher1' });
-      const classItem = await this.classModel.findOne({ code: 'A1001' });
-
-      if (!teacher || !classItem) {
-        return;
-      }
-
-      await this.assignmentModel.create({
-        title: '英语阅读理解训练 1',
-        description: '<p>请完成阅读理解并提交答案。</p>',
-        teacherId: teacher.id,
-        teacherName: teacher.name,
-        classes: [{ id: classItem.id, name: classItem.name }],
-        aiRule: {
-          id: 'rule-1',
-          name: '标准答题批改模板',
-          modelType: 'doubao',
-          prompt: '请根据题目、标准答案和学生答案进行评分，返回总分、问题、建议。',
-          originalRuleId: 'rule-1',
-          snapshotAt: new Date().toISOString(),
-        },
-        questionMaterial: {
-          content: '<p>题目原文：请根据文章回答 5 个问题。</p>',
-        },
-        referenceAnswer: {
-          content: '<p>标准答案：1.A 2.C 3.B 4.D 5.A</p>',
-        },
-        gradingNotes: '按题号逐项给分，错题说明原因。',
-        submissionFormat: 'answers_only',
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        allowAttachments: true,
-        status: 'published',
-      });
-    })();
-
-    return this.ensureSeedDataPromise;
-  }
-
-  async listAssignments(query: AssignmentQueryDto) {
-    await this.ensureSeedData();
-
-    const filter: Record<string, unknown> = {};
-    if (query.search) {
-      filter.title = { $regex: query.search, $options: 'i' };
-    }
-    if (query.status) {
-      filter.status = query.status;
-    }
-    if (query.classId) {
-      filter['classes.id'] = query.classId;
-    }
-    if (query.className) {
-      filter['classes.name'] = { $regex: query.className, $options: 'i' };
-    }
-    if (query.teacherName) {
-      filter.teacherName = { $regex: query.teacherName, $options: 'i' };
-    }
-
+    const filter = this.buildTeacherAssignmentFilter(user, query);
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 10);
     const skip = (page - 1) * pageSize;
-
-    const sortField = query.sort || 'createdAt';
-    const sortOrder = query.order === 'asc' ? 1 : -1;
+    const sortField = query.sort || query.sortBy || 'createdAt';
+    const sortOrder = (query.order || query.sortOrder) === 'asc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
       this.assignmentModel
@@ -122,19 +66,8 @@ export class AssignmentsService {
 
     const itemsWithStats = await Promise.all(
       items.map(async (item) => {
-        const totalStudents = await this.membershipModel.countDocuments({
-          classId: { $in: item.classes.map((cls) => cls.id) },
-        });
-
-        return {
-          ...this.toAssignmentListItem(item),
-          submissionCount: 0,
-          totalStudents,
-          totalSubmissions: 0,
-          gradedSubmissions: 0,
-          reviewedSubmissions: 0,
-          pendingSubmissions: 0,
-        };
+        const stats = await this.getAssignmentStats(item);
+        return this.toAssignmentListItem(item, stats);
       }),
     );
 
@@ -150,88 +83,120 @@ export class AssignmentsService {
     );
   }
 
-  async getAssignment(id: string) {
-    await this.ensureSeedData();
+  async getAssignment(authorization: string | undefined, id: string) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
     const item = await this.assignmentModel.findById(id).lean();
     if (!item) {
       throw new NotFoundException('作业不存在');
     }
 
-    const totalStudents = await this.membershipModel.countDocuments({
-      classId: { $in: item.classes.map((cls) => cls.id) },
-    });
+    this.assertCanManageAssignment(user, item.teacherId);
+    const stats = await this.getAssignmentStats(item);
 
-    return this.appService.envelope(
-      {
-        ...this.toAssignmentDetail(item),
-        totalStudents,
-        submissionStats: {
-          total: totalStudents,
-          submitted: 0,
-          graded: 0,
-          pending: 0,
-          totalSubmissions: 0,
-          reviewedSubmissions: 0,
-          pendingSubmissions: 0,
-          draftSubmissions: 0,
-        },
-      },
-      '获取成功',
-    );
+    return this.appService.envelope(this.toAssignmentDetail(item, stats), '获取成功');
   }
 
-  async getAssignmentStudents(id: string, query?: any) {
-    await this.ensureSeedData();
+  async getAssignmentStudents(
+    authorization: string | undefined,
+    id: string,
+    query?: Record<string, any>,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
     const assignment = await this.assignmentModel.findById(id).lean();
     if (!assignment) {
       throw new NotFoundException('作业不存在');
     }
 
-    const filter: Record<string, unknown> = {
-      classId: { $in: assignment.classes.map((cls) => cls.id) },
+    this.assertCanManageAssignment(user, assignment.teacherId);
+
+    const assignmentClassIds = assignment.classes.map((item) => item.id);
+    const selectedClassIds =
+      query?.classId && assignmentClassIds.includes(query.classId)
+        ? [query.classId]
+        : assignmentClassIds;
+
+    const membershipFilter: Record<string, unknown> = {
+      classId: { $in: selectedClassIds },
+      status: 'active',
     };
 
-    if (query?.classId) {
-      filter.classId = query.classId;
-    }
     if (query?.studentName) {
-      filter.studentName = { $regex: query.studentName, $options: 'i' };
+      membershipFilter.studentName = { $regex: query.studentName, $options: 'i' };
     }
     if (query?.studentNumber) {
-      filter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
+      membershipFilter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
     }
-    if (query?.submissionStatus && query.submissionStatus !== 'not_submitted') {
-      return this.appService.envelope(
-        { items: [], total: 0, page: 1, limit: 20, totalPages: 1 },
-        '获取成功',
-      );
-    }
+
+    const memberships = await this.membershipModel.find(membershipFilter).lean();
+    const studentIds = memberships.map((item) => item.studentId);
+    const submissions = studentIds.length
+      ? await this.submissionModel
+          .find({
+            assignmentId: id,
+            studentId: { $in: studentIds },
+            classId: { $in: selectedClassIds },
+          })
+          .lean()
+      : [];
+
+    const submissionMap = new Map(submissions.map((item) => [item.studentId, item]));
+    let rows = memberships.map((member) => {
+      const submission = submissionMap.get(member.studentId);
+      const normalizedStatus = submission
+        ? this.normalizeSubmissionStatus(submission.status)
+        : 'not_submitted';
+
+      return {
+        _id: submission?._id?.toString?.() || `virtual-${member.studentId}`,
+        studentId: member.studentId,
+        studentName: member.studentName,
+        studentNumber: member.studentNumber || '',
+        classId: member.classId,
+        className:
+          assignment.classes.find((item) => item.id === member.classId)?.name || '',
+        status: normalizedStatus,
+        submittedAt: submission?.submittedAt || null,
+        content: submission?.content || '',
+        contentPreview: submission?.content ? this.getContentPreview(submission.content) : '',
+        wordCount: submission?.content ? this.getWordCount(submission.content) : 0,
+        aiScore: submission?.aiScore ?? null,
+        teacherScore: submission?.teacherScore ?? null,
+        teacherReviewedAt: submission?.teacherReviewedAt || null,
+        teacherName: submission ? assignment.teacherName : '',
+      };
+    });
+
+    rows = rows.filter((row) => {
+      const hasSubmission = row.status !== 'not_submitted';
+      const isDraft = row.status === 'draft';
+
+      if (query?.submissionStatus === 'submitted' && (!hasSubmission || isDraft)) {
+        return false;
+      }
+      if (query?.submissionStatus === 'draft' && !isDraft) {
+        return false;
+      }
+      if (query?.submissionStatus === 'not_submitted' && hasSubmission) {
+        return false;
+      }
+      if (query?.gradingStatus && row.status !== query.gradingStatus) {
+        return false;
+      }
+      return true;
+    });
 
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 20);
-    const skip = (page - 1) * limit;
-
-    const [items, total] = await Promise.all([
-      this.membershipModel.find(filter).skip(skip).limit(limit).lean(),
-      this.membershipModel.countDocuments(filter),
-    ]);
+    const total = rows.length;
+    const pagedRows = rows.slice((page - 1) * limit, page * limit);
 
     return this.appService.envelope(
       {
-        items: items.map((item) => ({
-          _id: `virtual-${item.studentId}`,
-          studentId: item.studentId,
-          studentName: item.studentName,
-          studentNumber: item.studentNumber,
-          classId: item.classId,
-          className:
-            assignment.classes.find((cls) => cls.id === item.classId)?.name || '',
-          status: 'not_submitted',
-          contentPreview: '',
-          wordCount: 0,
-        })),
+        items: pagedRows,
         total,
         page,
         limit,
@@ -242,18 +207,16 @@ export class AssignmentsService {
   }
 
   async createAssignment(authorization: string | undefined, payload: CreateAssignmentDto) {
-    await this.ensureSeedData();
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
-    const classes = await this.classModel.find({ _id: { $in: payload.classes } }).lean();
-    const classSnapshots = classes.map((item) => ({ id: item._id.toString(), name: item.name }));
-
+    const classes = await this.resolveAssignmentClasses(user, payload.classes);
     const item = await this.assignmentModel.create({
       title: payload.title,
       description: payload.description,
       teacherId: user.id,
       teacherName: user.name,
-      classes: classSnapshots,
+      classes,
       aiRule: payload.aiRule || null,
       questionMaterial: payload.questionMaterial || null,
       referenceAnswer: payload.referenceAnswer || null,
@@ -265,20 +228,27 @@ export class AssignmentsService {
       status: 'draft',
     });
 
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject()), '创建成功');
+    const stats = await this.getAssignmentStats(item.toObject());
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '创建成功');
   }
 
-  async updateAssignment(id: string, payload: UpdateAssignmentDto) {
-    await this.ensureSeedData();
+  async updateAssignment(
+    authorization: string | undefined,
+    id: string,
+    payload: UpdateAssignmentDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
     const item = await this.assignmentModel.findById(id);
     if (!item) {
       throw new NotFoundException('作业不存在');
     }
 
+    this.assertCanManageAssignment(user, item.teacherId);
+
     if (payload.classes) {
-      const classes = await this.classModel.find({ _id: { $in: payload.classes } }).lean();
-      item.classes = classes.map((cls) => ({ id: cls._id.toString(), name: cls.name }));
+      item.classes = await this.resolveAssignmentClasses(user, payload.classes);
     }
 
     if (payload.title !== undefined) item.title = payload.title;
@@ -293,55 +263,103 @@ export class AssignmentsService {
     if (payload.allowAttachments !== undefined) item.allowAttachments = payload.allowAttachments;
 
     await item.save();
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject()), '更新成功');
+    const stats = await this.getAssignmentStats(item.toObject());
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '更新成功');
   }
 
-  async updateAssignmentStatus(id: string, payload: UpdateAssignmentStatusDto) {
-    await this.ensureSeedData();
+  async updateAssignmentStatus(
+    authorization: string | undefined,
+    id: string,
+    payload: UpdateAssignmentStatusDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
     const item = await this.assignmentModel.findById(id);
     if (!item) {
       throw new NotFoundException('作业不存在');
     }
 
+    this.assertCanManageAssignment(user, item.teacherId);
     item.status = payload.status;
-    item.terminatedReason = payload.terminatedReason;
+    item.terminatedReason =
+      payload.status === 'terminated' ? payload.terminatedReason : undefined;
     await item.save();
 
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject()), '更新成功');
+    const stats = await this.getAssignmentStats(item.toObject());
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '更新成功');
   }
 
-  async deleteAssignment(id: string) {
-    await this.ensureSeedData();
-    await this.assignmentModel.findByIdAndDelete(id);
+  async deleteAssignment(authorization: string | undefined, id: string) {
+    const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
+
+    const item = await this.assignmentModel.findById(id).lean();
+    if (!item) {
+      throw new NotFoundException('作业不存在');
+    }
+
+    this.assertCanManageAssignment(user, item.teacherId);
+
+    await Promise.all([
+      this.assignmentModel.findByIdAndDelete(id),
+      this.submissionModel.deleteMany({ assignmentId: id }),
+    ]);
+
     return this.appService.envelope(null, '删除成功');
   }
 
-  async getStudentAssignments(authorization?: string, query?: AssignmentQueryDto) {
-    await this.ensureSeedData();
-
+  async getStudentAssignments(
+    authorization: string | undefined,
+    query?: AssignmentQueryDto,
+  ) {
     const user = await this.getUserFromAuthorization(authorization);
-    const memberships = await this.membershipModel.find({ studentId: user.id }).lean();
+    if (user.role !== 'student') {
+      throw new ForbiddenException('只有学生可以查看学生端作业');
+    }
+
+    const memberships = await this.membershipModel
+      .find({ studentId: user.id, status: 'active' })
+      .lean();
     const classIds = memberships.map((item) => item.classId);
 
-    const filter: Record<string, unknown> = {
-      'classes.id': { $in: classIds },
-    };
+    if (!classIds.length) {
+      return this.appService.envelope(
+        {
+          items: [],
+          total: 0,
+          page: Number(query?.page || 1),
+          pageSize: Number(query?.pageSize || 10),
+        },
+        '获取成功',
+      );
+    }
 
-    const page = Number(query?.page || 1);
-    const pageSize = Number(query?.pageSize || 10);
-    const skip = (page - 1) * pageSize;
-
+    const filter = this.buildStudentAssignmentFilter(classIds, query);
+    const sortField = query?.sort || query?.sortBy || 'createdAt';
+    const sortOrder = (query?.order || query?.sortOrder) === 'asc' ? 1 : -1;
     const assignments = await this.assignmentModel
       .find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(pageSize)
+      .sort({ [sortField]: sortOrder })
       .lean();
-    const total = await this.assignmentModel.countDocuments(filter);
+    const submissions = await this.submissionModel
+      .find({
+        assignmentId: { $in: assignments.map((item) => item._id.toString()) },
+        studentId: user.id,
+      })
+      .lean();
+    const submissionMap = new Map(submissions.map((item) => [item.assignmentId, item]));
 
     let items = assignments.map((item) => {
-      const matchedClass = item.classes.find((cls) => classIds.includes(cls.id));
+      const availableClasses = item.classes.filter((cls) => classIds.includes(cls.id));
+      const matchedClass = availableClasses[0];
+      const submission = submissionMap.get(item._id.toString());
+      const normalizedStatus = submission
+        ? this.normalizeSubmissionStatus(submission.status)
+        : undefined;
+      const hasSubmitted = !!submission && !submission.isDraft;
+      const hasDraft = !!submission && submission.isDraft;
+
       return {
         id: item._id.toString(),
         title: item.title,
@@ -350,11 +368,11 @@ export class AssignmentsService {
         endDate: item.endDate,
         status: item.status,
         terminatedReason: item.terminatedReason,
-        isExpired: new Date(item.endDate).getTime() < Date.now(),
-        hasSubmitted: false,
-        hasDraft: false,
-        submissionStatus: undefined,
-        submissionId: undefined,
+        isExpired: this.isExpired(item.endDate),
+        hasSubmitted,
+        hasDraft,
+        submissionStatus: normalizedStatus,
+        submissionId: submission?._id?.toString?.(),
         allowAttachments: !!item.allowAttachments,
         createdAt: item.createdAt,
         classId: matchedClass?.id || user.classId || '',
@@ -362,22 +380,34 @@ export class AssignmentsService {
       };
     });
 
-    if (query?.businessStatus === 'todo') {
-      items = items.filter((item) => !item.hasSubmitted && !item.isExpired);
-    } else if (query?.businessStatus === 'completed') {
-      items = items.filter((item) => item.hasSubmitted);
-    } else if (query?.businessStatus === 'draft') {
-      items = items.filter((item) => item.hasDraft);
-    } else if (query?.businessStatus === 'expired') {
-      items = items.filter((item) => item.isExpired);
-    }
+    items = items.filter((item) => {
+      if (query?.businessStatus === 'todo') {
+        return item.status === 'published' && !item.isExpired && !item.hasSubmitted;
+      }
+      if (query?.businessStatus === 'completed') {
+        return item.hasSubmitted;
+      }
+      if (query?.businessStatus === 'draft') {
+        return item.hasDraft;
+      }
+      if (query?.businessStatus === 'expired') {
+        return item.isExpired;
+      }
+      return true;
+    });
+
+    const page = Number(query?.page || 1);
+    const pageSize = Number(query?.pageSize || 10);
+    const total = items.length;
+    items = items.slice((page - 1) * pageSize, page * pageSize);
 
     return this.appService.envelope(
       {
         items,
-        total: items.length,
+        total,
         page,
         pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
       '获取成功',
     );
@@ -394,10 +424,13 @@ export class AssignmentsService {
       {
         totalAssignments: items.length,
         submittedCount: items.filter((item: any) => item.hasSubmitted).length,
-        todoCount: items.filter((item: any) => !item.hasSubmitted && !item.isExpired).length,
+        todoCount: items.filter(
+          (item: any) => item.status === 'published' && !item.isExpired && !item.hasSubmitted,
+        ).length,
         draftCount: items.filter((item: any) => item.hasDraft).length,
         expiredCount: items.filter((item: any) => item.isExpired).length,
-        reviewedCount: items.filter((item: any) => item.submissionStatus === 'teacher_reviewed').length,
+        reviewedCount: items.filter((item: any) => item.submissionStatus === 'teacher_reviewed')
+          .length,
       },
       '获取成功',
     );
@@ -409,12 +442,51 @@ export class AssignmentsService {
     classId?: string,
   ) {
     const user = await this.getUserFromAuthorization(authorization);
+    if (user.role !== 'student') {
+      throw new ForbiddenException('只有学生可以查看学生端作业');
+    }
+
     const assignment = await this.assignmentModel.findById(assignmentId).lean();
     if (!assignment) {
       throw new NotFoundException('作业不存在');
     }
+    if (assignment.status === 'draft') {
+      throw new ForbiddenException('草稿作业暂不可查看');
+    }
 
-    const matchedClass = assignment.classes.find((cls) => cls.id === classId) || assignment.classes[0];
+    const memberships = await this.membershipModel
+      .find({
+        studentId: user.id,
+        classId: { $in: assignment.classes.map((item) => item.id) },
+        status: 'active',
+      })
+      .lean();
+
+    if (!memberships.length) {
+      throw new ForbiddenException('你不在当前作业所属班级中');
+    }
+
+    const availableClassIds = memberships.map((item) => item.classId);
+    if (classId && !availableClassIds.includes(classId)) {
+      throw new ForbiddenException('你不在指定班级中');
+    }
+    const resolvedClassId =
+      classId && availableClassIds.includes(classId) ? classId : availableClassIds[0];
+    const matchedClass = assignment.classes.find((item) => item.id === resolvedClassId);
+
+    const submission = await this.submissionModel.findOne({ assignmentId, studentId: user.id }).lean();
+    const normalizedStatus = submission
+      ? this.normalizeSubmissionStatus(submission.status)
+      : undefined;
+    const hasSubmitted = !!submission && !submission.isDraft;
+    const hasDraft = !!submission && submission.isDraft;
+    const isExpired = this.isExpired(assignment.endDate);
+    const canSubmit =
+      assignment.status === 'published' &&
+      !isExpired &&
+      (!submission ||
+        submission.isDraft ||
+        (submission.status !== 'teacher_reviewed' && (submission.submissionCount || 0) < 2));
 
     return this.appService.envelope(
       {
@@ -429,14 +501,14 @@ export class AssignmentsService {
         allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'],
         status: assignment.status,
         terminatedReason: assignment.terminatedReason,
-        isExpired: new Date(assignment.endDate).getTime() < Date.now(),
-        hasSubmitted: false,
-        hasDraft: false,
-        submissionStatus: undefined,
-        submissionId: undefined,
-        canSubmit: assignment.status === 'published',
+        isExpired,
+        hasSubmitted,
+        hasDraft,
+        submissionStatus: normalizedStatus,
+        submissionId: submission?._id?.toString?.(),
+        canSubmit,
         createdAt: assignment.createdAt,
-        classId: matchedClass?.id || user.classId,
+        classId: matchedClass?.id || resolvedClassId,
         className: matchedClass?.name || user.className,
         aiRule: assignment.aiRule,
         questionMaterial: assignment.questionMaterial,
@@ -446,6 +518,162 @@ export class AssignmentsService {
       },
       '获取成功',
     );
+  }
+
+  private buildTeacherAssignmentFilter(user: UserDocument, query: AssignmentQueryDto) {
+    const filter: Record<string, unknown> = {};
+    const keyword = query.search || query.title;
+
+    if (user.role !== 'superadmin') {
+      filter.teacherId = user.id;
+    }
+    if (keyword) {
+      filter.title = { $regex: keyword, $options: 'i' };
+    }
+    if (query.status) {
+      filter.status = query.status;
+    }
+    if (query.classId) {
+      filter['classes.id'] = query.classId;
+    }
+    if (query.className) {
+      filter['classes.name'] = { $regex: query.className, $options: 'i' };
+    }
+    if (query.teacherName) {
+      filter.teacherName = { $regex: query.teacherName, $options: 'i' };
+    }
+    if (query.startDate) {
+      filter.startDate = {
+        ...(filter.startDate as Record<string, Date>),
+        $gte: new Date(query.startDate),
+      };
+    }
+    if (query.endDate) {
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $lte: new Date(query.endDate),
+      };
+    }
+    if (query.isExpired === true) {
+      filter.endDate = { ...(filter.endDate as Record<string, Date>), $lt: new Date() };
+    } else if (query.isExpired === false) {
+      filter.endDate = { ...(filter.endDate as Record<string, Date>), $gte: new Date() };
+    }
+
+    return filter;
+  }
+
+  private buildStudentAssignmentFilter(classIds: string[], query?: AssignmentQueryDto) {
+    const keyword = query?.search || query?.title;
+    const filter: Record<string, unknown> = {
+      'classes.id': { $in: classIds },
+      status: query?.status || { $in: ['published', 'terminated'] },
+    };
+
+    if (keyword) {
+      filter.title = { $regex: keyword, $options: 'i' };
+    }
+    if (query?.classId) {
+      filter['classes.id'] = query.classId;
+    }
+    if (query?.className) {
+      filter['classes.name'] = { $regex: query.className, $options: 'i' };
+    }
+    if (query?.teacherName) {
+      filter.teacherName = { $regex: query.teacherName, $options: 'i' };
+    }
+    if (query?.startDate) {
+      filter.startDate = {
+        ...(filter.startDate as Record<string, Date>),
+        $gte: new Date(query.startDate),
+      };
+    }
+    if (query?.endDate) {
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $lte: new Date(query.endDate),
+      };
+    }
+    if (query?.isExpired === true) {
+      filter.endDate = { ...(filter.endDate as Record<string, Date>), $lt: new Date() };
+    } else if (query?.isExpired === false) {
+      filter.endDate = { ...(filter.endDate as Record<string, Date>), $gte: new Date() };
+    }
+
+    return filter;
+  }
+
+  private async resolveAssignmentClasses(user: UserDocument, classIds: string[]) {
+    const uniqueClassIds = [...new Set(classIds || [])];
+    if (!uniqueClassIds.length) {
+      throw new BadRequestException('请至少选择一个班级');
+    }
+
+    const classes = await this.classModel.find({ _id: { $in: uniqueClassIds } }).lean();
+    if (classes.length !== uniqueClassIds.length) {
+      throw new BadRequestException('存在无效的班级');
+    }
+
+    if (user.role !== 'superadmin') {
+      const invalidClass = classes.find((item) => item.teacherId !== user.id);
+      if (invalidClass) {
+        throw new ForbiddenException('只能给自己的班级布置作业');
+      }
+    }
+
+    return classes.map((item) => ({ id: item._id.toString(), name: item.name }));
+  }
+
+  private async getAssignmentStats(item: any) {
+    const classIds = (item.classes || []).map((cls: { id: string }) => cls.id);
+    if (!classIds.length) {
+      return {
+        total: 0,
+        submitted: 0,
+        graded: 0,
+        pending: 0,
+        totalStudents: 0,
+        totalSubmissions: 0,
+        reviewedSubmissions: 0,
+        pendingSubmissions: 0,
+        draftSubmissions: 0,
+      };
+    }
+
+    const [studentIds, submissions] = await Promise.all([
+      this.membershipModel.distinct('studentId', {
+        classId: { $in: classIds },
+        status: 'active',
+      }),
+      this.submissionModel.find({ assignmentId: item._id?.toString?.() || item.id }).lean(),
+    ]);
+
+    const nonDraftSubmissions = submissions.filter((submission) => !submission.isDraft);
+    const teacherReviewedSubmissions = nonDraftSubmissions.filter(
+      (submission) => submission.status === 'teacher_reviewed',
+    );
+    const aiProcessedSubmissions = nonDraftSubmissions.filter(
+      (submission) =>
+        submission.status === 'ai_reviewed' ||
+        submission.status === 'teacher_reviewed' ||
+        submission.aiScore !== null,
+    );
+    const pendingTeacherReviewSubmissions = nonDraftSubmissions.filter(
+      (submission) => this.normalizeSubmissionStatus(submission.status) === 'submitted',
+    );
+    const draftSubmissions = submissions.filter((submission) => submission.isDraft).length;
+
+    return {
+      total: studentIds.length,
+      submitted: nonDraftSubmissions.length,
+      graded: aiProcessedSubmissions.length,
+      pending: pendingTeacherReviewSubmissions.length,
+      totalStudents: studentIds.length,
+      totalSubmissions: nonDraftSubmissions.length,
+      reviewedSubmissions: teacherReviewedSubmissions.length,
+      pendingSubmissions: pendingTeacherReviewSubmissions.length,
+      draftSubmissions,
+    };
   }
 
   private async getUserFromAuthorization(authorization?: string) {
@@ -460,18 +688,73 @@ export class AssignmentsService {
       throw new UnauthorizedException('登录失效');
     }
 
+    this.assertTokenFreshForUser(user, decoded.iat);
     return user;
   }
 
-  private toAssignmentListItem(item: any) {
+  private assertTeacherPrivileges(user: UserDocument) {
+    if (!['teacher', 'superadmin'].includes(user.role)) {
+      throw new ForbiddenException('当前用户无权执行教师端操作');
+    }
+  }
+
+  private assertCanManageAssignment(user: UserDocument, teacherId: string) {
+    this.assertTeacherPrivileges(user);
+    if (user.role !== 'superadmin' && user.id !== teacherId) {
+      throw new ForbiddenException('只能管理自己的作业');
+    }
+  }
+
+  private normalizeSubmissionStatus(status: string): NormalizedSubmissionStatus {
+    if (status === 'ai_review_queued' || status === 'ai_review_failed') {
+      return 'submitted';
+    }
+    return status as NormalizedSubmissionStatus;
+  }
+
+  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number) {
+    const issuedAtDate = issuedAt ? new Date(issuedAt * 1000) : null;
+    if (
+      issuedAtDate &&
+      user.lastLogoutAt &&
+      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
+    if (
+      issuedAtDate &&
+      user.passwordChangedAt &&
+      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
+  }
+
+  private isExpired(endDate: string | Date) {
+    return new Date(endDate).getTime() < Date.now();
+  }
+
+  private getWordCount(content: string) {
+    return content.replace(/\s/g, '').length;
+  }
+
+  private getContentPreview(content: string) {
+    return content.length > 50 ? `${content.slice(0, 50)}...` : content;
+  }
+
+  private toAssignmentListItem(item: any, stats: any) {
     return {
-      id: item._id.toString(),
+      id: item._id?.toString?.() || item.id,
       title: item.title,
       description: item.description,
       teacherId: item.teacherId,
       teacherName: item.teacherName,
       classes: item.classes,
       aiRule: item.aiRule,
+      questionMaterial: item.questionMaterial,
+      referenceAnswer: item.referenceAnswer,
+      gradingNotes: item.gradingNotes,
+      submissionFormat: item.submissionFormat,
       startDate: item.startDate,
       endDate: item.endDate,
       allowAttachments: !!item.allowAttachments,
@@ -481,18 +764,35 @@ export class AssignmentsService {
       deletedAt: undefined,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      isExpired: new Date(item.endDate).getTime() < Date.now(),
+      isExpired: this.isExpired(item.endDate),
+      submissionStats: {
+        total: stats.total,
+        submitted: stats.submitted,
+        graded: stats.graded,
+        pending: stats.pending,
+      },
+      submissionCount: stats.totalSubmissions,
+      totalStudents: stats.totalStudents,
+      totalSubmissions: stats.totalSubmissions,
+      gradedSubmissions: stats.graded,
+      reviewedSubmissions: stats.reviewedSubmissions,
+      pendingSubmissions: stats.pendingSubmissions,
     };
   }
 
-  private toAssignmentDetail(item: any) {
+  private toAssignmentDetail(item: any, stats: any) {
     return {
-      ...this.toAssignmentListItem(item),
+      ...this.toAssignmentListItem(item, stats),
+      totalStudents: stats.totalStudents,
       submissionStats: {
-        total: 0,
-        submitted: 0,
-        graded: 0,
-        pending: 0,
+        total: stats.total,
+        submitted: stats.submitted,
+        graded: stats.graded,
+        pending: stats.pending,
+        totalSubmissions: stats.totalSubmissions,
+        reviewedSubmissions: stats.reviewedSubmissions,
+        pendingSubmissions: stats.pendingSubmissions,
+        draftSubmissions: stats.draftSubmissions,
       },
     };
   }

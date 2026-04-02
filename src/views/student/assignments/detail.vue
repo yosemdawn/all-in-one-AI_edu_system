@@ -1,117 +1,98 @@
 <template>
   <div class="assignment-detail-container">
     <div v-loading="loading" class="bg-white rounded-lg shadow-sm">
-      <!-- 作业标题区域 -->
       <div class="border-b border-gray-200 px-6 py-4">
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1 min-w-0">
             <h1 class="text-2xl font-bold text-gray-900 mb-2">
-              {{ assignment?.title }}
+              {{ assignment?.title || "作业详情" }}
             </h1>
-            <div class="flex items-center space-x-4 text-sm text-gray-500">
-              <span>{{ assignment?.subject }}</span>
-              <span>总分：{{ assignment?.totalPoints }}分</span>
-              <span>截止时间：{{ formatDate(assignment?.deadline) }}</span>
+            <div
+              v-if="assignment"
+              class="flex flex-wrap items-center gap-4 text-sm text-gray-500"
+            >
+              <span>教师：{{ assignment.teacherName || "-" }}</span>
+              <span>截止时间：{{ formatDate(assignment.endDate) }}</span>
+              <span v-if="assignment.className">班级：{{ assignment.className }}</span>
             </div>
           </div>
-          <el-tag :type="getStatusType(assignment?.status)" size="large">
-            {{ getStatusText(assignment?.status) }}
+          <el-tag :type="getAssignmentStatusType(assignment)" size="large">
+            {{ getAssignmentStatusText(assignment) }}
           </el-tag>
         </div>
       </div>
 
-      <!-- 作业内容 -->
-      <div class="p-6">
+      <div class="p-6" v-if="assignment">
         <div class="prose max-w-none">
           <h3 class="text-lg font-medium text-gray-900 mb-3">作业要求</h3>
-          <div class="text-gray-700 whitespace-pre-wrap">
-            {{ assignment?.description }}
-          </div>
+          <div class="text-gray-700" v-html="assignment.description"></div>
         </div>
 
-        <!-- 附件列表 -->
-        <div v-if="assignment?.attachments?.length" class="mt-6">
-          <h3 class="text-lg font-medium text-gray-900 mb-3">作业附件</h3>
-          <div class="space-y-2">
-            <div
-              v-for="attachment in assignment.attachments"
-              :key="attachment.url"
-              class="flex items-center p-3 bg-gray-50 rounded-lg"
-            >
-              <el-icon class="text-blue-500 mr-2"><Document /></el-icon>
-              <span class="flex-1">{{ attachment.name }}</span>
-              <el-button
-                type="primary"
-                size="small"
-                @click="downloadFile(attachment)"
-              >
-                下载
-              </el-button>
-            </div>
-          </div>
+        <div v-if="assignment.questionMaterial?.content" class="mt-6 detail-card">
+          <h3 class="text-lg font-medium text-gray-900 mb-3">题目内容</h3>
+          <div class="text-gray-700" v-html="assignment.questionMaterial.content"></div>
         </div>
 
-        <!-- 提交状态信息 -->
+        <div
+          v-if="assignment.referenceAnswer?.content"
+          class="mt-6 detail-card detail-card--answer"
+        >
+          <h3 class="text-lg font-medium text-gray-900 mb-3">参考答案</h3>
+          <div class="text-gray-700" v-html="assignment.referenceAnswer.content"></div>
+        </div>
+
+        <div v-if="assignment.gradingNotes" class="mt-6 detail-card detail-card--notes">
+          <h3 class="text-lg font-medium text-gray-900 mb-3">补充说明</h3>
+          <div class="text-gray-700 whitespace-pre-wrap">{{ assignment.gradingNotes }}</div>
+        </div>
+
         <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h3 class="text-lg font-medium text-gray-900 mb-3">提交状态</h3>
+          <h3 class="text-lg font-medium text-gray-900 mb-3">当前状态</h3>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span class="text-gray-500">提交状态：</span>
-              <el-tag :type="getSubmissionStatusType()" size="small">
-                {{ getSubmissionStatusText() }}
+              <el-tag :type="getSubmissionStatusType(assignment)" size="small">
+                {{ getSubmissionStatusText(assignment) }}
               </el-tag>
             </div>
-            <div v-if="assignment?.hasSubmitted">
+            <div v-if="assignment.hasSubmitted">
               <span class="text-gray-500">批改状态：</span>
-              <el-tag :type="getReviewStatusType()" size="small">
-                {{ getReviewStatusText() }}
+              <el-tag
+                :type="getReviewStatusType(assignment.submissionStatus)"
+                size="small"
+              >
+                {{ getReviewStatusText(assignment.submissionStatus) }}
               </el-tag>
             </div>
             <div>
               <span class="text-gray-500">作业状态：</span>
-              <el-tag
-                :type="assignment?.isExpired ? 'danger' : 'success'"
-                size="small"
-              >
-                {{ assignment?.isExpired ? "已过期" : "进行中" }}
+              <el-tag :type="assignment.isExpired ? 'danger' : 'success'" size="small">
+                {{ assignment.isExpired ? "已过期" : "进行中" }}
               </el-tag>
             </div>
-            <div v-if="assignment?.terminatedReason">
+            <div v-if="assignment.terminatedReason">
               <span class="text-gray-500">终止原因：</span>
-              <span class="text-red-600">{{
-                assignment.terminatedReason
-              }}</span>
+              <span class="text-red-600">{{ assignment.terminatedReason }}</span>
             </div>
           </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="mt-6 flex justify-end space-x-3">
+        <div class="mt-6 flex justify-end gap-3 flex-wrap">
           <el-button @click="goBack">返回</el-button>
           <el-button
-            v-if="assignment?.hasSubmitted || assignment?.hasDraft"
+            v-if="assignment.hasSubmitted || assignment.hasDraft"
             type="primary"
-            @click="viewSubmission"
+            @click="goToSubmission"
           >
-            {{ assignment?.hasSubmitted ? "查看提交" : "继续编辑" }}
+            {{ assignment.hasSubmitted ? "查看提交" : "继续编辑" }}
           </el-button>
-          <el-button
-            v-else-if="
-              !assignment?.isExpired && assignment?.status !== 'terminated'
-            "
-            type="primary"
-            @click="startSubmission"
-          >
+          <el-button v-else-if="assignment.canSubmit" type="primary" @click="goToSubmission">
             开始作业
           </el-button>
-          <el-tag v-else-if="assignment?.isExpired" type="danger" size="large">
+          <el-tag v-else-if="assignment.isExpired" type="danger" size="large">
             作业已过期
           </el-tag>
-          <el-tag
-            v-else-if="assignment?.status === 'terminated'"
-            type="warning"
-            size="large"
-          >
+          <el-tag v-else-if="assignment.status === 'terminated'" type="warning" size="large">
             作业已终止
           </el-tag>
         </div>
@@ -121,85 +102,81 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { Document } from "@element-plus/icons-vue";
 import { getStudentAssignment } from "../../../api/assignments";
 
 const route = useRoute();
 const router = useRouter();
 
 const loading = ref(false);
-const assignment = ref(null);
+const assignment = ref<any>(null);
 
-// 加载作业详情
+const assignmentId = computed(
+  () => (route.query.assignmentId || route.params.id) as string
+);
+const classId = computed(() => route.query.classId as string | undefined);
+
 const loadAssignment = async () => {
+  if (!assignmentId.value) {
+    ElMessage.error("缺少作业ID");
+    router.replace("/student/assignments");
+    return;
+  }
+
   loading.value = true;
   try {
-    const assignmentId = route.params.id as string;
-    const classId = route.query.classId as string;
-    assignment.value = await getStudentAssignment(assignmentId, classId);
-  } catch (error) {
+    assignment.value = await getStudentAssignment(assignmentId.value, classId.value);
+  } catch (error: any) {
     console.error("加载作业详情失败:", error);
-    ElMessage.error("加载作业详情失败");
+    ElMessage.error(error?.message || "加载作业详情失败");
   } finally {
     loading.value = false;
   }
 };
 
-// 格式化日期
-const formatDate = (date) => {
+const formatDate = (date?: string) => {
   if (!date) return "-";
   return new Date(date).toLocaleString("zh-CN");
 };
 
-// 获取状态类型
-const getStatusType = (status) => {
-  const statusMap = {
-    pending: "warning",
-    in_progress: "primary",
-    completed: "success",
-    overdue: "danger",
-  };
-  return statusMap[status] || "info";
+const getAssignmentStatusType = (item?: any) => {
+  if (!item) return "info";
+  if (item.status === "terminated") return "warning";
+  if (item.isExpired) return "danger";
+  if (item.hasSubmitted) return "success";
+  if (item.hasDraft) return "info";
+  return "primary";
 };
 
-// 获取状态文本
-const getStatusText = (status) => {
-  const statusMap = {
-    pending: "待完成",
-    in_progress: "进行中",
-    completed: "已完成",
-    overdue: "已逾期",
-  };
-  return statusMap[status] || "未知";
+const getAssignmentStatusText = (item?: any) => {
+  if (!item) return "未知";
+  if (item.status === "terminated") return "已终止";
+  if (item.isExpired) return "已过期";
+  if (item.hasSubmitted) return "已提交";
+  if (item.hasDraft) return "草稿";
+  return "待处理";
 };
 
-// 获取提交状态类型
-const getSubmissionStatusType = () => {
-  if (!assignment.value) return "info";
-  if (assignment.value.hasDraft && !assignment.value.hasSubmitted)
-    return "warning";
-  if (assignment.value.hasSubmitted) return "success";
-  if (assignment.value.isExpired) return "danger";
+const getSubmissionStatusType = (item?: any) => {
+  if (!item) return "info";
+  if (item.hasDraft && !item.hasSubmitted) return "warning";
+  if (item.hasSubmitted) return "success";
+  if (item.isExpired) return "danger";
   return "info";
 };
 
-// 获取提交状态文本
-const getSubmissionStatusText = () => {
-  if (!assignment.value) return "未知";
-  if (assignment.value.hasDraft && !assignment.value.hasSubmitted)
-    return "草稿";
-  if (assignment.value.hasSubmitted) return "已提交";
-  if (assignment.value.isExpired) return "未提交";
+const getSubmissionStatusText = (item?: any) => {
+  if (!item) return "未知";
+  if (item.hasDraft && !item.hasSubmitted) return "草稿";
+  if (item.hasSubmitted) return "已提交";
+  if (item.isExpired) return "未提交";
   return "待提交";
 };
 
-// 获取批改状态类型
-const getReviewStatusType = () => {
-  if (!assignment.value?.submissionStatus) return "info";
-  switch (assignment.value.submissionStatus) {
+const getReviewStatusType = (status?: string) => {
+  switch (status) {
     case "teacher_reviewed":
       return "success";
     case "ai_reviewed":
@@ -211,10 +188,8 @@ const getReviewStatusType = () => {
   }
 };
 
-// 获取批改状态文本
-const getReviewStatusText = () => {
-  if (!assignment.value?.submissionStatus) return "待批改";
-  switch (assignment.value.submissionStatus) {
+const getReviewStatusText = (status?: string) => {
+  switch (status) {
     case "teacher_reviewed":
       return "已批改";
     case "ai_reviewed":
@@ -226,36 +201,16 @@ const getReviewStatusText = () => {
   }
 };
 
-// 下载附件
-const downloadFile = (attachment) => {
-  window.open(attachment.url, "_blank");
-};
-
-// 返回
 const goBack = () => {
-  router.back();
+  router.push("/student/assignments");
 };
 
-// 开始作业
-const startSubmission = () => {
-  // 跳转到提交页面
+const goToSubmission = () => {
   router.push({
     path: "/student/submissions",
     query: {
-      assignmentId: route.params.id,
-      classId: route.query.classId || "", // 从路由查询参数中获取classId
-    },
-  });
-};
-
-// 查看提交
-const viewSubmission = () => {
-  // 跳转到提交页面
-  router.push({
-    path: "/student/submissions",
-    query: {
-      assignmentId: route.params.id,
-      classId: route.query.classId || "", // 从路由查询参数中获取classId
+      assignmentId: assignmentId.value,
+      classId: classId.value || assignment.value?.classId || "",
     },
   });
 };
@@ -267,12 +222,25 @@ onMounted(() => {
 
 <style scoped>
 .assignment-detail-container {
-  max-width: 800px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 20px;
 }
 
-.prose {
-  line-height: 1.6;
+.detail-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+}
+
+.detail-card--answer {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.detail-card--notes {
+  border-color: #fde68a;
+  background: #fffbeb;
 }
 </style>

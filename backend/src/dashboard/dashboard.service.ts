@@ -27,19 +27,26 @@ export class DashboardService {
   async getTeacherDashboard(userId: string) {
     const user = await this.userModel.findById(userId).lean();
     if (!user) throw new UnauthorizedException('登录失效');
+    const resolvedUserId = user._id.toString();
 
-    const myClasses = await this.classModel.find({ teacherId: user.id }).lean();
+    const myClasses = await this.classModel.find({ teacherId: resolvedUserId }).lean();
     const myClassIds = myClasses.map((item) => item._id.toString());
-    const myAssignments = await this.assignmentModel.find({ teacherId: user.id }).lean();
+    const myAssignments = await this.assignmentModel.find({ teacherId: resolvedUserId }).lean();
     const myAssignmentIds = myAssignments.map((item) => item._id.toString());
-    const memberships = await this.membershipModel.find({ classId: { $in: myClassIds } }).lean();
-    const submissions = await this.submissionModel.find({ assignmentId: { $in: myAssignmentIds } }).lean();
+    const memberships = await this.membershipModel
+      .find({ classId: { $in: myClassIds }, status: 'active' })
+      .lean();
+    const submissions = await this.submissionModel
+      .find({ assignmentId: { $in: myAssignmentIds } })
+      .lean();
+
+    const pendingReviewStatuses = ['submitted', 'ai_reviewed', 'ai_review_failed'];
 
     return this.appService.envelope(
       {
         myClasses: myClasses.length,
         myAssignments: myAssignments.length,
-        pendingReviews: submissions.filter((s) => ['submitted', 'ai_reviewed'].includes(s.status)).length,
+        pendingReviews: submissions.filter((s) => pendingReviewStatuses.includes(s.status)).length,
         totalStudents: memberships.length,
         classSubmissionStats: myClasses.map((cls) => {
           const totalStudents = memberships.filter((m) => m.classId === cls._id.toString()).length;
@@ -68,11 +75,21 @@ export class DashboardService {
           pendingReviews: submissions.filter((s) => ['submitted', 'ai_review_queued'].includes(s.status)).length,
         },
         studentScoreAnalysis: {
-          avgAiScore: this.average(submissions.map((s) => s.aiScore).filter((v) => v !== null && v !== undefined) as number[]),
-          avgTeacherScore: this.average(submissions.map((s) => s.teacherScore).filter((v) => v !== null && v !== undefined) as number[]),
+          avgAiScore: this.average(
+            submissions.map((s) => s.aiScore).filter((v) => v !== null && v !== undefined) as number[],
+          ),
+          avgTeacherScore: this.average(
+            submissions.map((s) => s.teacherScore).filter((v) => v !== null && v !== undefined) as number[],
+          ),
           scoreDifference:
-            this.average(submissions.map((s) => s.teacherScore).filter((v) => v !== null && v !== undefined) as number[]) -
-            this.average(submissions.map((s) => s.aiScore).filter((v) => v !== null && v !== undefined) as number[]),
+            this.average(
+              submissions
+                .map((s) => s.teacherScore)
+                .filter((v) => v !== null && v !== undefined) as number[],
+            ) -
+            this.average(
+              submissions.map((s) => s.aiScore).filter((v) => v !== null && v !== undefined) as number[],
+            ),
           excellentRate: submissions.length
             ? Math.round((submissions.filter((s) => (s.teacherScore ?? s.aiScore ?? 0) >= 90).length / submissions.length) * 100)
             : 0,
@@ -111,7 +128,7 @@ export class DashboardService {
           };
         }),
         submissions: submissions
-          .filter((submission) => ['submitted', 'ai_reviewed'].includes(submission.status))
+          .filter((submission) => ['submitted', 'ai_reviewed', 'ai_review_failed'].includes(submission.status))
           .sort(
             (a, b) =>
               new Date(b.submittedAt || b.createdAt || 0).getTime() -
@@ -123,7 +140,7 @@ export class DashboardService {
             studentName: submission.studentName,
             assignmentTitle:
               assignments.find((a) => a._id.toString() === submission.assignmentId)?.title || '',
-            status: submission.status,
+            status: this.normalizeSubmissionStatus(submission.status),
             submittedAt: submission.submittedAt || submission.createdAt,
             aiScore: submission.aiScore,
           })),
@@ -161,7 +178,7 @@ export class DashboardService {
       submissions.some(
         (submission) =>
           submission.assignmentId === assignment._id.toString() &&
-          ['submitted', 'ai_reviewed'].includes(submission.status),
+          ['submitted', 'ai_reviewed', 'ai_review_failed'].includes(submission.status),
       ),
     );
 
@@ -184,11 +201,13 @@ export class DashboardService {
   async getStudentDashboard(userId: string) {
     const user = await this.userModel.findById(userId).lean();
     if (!user) throw new UnauthorizedException('登录失效');
+    const resolvedUserId = user._id.toString();
 
-    const memberships = await this.membershipModel.find({ studentId: user.id, status: 'active' }).lean();
+    const memberships = await this.membershipModel.find({ studentId: resolvedUserId, status: 'active' }).lean();
     const classIds = memberships.map((item) => item.classId);
     const assignments = await this.assignmentModel.find({ 'classes.id': { $in: classIds } }).lean();
-    const submissions = await this.submissionModel.find({ studentId: user.id }).lean();
+    const submissions = await this.submissionModel.find({ studentId: resolvedUserId }).lean();
+    const assignmentMap = new Map(assignments.map((assignment) => [assignment._id.toString(), assignment]));
 
     const pendingAssignmentsList = assignments
       .map((assignment) => {
@@ -196,35 +215,54 @@ export class DashboardService {
         const submission = submissions.find(
           (item) => item.assignmentId === assignment._id.toString() && item.classId === matchedClass?.id,
         );
+        const hasSubmitted = !!submission && !submission.isDraft;
+        const isExpired = this.isExpired(assignment.endDate);
         return {
           assignmentId: assignment._id.toString(),
           title: assignment.title,
           classId: matchedClass?.id || '',
           className: matchedClass?.name || '',
           endDate: assignment.endDate,
-          hasSubmitted: !!submission && !submission.isDraft,
+          hasSubmitted,
           hasDraft: !!submission && submission.isDraft,
           status: submission?.isDraft ? 'draft' : 'not_started',
+          isPending:
+            assignment.status === 'published' &&
+            !isExpired &&
+            !hasSubmitted,
         };
       })
-      .filter((item) => !item.hasSubmitted);
+      .filter((item) => item.isPending);
+
+    const completedSubmissions = submissions.filter((item) => !item.isDraft);
+    const onTimeSubmissionCount = completedSubmissions.filter((submission) => {
+      const assignment = assignmentMap.get(submission.assignmentId);
+      if (!assignment?.endDate || !submission.submittedAt) {
+        return false;
+      }
+      return new Date(submission.submittedAt).getTime() <= new Date(assignment.endDate).getTime();
+    }).length;
+
+    const normalizedStatuses = submissions.map((submission) => this.normalizeSubmissionStatus(submission.status));
 
     return this.appService.envelope(
       {
-        completedSubmissions: submissions.filter((item) => !item.isDraft).length,
+        completedSubmissions: completedSubmissions.length,
         averageScore: this.average(
           submissions
             .map((item) => item.teacherScore ?? item.aiScore)
             .filter((item) => item !== null && item !== undefined) as number[],
         ),
         joinedClasses: memberships.length,
-        onTimeRate: submissions.length ? 100 : 0,
+        onTimeRate: completedSubmissions.length
+          ? Math.round((onTimeSubmissionCount / completedSubmissions.length) * 100)
+          : 0,
         pendingAssignments: pendingAssignmentsList.length,
         submissionStatusStats: ['draft', 'submitted', 'ai_reviewed', 'teacher_reviewed'].map((status) => ({
           status,
-          count: submissions.filter((item) => item.status === status).length,
+          count: normalizedStatuses.filter((item) => item === status).length,
           percentage: submissions.length
-            ? Math.round((submissions.filter((item) => item.status === status).length / submissions.length) * 100)
+            ? Math.round((normalizedStatuses.filter((item) => item === status).length / submissions.length) * 100)
             : 0,
         })),
         performanceAnalysis: {
@@ -258,12 +296,11 @@ export class DashboardService {
           .slice(0, 10)
           .map((item) => ({
             id: item._id.toString(),
-            assignmentTitle:
-              assignments.find((assignment) => assignment._id.toString() === item.assignmentId)?.title || '',
+            assignmentTitle: assignmentMap.get(item.assignmentId)?.title || '',
             aiScore: item.aiScore,
             teacherScore: item.teacherScore,
             submittedAt: item.submittedAt || item.createdAt,
-            status: item.status,
+            status: this.normalizeSubmissionStatus(item.status),
           })),
       },
       '获取成功',
@@ -273,10 +310,11 @@ export class DashboardService {
   async getStudentLearningProgress(userId: string) {
     const user = await this.userModel.findById(userId).lean();
     if (!user) throw new UnauthorizedException('登录失效');
-    const memberships = await this.membershipModel.find({ studentId: user.id, status: 'active' }).lean();
+    const resolvedUserId = user._id.toString();
+    const memberships = await this.membershipModel.find({ studentId: resolvedUserId, status: 'active' }).lean();
     const classIds = memberships.map((item) => item.classId);
     const assignments = await this.assignmentModel.find({ 'classes.id': { $in: classIds } }).lean();
-    const submissions = await this.submissionModel.find({ studentId: user.id, isDraft: false }).lean();
+    const submissions = await this.submissionModel.find({ studentId: resolvedUserId, isDraft: false }).lean();
 
     return this.appService.envelope(
       {
@@ -291,7 +329,8 @@ export class DashboardService {
   async getStudentAchievements(userId: string) {
     const user = await this.userModel.findById(userId).lean();
     if (!user) throw new UnauthorizedException('登录失效');
-    const submissions = await this.submissionModel.find({ studentId: user.id, isDraft: false }).lean();
+    const resolvedUserId = user._id.toString();
+    const submissions = await this.submissionModel.find({ studentId: resolvedUserId, isDraft: false }).lean();
 
     return this.appService.envelope(
       {
@@ -306,13 +345,16 @@ export class DashboardService {
   async getStudentStudyRecommendations(userId: string) {
     const user = await this.userModel.findById(userId).lean();
     if (!user) throw new UnauthorizedException('登录失效');
-    const memberships = await this.membershipModel.find({ studentId: user.id, status: 'active' }).lean();
+    const resolvedUserId = user._id.toString();
+    const memberships = await this.membershipModel.find({ studentId: resolvedUserId, status: 'active' }).lean();
     const classIds = memberships.map((item) => item.classId);
     const assignments = await this.assignmentModel.find({ 'classes.id': { $in: classIds } }).lean();
-    const submissions = await this.submissionModel.find({ studentId: user.id, isDraft: false }).lean();
+    const submissions = await this.submissionModel.find({ studentId: resolvedUserId, isDraft: false }).lean();
 
     const pendingAssignments = assignments.filter(
       (assignment) =>
+        assignment.status === 'published' &&
+        !this.isExpired(assignment.endDate) &&
         !submissions.some((submission) => submission.assignmentId === assignment._id.toString()),
     );
 
@@ -324,6 +366,17 @@ export class DashboardService {
       })),
       '获取成功',
     );
+  }
+
+  private normalizeSubmissionStatus(status: string) {
+    if (status === 'ai_review_queued' || status === 'ai_review_failed') {
+      return 'submitted';
+    }
+    return status;
+  }
+
+  private isExpired(endDate: Date | string) {
+    return new Date(endDate).getTime() < Date.now();
   }
 
   private average(values: number[]) {

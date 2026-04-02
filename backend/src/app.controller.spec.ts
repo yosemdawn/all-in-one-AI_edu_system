@@ -3,8 +3,11 @@ import { AssignmentsService } from './assignments/assignments.service';
 import { AuthService } from './auth/auth.service';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AdminService } from './admin/admin.service';
 import { ClassesService } from './classes/classes.service';
+import { DashboardService } from './dashboard/dashboard.service';
 import { SubmissionsService } from './submissions/submissions.service';
+import { UsersService } from './users/users.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -68,6 +71,44 @@ describe('AppController', () => {
             getSubmissionList: jest.fn(),
             getSubmissionDetail: jest.fn(),
             teacherReview: jest.fn(),
+          },
+        },
+        {
+          provide: DashboardService,
+          useValue: {
+            getTeacherDashboard: jest.fn(),
+            getTeacherPendingTasks: jest.fn(),
+            getTeacherPerformanceSummary: jest.fn(),
+            getTeacherQuickActions: jest.fn(),
+            getStudentDashboard: jest.fn(),
+            getStudentLearningProgress: jest.fn(),
+            getStudentAchievements: jest.fn(),
+            getStudentStudyRecommendations: jest.fn(),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            getUsers: jest.fn(),
+            createUser: jest.fn(),
+            getCurrentUserProfile: jest.fn(),
+            updateCurrentUserProfile: jest.fn(),
+            updateCurrentUserPassword: jest.fn(),
+            getUser: jest.fn(),
+            updateUser: jest.fn(),
+            updateUserPassword: jest.fn(),
+            resetUserPassword: jest.fn(),
+            deleteUser: jest.fn(),
+            importUsers: jest.fn(),
+            deleteUsers: jest.fn(),
+          },
+        },
+        {
+          provide: AdminService,
+          useValue: {
+            getOverview: jest.fn(),
+            getRecentUsers: jest.fn(),
+            getHealth: jest.fn(),
           },
         },
       ],

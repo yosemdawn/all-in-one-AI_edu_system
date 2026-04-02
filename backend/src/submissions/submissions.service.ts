@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -10,10 +11,10 @@ import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import { TokenService } from '../auth/auth.helpers';
 import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { AiReviewQueueService } from './ai-review-queue.service';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { AiReviewQueueService } from './ai-review-queue.service';
 import { DeleteSubmissionDto } from './dto/delete-submission.dto';
 import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SubmitAssignmentDto } from './dto/submit-assignment.dto';
@@ -41,15 +42,28 @@ export class SubmissionsService {
 
   async submit(authorization: string | undefined, payload: SubmitAssignmentDto) {
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertRoles(user, ['student']);
+
     const assignment = await this.assignmentModel.findById(payload.assignmentId);
     if (!assignment) {
       throw new NotFoundException('作业不存在');
+    }
+    if (assignment.status !== 'published') {
+      throw new BadRequestException('当前作业不可提交');
+    }
+    if (new Date(assignment.endDate).getTime() < Date.now()) {
+      throw new BadRequestException('作业已截止，无法继续提交');
     }
 
     const allowedClassIds = assignment.classes.map((item) => item.id);
     const targetClassId = payload.classId || user.classId;
     if (!targetClassId || !allowedClassIds.includes(targetClassId)) {
       throw new BadRequestException('提交班级与作业班级不匹配');
+    }
+
+    const classItem = await this.classModel.findById(targetClassId).lean();
+    if (!classItem || classItem.status !== 'active') {
+      throw new BadRequestException('当前班级不可提交作业');
     }
 
     const member = await this.membershipModel.findOne({
@@ -141,6 +155,8 @@ export class SubmissionsService {
 
   async getMySubmission(authorization: string | undefined, assignmentId: string) {
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertRoles(user, ['student']);
+
     const assignment = await this.assignmentModel.findById(assignmentId).lean();
     if (!assignment) {
       throw new NotFoundException('作业不存在');
@@ -149,6 +165,11 @@ export class SubmissionsService {
     const submission = await this.submissionModel
       .findOne({ assignmentId, studentId: user.id })
       .lean();
+
+    const shouldExposeAiReview =
+      !!submission &&
+      ((submission.aiScore !== null && submission.aiScore !== undefined) ||
+        !!submission.aiReviewMetadata);
 
     return this.appService.envelope(
       {
@@ -167,10 +188,11 @@ export class SubmissionsService {
           submissionFormat: assignment.submissionFormat,
           status: assignment.status,
           terminatedReason: assignment.terminatedReason,
+          createdAt: assignment.createdAt,
         },
         submission: submission ? this.toSubmissionPayload(submission) : null,
         aiReview:
-          submission && submission.aiScore !== null && submission.aiScore !== undefined
+          submission && shouldExposeAiReview
             ? {
                 content: submission.aiReviewContent,
                 score: submission.aiScore,
@@ -191,8 +213,30 @@ export class SubmissionsService {
     );
   }
 
-  async deleteSubmission(body: DeleteSubmissionDto) {
+  async deleteSubmission(
+    authorization: string | undefined,
+    body: DeleteSubmissionDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
+    const submission = await this.submissionModel.findById(body.submissionId);
+    if (!submission) {
+      throw new NotFoundException('提交不存在');
+    }
+
+    if (user.role !== 'superadmin') {
+      this.assertRoles(user, ['student']);
+      if (submission.studentId !== user.id) {
+        throw new ForbiddenException('只能删除自己的提交');
+      }
+      if (!submission.isDraft) {
+        throw new ForbiddenException('只能删除草稿提交');
+      }
+    }
+
+    const deletedClassId = submission.classId;
+    const deletedStudentId = submission.studentId;
     await this.submissionModel.findByIdAndDelete(body.submissionId);
+    await this.syncMembershipSubmissionStats(deletedClassId, deletedStudentId);
     return this.appService.envelope(
       {
         success: true,
@@ -205,7 +249,11 @@ export class SubmissionsService {
 
   async getSubmissionList(authorization: string | undefined, query: SubmissionQueryDto) {
     const user = await this.getUserFromAuthorization(authorization);
-    const teacherAssignments = await this.assignmentModel.find({ teacherId: user.id }).lean();
+    this.assertRoles(user, ['teacher', 'superadmin']);
+
+    const teacherAssignments = await this.assignmentModel
+      .find(user.role === 'superadmin' ? {} : { teacherId: user.id })
+      .lean();
     const teacherAssignmentIds = teacherAssignments.map((item) => item._id.toString());
 
     const filter: Record<string, unknown> = {
@@ -214,9 +262,15 @@ export class SubmissionsService {
 
     if (query.assignmentId) filter.assignmentId = query.assignmentId;
     if (query.classId) filter.classId = query.classId;
-    if (query.status) filter.status = query.status;
+    if (query.status === 'submitted') {
+      filter.status = { $in: ['submitted', 'ai_review_queued', 'ai_review_failed'] };
+    } else if (query.status) {
+      filter.status = query.status;
+    }
     if (query.studentName) filter.studentName = { $regex: query.studentName, $options: 'i' };
-    if (query.studentNumber) filter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
+    if (query.studentNumber) {
+      filter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
+    }
     if (query.minScore !== undefined || query.maxScore !== undefined) {
       const scoreFilter: Record<string, number> = {};
       if (query.minScore !== undefined) scoreFilter.$gte = Number(query.minScore);
@@ -231,7 +285,12 @@ export class SubmissionsService {
     const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
-      this.submissionModel.find(filter).sort({ [sortBy]: sortOrder }).skip(skip).limit(limit).lean(),
+      this.submissionModel
+        .find(filter)
+        .sort({ [sortBy]: sortOrder })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       this.submissionModel.countDocuments(filter),
     ]);
 
@@ -241,9 +300,11 @@ export class SubmissionsService {
           ...this.toSubmissionPayload(item),
           _id: item._id.toString(),
           assignmentTitle:
-            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)?.title || '',
+            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)
+              ?.title || '',
           teacherName:
-            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)?.teacherName || '',
+            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)
+              ?.teacherName || '',
         })),
         total,
         page,
@@ -255,14 +316,19 @@ export class SubmissionsService {
 
   async getSubmissionDetail(authorization: string | undefined, submissionId: string) {
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertRoles(user, ['teacher', 'superadmin']);
+
     const item = await this.submissionModel.findById(submissionId).lean();
     if (!item) {
       throw new NotFoundException('提交不存在');
     }
 
     const assignment = await this.assignmentModel.findById(item.assignmentId).lean();
-    if (!assignment || assignment.teacherId !== user.id) {
-      throw new UnauthorizedException('无权查看该提交');
+    if (!assignment) {
+      throw new NotFoundException('作业不存在');
+    }
+    if (user.role !== 'superadmin' && assignment.teacherId !== user.id) {
+      throw new ForbiddenException('无权查看该提交');
     }
 
     return this.appService.envelope(
@@ -276,14 +342,22 @@ export class SubmissionsService {
 
   async teacherReview(authorization: string | undefined, body: TeacherReviewDto) {
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertRoles(user, ['teacher', 'superadmin']);
+
     const item = await this.submissionModel.findById(body.submissionId);
     if (!item) {
       throw new NotFoundException('提交不存在');
     }
+    if (item.isDraft) {
+      throw new BadRequestException('草稿提交不能批改');
+    }
 
     const assignment = await this.assignmentModel.findById(item.assignmentId).lean();
-    if (!assignment || assignment.teacherId !== user.id) {
-      throw new UnauthorizedException('无权批改该提交');
+    if (!assignment) {
+      throw new NotFoundException('作业不存在');
+    }
+    if (user.role !== 'superadmin' && assignment.teacherId !== user.id) {
+      throw new ForbiddenException('无权批改该提交');
     }
 
     item.teacherScore = body.teacherScore;
@@ -352,7 +426,56 @@ export class SubmissionsService {
       throw new UnauthorizedException('登录失效');
     }
 
+    this.assertTokenFreshForUser(user, decoded.iat);
     return user;
+  }
+
+  private async syncMembershipSubmissionStats(classId: string, studentId: string) {
+    const latestSubmitted = await this.submissionModel
+      .findOne({
+        classId,
+        studentId,
+        isDraft: false,
+      })
+      .sort({ submittedAt: -1, createdAt: -1 })
+      .lean();
+
+    await this.membershipModel.findOneAndUpdate(
+      { classId, studentId },
+      {
+        $set: {
+          totalSubmissions: latestSubmitted?.submissionCount || 0,
+          lastSubmissionTime: latestSubmitted?.submittedAt || null,
+        },
+      },
+    );
+  }
+
+  private assertRoles(
+    user: UserDocument,
+    allowedRoles: Array<'superadmin' | 'teacher' | 'student'>,
+  ) {
+    if (!allowedRoles.includes(user.role)) {
+      throw new ForbiddenException('当前用户无权执行此操作');
+    }
+  }
+
+  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number) {
+    const issuedAtDate = issuedAt ? new Date(issuedAt * 1000) : null;
+    if (
+      issuedAtDate &&
+      user.lastLogoutAt &&
+      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
+    if (
+      issuedAtDate &&
+      user.passwordChangedAt &&
+      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
   }
 
   private toSubmissionPayload(item: any) {

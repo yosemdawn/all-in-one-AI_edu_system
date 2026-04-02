@@ -53,6 +53,9 @@ export class User {
   @Prop()
   passwordChangedAt?: Date;
 
+  @Prop()
+  lastLogoutAt?: Date;
+
   createdAt?: Date;
 
   updatedAt?: Date;

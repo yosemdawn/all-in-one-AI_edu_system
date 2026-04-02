@@ -250,7 +250,7 @@ export class AppService {
       provider: 'ByteDance',
       modelName: 'doubao-seed-2-0-lite-260215',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      apiKey: 'REMOVED_EXPOSED_SECRET',
+      apiKey: process.env.DOUBAO_API_KEY || '',
       status: 'active',
       isDefault: true,
       totalUsage: 12,

@@ -304,8 +304,9 @@ const viewAssignment = (assignment: StudentAssignmentListItem) => {
   } else {
     // 跳转到作业详情页面
     router.push({
-      path: `/student/assignments/${assignment.id}`,
+      path: "/student/assignments/detail",
       query: {
+        assignmentId: assignment.id,
         classId: assignment.classId, // 传递classId参数
       },
     });
