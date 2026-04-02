@@ -40,6 +40,8 @@ export class TokenService {
 
   verifyAccessToken(token: string) {
     const secret = this.configService.get<string>('JWT_SECRET') ?? 'dev-secret';
-    return this.jwtService.verify<{ sub: string; role: string }>(token, { secret });
+    return this.jwtService.verify<{ sub: string; role: string; iat?: number }>(token, {
+      secret,
+    });
   }
 }

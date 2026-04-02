@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class AssignmentQueryDto {
@@ -13,6 +13,10 @@ export class AssignmentQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
 
   @IsOptional()
   @IsString()
@@ -39,7 +43,18 @@ export class AssignmentQueryDto {
   endDate?: string;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === true || value === 'true') {
+      return true;
+    }
+    if (value === false || value === 'false') {
+      return false;
+    }
+    return value;
+  })
   isExpired?: boolean;
 
   @IsOptional()
@@ -47,8 +62,16 @@ export class AssignmentQueryDto {
   sort?: string;
 
   @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @IsOptional()
   @IsIn(['asc', 'desc'])
   order?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
   @IsString()

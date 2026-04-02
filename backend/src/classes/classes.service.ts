@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -21,8 +22,6 @@ import { ClassDocument, ClassEntity } from './schemas/class.schema';
 
 @Injectable()
 export class ClassesService {
-  private ensureSeedDataPromise?: Promise<void>;
-
   constructor(
     @InjectModel(ClassEntity.name)
     private readonly classModel: Model<ClassDocument>,
@@ -34,64 +33,30 @@ export class ClassesService {
     private readonly appService: AppService,
   ) {}
 
-  async ensureSeedData() {
-    if (this.ensureSeedDataPromise) {
-      return this.ensureSeedDataPromise;
-    }
-
-    this.ensureSeedDataPromise = (async () => {
-      const existing = await this.classModel.countDocuments();
-      if (existing > 0) {
-        return;
-      }
-
-      const teacher = await this.userModel.findOne({ username: 'teacher1' });
-      const student = await this.userModel.findOne({ username: 'student1' });
-
-      if (!teacher || !student) {
-        return;
-      }
-
-      const classItem = await this.classModel.create({
-        name: '高一(1)班',
-        code: 'A1001',
-        teacherId: teacher.id,
-        teacherName: teacher.name,
-        status: 'active',
-        studentCount: 1,
-        maxStudents: 60,
-        description: '英语写作提升班',
-      });
-
-      await this.membershipModel.create({
-        classId: classItem.id,
-        studentId: student.id,
-        studentName: student.name,
-        studentNumber: student.studentId,
-        status: 'active',
-        joinMethod: 'code',
-        joinedAt: new Date(),
-        totalSubmissions: 0,
-        lastSubmissionTime: null,
-      });
-
-      student.classId = classItem.id;
-      student.className = classItem.name;
-      await student.save();
-    })();
-
-    return this.ensureSeedDataPromise;
-  }
-
-  async getClasses(query: ClassListQueryDto) {
-    await this.ensureSeedData();
-
+  async getClasses(
+    authorization: string | undefined,
+    query: ClassListQueryDto,
+  ) {
     const filter: Record<string, unknown> = {};
+    const currentUser = authorization
+      ? await this.getUserFromAuthorization(authorization)
+      : null;
+
     if (query.status) {
       filter.status = query.status;
     }
     if (query.search) {
       filter.name = { $regex: query.search, $options: 'i' };
+    }
+    if (currentUser?.role === 'teacher') {
+      filter.teacherId = currentUser.id;
+    }
+    if (currentUser?.role === 'student') {
+      const joinedClassIds = await this.membershipModel.distinct('classId', {
+        studentId: currentUser.id,
+        status: 'active',
+      });
+      filter._id = { $in: joinedClassIds };
     }
 
     const page = Number(query.page || 1);
@@ -115,8 +80,6 @@ export class ClassesService {
   }
 
   async getClass(id: string) {
-    await this.ensureSeedData();
-
     const classItem = await this.classModel.findById(id).lean();
     if (!classItem) {
       throw new NotFoundException('班级不存在');
@@ -126,8 +89,8 @@ export class ClassesService {
   }
 
   async createClass(authorization: string | undefined, payload: CreateClassDto) {
-    await this.ensureSeedData();
     const user = await this.getUserFromAuthorization(authorization);
+    this.assertTeacherPrivileges(user);
 
     const code = payload.code || `C${Math.floor(1000 + Math.random() * 9000)}`;
     const exists = await this.classModel.exists({ code });
@@ -152,17 +115,26 @@ export class ClassesService {
     );
   }
 
-  async updateClass(id: string, payload: UpdateClassDto) {
-    await this.ensureSeedData();
-
+  async updateClass(
+    authorization: string | undefined,
+    id: string,
+    payload: UpdateClassDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
     const classItem = await this.classModel.findById(id);
     if (!classItem) {
       throw new NotFoundException('班级不存在');
     }
+    this.assertCanManageClass(user, classItem.teacherId);
 
     if (payload.name !== undefined) classItem.name = payload.name;
     if (payload.description !== undefined) classItem.description = payload.description;
-    if (payload.maxStudents !== undefined) classItem.maxStudents = payload.maxStudents;
+    if (payload.maxStudents !== undefined) {
+      if (payload.maxStudents < classItem.studentCount) {
+        throw new BadRequestException('班级人数上限不能小于当前人数');
+      }
+      classItem.maxStudents = payload.maxStudents;
+    }
     if (payload.status && ['active', 'inactive', 'disbanded'].includes(payload.status)) {
       classItem.status = payload.status as 'active' | 'inactive' | 'disbanded';
     }
@@ -171,26 +143,26 @@ export class ClassesService {
     return this.appService.envelope({ message: '更新成功' }, '更新成功');
   }
 
-  async closeClass(id: string) {
-    await this.ensureSeedData();
-
+  async closeClass(authorization: string | undefined, id: string) {
+    const user = await this.getUserFromAuthorization(authorization);
     const classItem = await this.classModel.findById(id);
     if (!classItem) {
       throw new NotFoundException('班级不存在');
     }
+    this.assertCanManageClass(user, classItem.teacherId);
 
     classItem.status = 'disbanded';
     await classItem.save();
     return this.appService.envelope({ message: '班级已解散' }, '解散成功');
   }
 
-  async regenerateCode(id: string) {
-    await this.ensureSeedData();
-
+  async regenerateCode(authorization: string | undefined, id: string) {
+    const user = await this.getUserFromAuthorization(authorization);
     const classItem = await this.classModel.findById(id);
     if (!classItem) {
       throw new NotFoundException('班级不存在');
     }
+    this.assertCanManageClass(user, classItem.teacherId);
 
     classItem.code = `N${Math.floor(1000 + Math.random() * 9000)}`;
     await classItem.save();
@@ -202,8 +174,6 @@ export class ClassesService {
   }
 
   async getClassStudents(id: string, query: ClassStudentsQueryDto) {
-    await this.ensureSeedData();
-
     const classItem = await this.classModel.findById(id).lean();
     if (!classItem) {
       throw new NotFoundException('班级不存在');
@@ -248,25 +218,34 @@ export class ClassesService {
     );
   }
 
-  async addStudents(id: string, body: AddStudentsDto) {
-    await this.ensureSeedData();
-
+  async addStudents(
+    authorization: string | undefined,
+    id: string,
+    body: AddStudentsDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
     const classItem = await this.classModel.findById(id);
     if (!classItem) {
       throw new NotFoundException('班级不存在');
     }
+    this.assertCanManageClass(user, classItem.teacherId);
 
     const success: string[] = [];
     const failed: Array<{ id: string; reason: string }> = [];
 
     for (const studentId of body.studentIds || []) {
-      const user = await this.userModel.findById(studentId);
-      if (!user || user.role !== 'student') {
+      if (classItem.studentCount + success.length >= classItem.maxStudents) {
+        failed.push({ id: studentId, reason: '班级人数已满' });
+        continue;
+      }
+
+      const student = await this.userModel.findById(studentId);
+      if (!student || student.role !== 'student') {
         failed.push({ id: studentId, reason: '学生不存在' });
         continue;
       }
 
-      const exists = await this.membershipModel.exists({ classId: id, studentId: user.id });
+      const exists = await this.membershipModel.exists({ classId: id, studentId: student.id });
       if (exists) {
         failed.push({ id: studentId, reason: '学生已在班级中' });
         continue;
@@ -274,9 +253,9 @@ export class ClassesService {
 
       await this.membershipModel.create({
         classId: id,
-        studentId: user.id,
-        studentName: user.name,
-        studentNumber: user.studentId,
+        studentId: student.id,
+        studentName: student.name,
+        studentNumber: student.studentId,
         status: 'active',
         joinMethod: 'teacher',
         joinedAt: new Date(),
@@ -284,22 +263,26 @@ export class ClassesService {
         lastSubmissionTime: null,
       });
 
-      user.classId = id;
-      user.className = classItem.name;
-      await user.save();
-      success.push(user.id);
+      student.classId = id;
+      student.className = classItem.name;
+      await student.save();
+      success.push(student.id);
     }
 
-    classItem.studentCount += success.length;
-    await classItem.save();
+    if (success.length > 0) {
+      classItem.studentCount += success.length;
+      await classItem.save();
+    }
 
     return this.appService.envelope({ success, failed }, '添加成功');
   }
 
   async joinClass(authorization: string | undefined, body: JoinClassDto) {
-    await this.ensureSeedData();
-
     const user = await this.getUserFromAuthorization(authorization);
+    if (user.role !== 'student') {
+      throw new ForbiddenException('只有学生可以加入班级');
+    }
+
     const classItem = await this.classModel.findOne({ code: body.code });
     if (!classItem) {
       throw new NotFoundException('班级邀请码不存在');
@@ -311,6 +294,13 @@ export class ClassesService {
     });
     if (exists) {
       return this.appService.envelope({ success: true, message: '加入成功' }, '加入成功');
+    }
+
+    if (classItem.status !== 'active') {
+      throw new BadRequestException('当前班级不可加入');
+    }
+    if ((classItem.studentCount || 0) >= (classItem.maxStudents || 60)) {
+      throw new BadRequestException('班级人数已满');
     }
 
     await this.membershipModel.create({
@@ -335,8 +325,17 @@ export class ClassesService {
     return this.appService.envelope({ success: true, message: '加入成功' }, '加入成功');
   }
 
-  async updateStudentStatus(id: string, body: UpdateStudentStatusDto) {
-    await this.ensureSeedData();
+  async updateStudentStatus(
+    authorization: string | undefined,
+    id: string,
+    body: UpdateStudentStatusDto,
+  ) {
+    const user = await this.getUserFromAuthorization(authorization);
+    const classItem = await this.classModel.findById(id).lean();
+    if (!classItem) {
+      throw new NotFoundException('班级不存在');
+    }
+    this.assertCanManageClass(user, classItem.teacherId);
 
     await this.membershipModel.updateMany(
       {
@@ -352,9 +351,11 @@ export class ClassesService {
   }
 
   async leaveClass(authorization: string | undefined, id: string) {
-    await this.ensureSeedData();
-
     const user = await this.getUserFromAuthorization(authorization);
+    if (user.role !== 'student') {
+      throw new ForbiddenException('只有学生可以退出班级');
+    }
+
     const deleted = await this.membershipModel.findOneAndDelete({
       classId: id,
       studentId: user.id,
@@ -362,8 +363,21 @@ export class ClassesService {
 
     if (deleted) {
       await this.classModel.findByIdAndUpdate(id, { $inc: { studentCount: -1 } });
-      user.classId = undefined;
-      user.className = undefined;
+
+      const remainingMembership = await this.membershipModel
+        .findOne({ studentId: user.id, status: 'active' })
+        .sort({ joinedAt: -1 })
+        .lean();
+
+      if (remainingMembership) {
+        const remainingClass = await this.classModel.findById(remainingMembership.classId).lean();
+        user.classId = remainingMembership.classId;
+        user.className = remainingClass?.name;
+      } else {
+        user.classId = undefined;
+        user.className = undefined;
+      }
+
       await user.save();
     }
 
@@ -382,7 +396,39 @@ export class ClassesService {
       throw new UnauthorizedException('登录失效');
     }
 
+    this.assertTokenFreshForUser(user, decoded.iat);
     return user;
+  }
+
+  private assertTeacherPrivileges(user: UserDocument) {
+    if (!['teacher', 'superadmin'].includes(user.role)) {
+      throw new ForbiddenException('当前用户无权执行教师端操作');
+    }
+  }
+
+  private assertCanManageClass(user: UserDocument, teacherId: string) {
+    this.assertTeacherPrivileges(user);
+    if (user.role !== 'superadmin' && user.id !== teacherId) {
+      throw new ForbiddenException('只能管理自己的班级');
+    }
+  }
+
+  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number) {
+    const issuedAtDate = issuedAt ? new Date(issuedAt * 1000) : null;
+    if (
+      issuedAtDate &&
+      user.lastLogoutAt &&
+      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
+    if (
+      issuedAtDate &&
+      user.passwordChangedAt &&
+      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
+    ) {
+      throw new UnauthorizedException('登录已失效');
+    }
   }
 
   private toClassListItem(item: any) {

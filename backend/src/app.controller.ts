@@ -1,4 +1,16 @@
-import { Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Body } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { AssignmentQueryDto } from './assignments/dto/assignment-query.dto';
 import { CreateAssignmentDto } from './assignments/dto/create-assignment.dto';
 import { UpdateAssignmentStatusDto } from './assignments/dto/update-assignment-status.dto';
@@ -18,11 +30,14 @@ import { UpdateClassDto } from './classes/dto/update-class.dto';
 import { UpdateStudentStatusDto } from './classes/dto/update-student-status.dto';
 import { ClassesService } from './classes/classes.service';
 import { AppService } from './app.service';
+import { AdminService } from './admin/admin.service';
+import { UsersService } from './users/users.service';
 import { DeleteSubmissionDto } from './submissions/dto/delete-submission.dto';
 import { SubmissionQueryDto } from './submissions/dto/submission-query.dto';
 import { SubmitAssignmentDto } from './submissions/dto/submit-assignment.dto';
 import { TeacherReviewDto } from './submissions/dto/teacher-review.dto';
 import { SubmissionsService } from './submissions/submissions.service';
+import { DashboardService } from './dashboard/dashboard.service';
 
 @Controller()
 export class AppController {
@@ -32,6 +47,9 @@ export class AppController {
     private readonly classesService: ClassesService,
     private readonly assignmentsService: AssignmentsService,
     private readonly submissionsService: SubmissionsService,
+    private readonly dashboardService: DashboardService,
+    private readonly usersService: UsersService,
+    private readonly adminService: AdminService,
   ) {}
 
   @Get()
@@ -55,8 +73,8 @@ export class AppController {
   }
 
   @Post('v1/auth/logout')
-  logout() {
-    return this.authService.logout();
+  logout(@Headers('authorization') authorization?: string) {
+    return this.authService.logout(authorization);
   }
 
   @Post('v1/auth/refresh-token')
@@ -166,23 +184,33 @@ export class AppController {
   }
 
   @Put('permissions/user-roles/users/:userId/roles')
-  assignRoles() {
+  async assignRoles(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope(true, '分配成功');
   }
 
   @Get('permissions/roles')
-  getRoleList() {
+  async getRoleList(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getRoleList();
   }
 
   @Get('permissions/roles/:id')
-  getRoleById(@Param('id') id: string) {
+  async getRoleById(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     const roles = this.appService.getRoleList().data.items;
     return this.appService.envelope(roles.find((r: any) => r._id === id), '获取成功');
   }
 
   @Get('permissions/roles/:id/with-menus')
-  getRoleWithMenus(@Param('id') id: string) {
+  async getRoleWithMenus(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     const roles = this.appService.getRoleList().data.items;
     return this.appService.envelope(
       { ...roles.find((r: any) => r._id === id), menus: [] },
@@ -191,114 +219,201 @@ export class AppController {
   }
 
   @Post('permissions/roles')
-  createRole(@Body() body: any) {
+  async createRole(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ _id: `r-${Date.now()}`, ...body }, '创建成功');
   }
 
   @Put('permissions/roles/:id')
-  updateRole(@Param('id') id: string, @Body() body: any) {
+  async updateRole(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ _id: id, ...body }, '更新成功');
   }
 
   @Delete('permissions/roles/:id')
-  deleteRole(@Param('id') id: string) {
+  async deleteRole(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ success: true, id }, '删除成功');
   }
 
   @Put('permissions/roles/:id/menus')
-  assignMenus(@Param('id') id: string, @Body() body: any) {
+  async assignMenus(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ _id: id, menuIds: body.menuIds }, '分配成功');
   }
 
   @Get('permissions/menus')
-  getMenuList() {
+  async getMenuList(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getMenuList();
   }
 
   @Get('permissions/menus/:id')
-  getMenuById(@Param('id') id: string) {
+  async getMenuById(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     const menus = this.appService.getMenuList().data;
     return this.appService.envelope(menus.find((m: any) => m._id === id), '获取成功');
   }
 
   @Post('permissions/menus')
-  createMenu(@Body() body: any) {
+  async createMenu(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ _id: `m-${Date.now()}`, ...body }, '创建成功');
   }
 
   @Put('permissions/menus/:id')
-  updateMenu(@Param('id') id: string, @Body() body: any) {
+  async updateMenu(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ _id: id, ...body }, '更新成功');
   }
 
   @Delete('permissions/menus/:id')
-  deleteMenu(@Param('id') id: string) {
+  async deleteMenu(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope({ success: true, id }, '删除成功');
   }
 
   @Get('users')
-  getUsers(@Query() query: any) {
-    return this.appService.getUsers(query);
+  async getUsers(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.getUsers(query), '获取成功');
   }
 
   @Post('users')
-  createUser(@Body() body: any) {
-    return this.appService.envelope({ _id: `u-${Date.now()}`, ...body }, '创建成功');
+  async createUser(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.createUser(body), '创建成功');
   }
 
   @Get('users/profile')
-  getUserProfile(@Headers('authorization') authorization?: string) {
-    return this.appService.profile(authorization);
+  async getUserProfile(@Headers('authorization') authorization?: string) {
+    return this.appService.envelope(
+      await this.usersService.getCurrentUserProfile(authorization),
+      '获取成功',
+    );
   }
 
   @Put('users/profile')
-  updateUserProfile(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.updateProfile(authorization, body);
+  async updateUserProfile(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.envelope(
+      await this.usersService.updateCurrentUserProfile(authorization, body),
+      '更新成功',
+    );
   }
 
   @Put('users/password')
-  updatePassword(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
-    return this.appService.updatePassword(authorization, body);
+  async updatePassword(@Headers('authorization') authorization: string | undefined, @Body() body: any) {
+    return this.appService.envelope(
+      await this.usersService.updateCurrentUserPassword(authorization, body),
+      '修改成功',
+    );
   }
 
   @Get('users/:id')
-  getUser(@Param('id') id: string) {
-    return this.appService.getUser(id);
+  async getUser(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.getUser(id), '获取成功');
   }
 
   @Patch('users/:id')
-  patchUser(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateUser(id, body);
+  async patchUser(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.updateUser(id, body), '更新成功');
   }
 
   @Patch('users/:id/password')
-  patchUserPassword(@Param('id') id: string, @Body() body: any) {
-    return this.appService.updateUserPassword(id, body);
+  async patchUserPassword(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.updateUserPassword(id, body), '修改成功');
   }
 
   @Post('users/:id/reset-password')
-  resetUserPassword(@Param('id') id: string, @Body() body: any) {
-    return this.appService.resetUserPassword(id, body);
+  async resetUserPassword(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.resetUserPassword(id, body), '重置成功');
   }
 
   @Delete('users/:id')
-  deleteUser(@Param('id') id: string) {
-    return this.appService.deleteUser(id);
+  async deleteUser(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.deleteUser(id), '删除成功');
   }
 
   @Post('users/batch-import')
-  importUsers(@Body() body: any) {
-    return this.appService.importUsers(body);
+  async importUsers(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.importUsers(body), '导入成功');
   }
 
   @Post('users/batch-delete')
-  deleteUsers(@Body() body: any) {
-    return this.appService.deleteUsers(body);
+  async deleteUsers(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.appService.envelope(await this.usersService.deleteUsers(body), '删除成功');
   }
 
   @Get('classes/list')
-  getClasses(@Query() query: ClassListQueryDto) {
-    return this.classesService.getClasses(query);
+  getClasses(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: ClassListQueryDto,
+  ) {
+    return this.classesService.getClasses(authorization, query);
   }
 
   @Get('classes/:id')
@@ -315,18 +430,28 @@ export class AppController {
   }
 
   @Post('classes/:id/edit')
-  editClass(@Param('id') id: string, @Body() body: UpdateClassDto) {
-    return this.classesService.updateClass(id, body);
+  editClass(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: UpdateClassDto,
+  ) {
+    return this.classesService.updateClass(authorization, id, body);
   }
 
   @Post('classes/:id/close')
-  closeClass(@Param('id') id: string) {
-    return this.classesService.closeClass(id);
+  closeClass(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.classesService.closeClass(authorization, id);
   }
 
   @Post('classes/:id/regenerate-code')
-  regenerateCode(@Param('id') id: string) {
-    return this.classesService.regenerateCode(id);
+  regenerateCode(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.classesService.regenerateCode(authorization, id);
   }
 
   @Get('classes/:id/students')
@@ -335,8 +460,12 @@ export class AppController {
   }
 
   @Post('classes/:id/students')
-  addStudents(@Param('id') id: string, @Body() body: AddStudentsDto) {
-    return this.classesService.addStudents(id, body);
+  addStudents(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: AddStudentsDto,
+  ) {
+    return this.classesService.addStudents(authorization, id, body);
   }
 
   @Post('classes/join')
@@ -348,8 +477,12 @@ export class AppController {
   }
 
   @Post('classes/:id/students/status')
-  updateStudentStatus(@Param('id') id: string, @Body() body: UpdateStudentStatusDto) {
-    return this.classesService.updateStudentStatus(id, body);
+  updateStudentStatus(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: UpdateStudentStatusDto,
+  ) {
+    return this.classesService.updateStudentStatus(authorization, id, body);
   }
 
   @Post('classes/:id/leave')
@@ -361,18 +494,28 @@ export class AppController {
   }
 
   @Get('teacher/assignments')
-  getTeacherAssignments(@Query() query: AssignmentQueryDto) {
-    return this.assignmentsService.listAssignments(query);
+  getTeacherAssignments(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: AssignmentQueryDto,
+  ) {
+    return this.assignmentsService.listAssignments(authorization, query);
   }
 
   @Get('teacher/assignments/:id')
-  getTeacherAssignment(@Param('id') id: string) {
-    return this.assignmentsService.getAssignment(id);
+  getTeacherAssignment(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.assignmentsService.getAssignment(authorization, id);
   }
 
   @Get('teacher/assignments/:id/students')
-  getTeacherAssignmentStudents(@Param('id') id: string, @Query() query: any) {
-    return this.assignmentsService.getAssignmentStudents(id, query);
+  getTeacherAssignmentStudents(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Query() query: any,
+  ) {
+    return this.assignmentsService.getAssignmentStudents(authorization, id, query);
   }
 
   @Post('teacher/assignments')
@@ -384,21 +527,29 @@ export class AppController {
   }
 
   @Post('teacher/assignments/:id/update')
-  updateTeacherAssignment(@Param('id') id: string, @Body() body: UpdateAssignmentDto) {
-    return this.assignmentsService.updateAssignment(id, body);
+  updateTeacherAssignment(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: UpdateAssignmentDto,
+  ) {
+    return this.assignmentsService.updateAssignment(authorization, id, body);
   }
 
   @Post('teacher/assignments/:id/status')
   updateTeacherAssignmentStatus(
+    @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() body: UpdateAssignmentStatusDto,
   ) {
-    return this.assignmentsService.updateAssignmentStatus(id, body);
+    return this.assignmentsService.updateAssignmentStatus(authorization, id, body);
   }
 
   @Post('teacher/assignments/:id/delete')
-  deleteTeacherAssignment(@Param('id') id: string) {
-    return this.assignmentsService.deleteAssignment(id);
+  deleteTeacherAssignment(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    return this.assignmentsService.deleteAssignment(authorization, id);
   }
 
   @Get('student/assignments')
@@ -440,8 +591,11 @@ export class AppController {
   }
 
   @Post('students/submissions/delete')
-  deleteSubmission(@Body() body: DeleteSubmissionDto) {
-    return this.submissionsService.deleteSubmission(body);
+  deleteSubmission(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: DeleteSubmissionDto,
+  ) {
+    return this.submissionsService.deleteSubmission(authorization, body);
   }
 
   @Get('teachers/submissions/list')
@@ -469,97 +623,157 @@ export class AppController {
   }
 
   @Get('v1/ai-rules')
-  getAiRuleList(@Query() query: any) {
+  async getAiRuleList(
+    @Headers('authorization') authorization: string | undefined,
+    @Query() query: any,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.getAiRuleList(query);
   }
 
   @Get('v1/ai-rules/available/list')
-  getAvailableAiRules(@Query('status') status?: string) {
+  async getAvailableAiRules(
+    @Headers('authorization') authorization: string | undefined,
+    @Query('status') status?: string,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.getAvailableAiRules(status || 'active');
   }
 
   @Get('v1/ai-rules/:id')
-  getAiRule(@Param('id') id: string) {
+  async getAiRule(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.getAiRule(id);
   }
 
   @Post('v1/ai-rules')
-  createAiRule(@Body() body: any) {
+  async createAiRule(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.createAiRule(body);
   }
 
   @Post('v1/ai-rules/:id/update')
-  updateAiRule(@Param('id') id: string, @Body() body: any) {
+  async updateAiRule(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.updateAiRule(id, body);
   }
 
   @Post('v1/ai-rules/:id/delete')
-  deleteAiRule(@Param('id') id: string) {
+  async deleteAiRule(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.deleteAiRule(id);
   }
 
   @Post('v1/ai-rules/:id/copy')
-  copyAiRule(@Param('id') id: string, @Body() body: any) {
+  async copyAiRule(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['teacher', 'superadmin']);
     return this.appService.copyAiRule(id, body);
   }
 
   @Get('admin/ai-models')
-  getAiModels() {
+  async getAiModels(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getAiModels();
   }
 
   @Get('admin/ai-models/active')
-  getActiveAiModels() {
+  async getActiveAiModels(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.envelope(this.appService.getAiModels().data.models.filter((m: any) => m.status === 'active'), '获取成功');
   }
 
   @Get('admin/ai-models/:code')
-  getAiModel(@Param('code') code: string) {
+  async getAiModel(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('code') code: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getAiModel(code);
   }
 
   @Put('admin/ai-models/:code')
-  updateAiModel(@Param('code') code: string, @Body() body: any) {
+  async updateAiModel(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('code') code: string,
+    @Body() body: any,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.updateAiModel(code, body);
   }
 
   @Post('admin/ai-models/:code/default')
-  setDefaultModel(@Param('code') code: string) {
+  async setDefaultModel(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('code') code: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.setDefaultModel(code);
   }
 
   @Get('admin/ai-models/:code/balance')
-  getModelBalance(@Param('code') code: string) {
+  async getModelBalance(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('code') code: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getModelBalance(code);
   }
 
   @Post('admin/ai-models/:code/test')
-  testModel(@Param('code') code: string) {
+  async testModel(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('code') code: string,
+  ) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.testModel(code);
   }
 
   @Get('admin/ai-models/:code/stats')
-  getModelStats() {
+  async getModelStats(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getModelStats();
   }
 
   @Post('admin/ai-models/initialize')
-  initializeModels() {
+  async initializeModels(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.initializeModels();
   }
 
   @Get('admin/dashboard/overview')
-  getAdminOverview() {
+  async getAdminOverview(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.adminService.getOverview();
     return this.appService.getAdminOverview();
   }
 
   @Get('admin/dashboard/ai-models')
-  getAdminAiModels() {
+  async getAdminAiModels(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getAiModels();
   }
 
   @Get('admin/dashboard/recent-users')
-  getRecentUsers() {
+  async getRecentUsers(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.adminService.getRecentUsers();
     return this.appService.envelope(
       {
         users: [
@@ -578,7 +792,9 @@ export class AppController {
   }
 
   @Get('admin/dashboard/health')
-  getHealth() {
+  async getHealth(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
+    return this.adminService.getHealth();
     return this.appService.envelope(
       {
         db: 'ok',
@@ -592,58 +808,84 @@ export class AppController {
   @Get('teacher/dashboard/stats')
   async getTeacherDashboard(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getTeacherDashboardByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['teacher', 'superadmin']);
+    return this.dashboardService.getTeacherDashboard(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/pending-tasks')
   async getTeacherPendingTasks(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getTeacherPendingTasksByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['teacher', 'superadmin']);
+    return this.dashboardService.getTeacherPendingTasks(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/performance-summary')
   async getTeacherPerformanceSummary(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getTeacherPerformanceSummaryByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['teacher', 'superadmin']);
+    return this.dashboardService.getTeacherPerformanceSummary(profile.data.user.id);
   }
 
   @Get('teacher/dashboard/quick-actions')
   async getTeacherQuickActions(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getTeacherQuickActionsByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['teacher', 'superadmin']);
+    return this.dashboardService.getTeacherQuickActions(profile.data.user.id);
   }
 
   @Get('student/dashboard/stats')
   async getStudentDashboard(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getStudentDashboardByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['student']);
+    return this.dashboardService.getStudentDashboard(profile.data.user.id);
   }
 
   @Get('student/dashboard/learning-progress')
   async getStudentLearningProgress(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getStudentLearningProgressByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['student']);
+    return this.dashboardService.getStudentLearningProgress(profile.data.user.id);
   }
 
   @Get('student/dashboard/achievements')
   async getStudentAchievements(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getStudentAchievementsByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['student']);
+    return this.dashboardService.getStudentAchievements(profile.data.user.id);
   }
 
   @Get('student/dashboard/study-recommendations')
   async getStudentRecommendations(@Headers('authorization') authorization?: string) {
     const profile = await this.authService.profile(authorization);
-    return this.appService.getStudentStudyRecommendationsByUserId(profile.data.user.id);
+    this.assertDashboardRole(profile.data.user.role, ['student']);
+    return this.dashboardService.getStudentStudyRecommendations(profile.data.user.id);
   }
 
   @Get('logs')
-  getLogs() {
+  async getLogs(@Headers('authorization') authorization?: string) {
+    await this.requireRole(authorization, ['superadmin']);
     return this.appService.getLogs();
   }
 
   @Get('v1/templates/:type')
   getTemplate(@Param('type') type: string) {
     return this.appService.envelope({ type, url: `/templates/${type}.xlsx` }, '获取成功');
+  }
+  private async requireRole(
+    authorization: string | undefined,
+    allowedRoles: Array<'superadmin' | 'teacher' | 'student'>,
+  ) {
+    const profile = await this.authService.profile(authorization);
+    this.assertDashboardRole(profile.data.user.role, allowedRoles);
+    return profile.data.user;
+  }
+
+  private assertDashboardRole(
+    role: string,
+    allowedRoles: Array<'superadmin' | 'teacher' | 'student'>,
+  ) {
+    if (!allowedRoles.includes(role as 'superadmin' | 'teacher' | 'student')) {
+      throw new ForbiddenException('当前用户无权访问该看板');
+    }
   }
 }

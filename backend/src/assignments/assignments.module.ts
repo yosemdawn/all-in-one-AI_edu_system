@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { AppService } from '../app.service';
 import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
+import { Submission, SubmissionSchema } from '../submissions/schemas/submission.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AssignmentsService } from './assignments.service';
 import { Assignment, AssignmentSchema } from './schemas/assignment.schema';
@@ -15,6 +16,7 @@ import { Assignment, AssignmentSchema } from './schemas/assignment.schema';
       { name: Assignment.name, schema: AssignmentSchema },
       { name: ClassEntity.name, schema: ClassSchema },
       { name: ClassMembership.name, schema: ClassMembershipSchema },
+      { name: Submission.name, schema: SubmissionSchema },
       { name: User.name, schema: UserSchema },
     ]),
   ],
