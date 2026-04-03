@@ -14,6 +14,7 @@ import { ClassesModule } from './classes/classes.module';
 import { validateEnvironment } from './config/env.validation';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
+import { LogsModule } from './logs/logs.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { User, UserSchema } from './users/schemas/user.schema';
@@ -57,6 +58,7 @@ const queueImports = redisUrl
     DashboardModule,
     PermissionsModule,
     AdminModule,
+    LogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

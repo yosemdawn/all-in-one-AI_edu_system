@@ -22,7 +22,7 @@ export class TokenService {
     private readonly configService: ConfigService,
   ) {}
 
-  issueAccessToken(payload: { sub: string; role: string }) {
+  issueAccessToken(payload: { sub: string; role: string; tokenVersion: number }) {
     const secret = this.configService.get<string>('JWT_SECRET') ?? 'dev-secret';
     return this.jwtService.sign(payload, {
       secret,
@@ -40,7 +40,12 @@ export class TokenService {
 
   verifyAccessToken(token: string) {
     const secret = this.configService.get<string>('JWT_SECRET') ?? 'dev-secret';
-    return this.jwtService.verify<{ sub: string; role: string; iat?: number }>(token, {
+    return this.jwtService.verify<{
+      sub: string;
+      role: string;
+      tokenVersion: number;
+      iat?: number;
+    }>(token, {
       secret,
     });
   }

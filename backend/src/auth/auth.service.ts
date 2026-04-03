@@ -59,6 +59,7 @@ export class AuthService {
     const accessToken = this.tokenService.issueAccessToken({
       sub: user.id,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     });
     const refreshToken = this.tokenService.issueRefreshToken();
     const refreshTokenHash = await this.passwordService.hash(refreshToken);
@@ -119,6 +120,7 @@ export class AuthService {
     const token = this.tokenService.issueAccessToken({
       sub: user.id,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     });
     const refreshToken = this.tokenService.issueRefreshToken();
     const refreshTokenHash = await this.passwordService.hash(refreshToken);
@@ -142,6 +144,7 @@ export class AuthService {
   async logout(currentUser: AuthenticatedUser) {
     const user = await this.getUserById(currentUser.id);
     user.lastLogoutAt = new Date();
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     await this.authSessionModel.updateMany(
@@ -221,6 +224,7 @@ export class AuthService {
     const token = this.tokenService.issueAccessToken({
       sub: user.id,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     });
     const refreshToken = this.tokenService.issueRefreshToken();
     const refreshTokenHash = await this.passwordService.hash(refreshToken);
@@ -263,6 +267,7 @@ export class AuthService {
     user.mustChangePassword = false;
     user.passwordChangedAt = new Date();
     user.lastLogoutAt = new Date();
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     if (!user.firstLoginAt) {
       user.firstLoginAt = new Date();
     }

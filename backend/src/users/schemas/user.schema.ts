@@ -56,6 +56,9 @@ export class User {
   @Prop()
   lastLogoutAt?: Date;
 
+  @Prop({ default: 0 })
+  tokenVersion?: number;
+
   createdAt?: Date;
 
   updatedAt?: Date;

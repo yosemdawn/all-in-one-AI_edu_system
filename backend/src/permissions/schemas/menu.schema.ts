@@ -26,7 +26,7 @@ export class Menu {
   @Prop({ required: true, enum: ['menu', 'button'], default: 'menu' })
   type: 'menu' | 'button';
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   parentId?: string | null;
 
   @Prop()
