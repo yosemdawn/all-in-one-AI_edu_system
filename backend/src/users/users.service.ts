@@ -11,6 +11,7 @@ import { PasswordService } from '../auth/auth.helpers';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import { ImportUserRowDto } from './dto/import-user-row.dto';
 import { UserListQueryDto } from './dto/user-list-query.dto';
 import { User, UserDocument } from './schemas/user.schema';
 
@@ -288,7 +289,7 @@ export class UsersService {
     return { success: true, id };
   }
 
-  async importUsers(items: any[]) {
+  async importUsers(items: ImportUserRowDto[]) {
     const rows = Array.isArray(items) ? items : [];
     const failures: Array<{ index: number; reason: string }> = [];
     let successCount = 0;

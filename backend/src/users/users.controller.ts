@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseArrayPipe,
   Patch,
   Post,
   Put,
@@ -19,6 +20,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AdminUpdateUserPasswordDto } from './dto/admin-update-user-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { DeleteUsersDto } from './dto/delete-users.dto';
+import { ImportUserRowDto } from './dto/import-user-row.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
@@ -114,7 +116,9 @@ export class UsersController {
 
   @Roles('superadmin')
   @Post('batch-import')
-  async importUsers(@Body() body: any) {
+  async importUsers(
+    @Body(new ParseArrayPipe({ items: ImportUserRowDto })) body: ImportUserRowDto[],
+  ) {
     return this.appService.envelope(await this.usersService.importUsers(body), 'users imported');
   }
 

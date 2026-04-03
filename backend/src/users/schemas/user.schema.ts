@@ -56,6 +56,12 @@ export class User {
   @Prop()
   lastLogoutAt?: Date;
 
+  @Prop({ type: String, default: null })
+  passwordResetTokenHash?: string | null;
+
+  @Prop({ type: Date, default: null })
+  passwordResetExpiresAt?: Date | null;
+
   @Prop({ default: 0 })
   tokenVersion?: number;
 

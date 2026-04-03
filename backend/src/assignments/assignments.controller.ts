@@ -4,6 +4,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { AssignmentStudentsQueryDto } from './dto/assignment-students-query.dto';
 import { AssignmentQueryDto } from './dto/assignment-query.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentStatusDto } from './dto/update-assignment-status.dto';
@@ -38,7 +39,7 @@ export class AssignmentsController {
   getTeacherAssignmentStudents(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param('id') id: string,
-    @Query() query: any,
+    @Query() query: AssignmentStudentsQueryDto,
   ) {
     return this.assignmentsService.getAssignmentStudents(currentUser, id, query);
   }

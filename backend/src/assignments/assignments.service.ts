@@ -24,6 +24,15 @@ type NormalizedSubmissionStatus =
   | 'ai_reviewed'
   | 'teacher_reviewed'
   | 'ai_review_failed';
+const ALLOWED_ASSIGNMENT_SORT_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  'startDate',
+  'endDate',
+  'title',
+  'status',
+  'teacherName',
+]);
 
 @Injectable()
 export class AssignmentsService {
@@ -48,7 +57,10 @@ export class AssignmentsService {
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 10);
     const skip = (page - 1) * pageSize;
-    const sortField = query.sort || query.sortBy || 'createdAt';
+    const requestedSortField = query.sort || query.sortBy || 'createdAt';
+    const sortField = ALLOWED_ASSIGNMENT_SORT_FIELDS.has(requestedSortField)
+      ? requestedSortField
+      : 'createdAt';
     const sortOrder = (query.order || query.sortOrder) === 'asc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
@@ -326,7 +338,10 @@ export class AssignmentsService {
     }
 
     const filter = this.buildStudentAssignmentFilter(classIds, query);
-    const sortField = query?.sort || query?.sortBy || 'createdAt';
+    const requestedSortField = query?.sort || query?.sortBy || 'createdAt';
+    const sortField = ALLOWED_ASSIGNMENT_SORT_FIELDS.has(requestedSortField)
+      ? requestedSortField
+      : 'createdAt';
     const sortOrder = (query?.order || query?.sortOrder) === 'asc' ? 1 : -1;
     const assignments = await this.assignmentModel
       .find(filter)

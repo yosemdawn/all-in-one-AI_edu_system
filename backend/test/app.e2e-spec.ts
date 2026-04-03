@@ -73,6 +73,12 @@ describe('Backend e2e', () => {
   it('revokes sessions on logout and blocks old tokens', async () => {
     const adminLogin = await login('admin');
 
+    const compatLoginResponse = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'admin@nengdou.local', password: '123456' });
+    const compatLogin = unwrap(compatLoginResponse);
+    expect(compatLogin.token).toBeTruthy();
+
     const refreshResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/refresh-token')
       .send({ refreshToken: adminLogin.refreshToken });
@@ -549,6 +555,36 @@ describe('Backend e2e', () => {
     expect(createdUserResources.roles.some((item: any) => item._id === createdRole._id)).toBe(true);
     expect(createdUserResources.permissions).toContain('e2e:access');
 
+    const forgotPasswordResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'managed_teacher@nengdou.local' });
+    const forgotPasswordResult = unwrap(forgotPasswordResponse);
+    expect(forgotPasswordResult.success).toBe(true);
+    expect(forgotPasswordResult.resetToken).toBeTruthy();
+
+    const resetPasswordByTokenResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/reset-password')
+      .send({
+        token: forgotPasswordResult.resetToken,
+        password: 'reset654',
+        confirmPassword: 'reset654',
+      });
+    const resetPasswordByTokenResult = unwrap(resetPasswordByTokenResponse);
+    expect(resetPasswordByTokenResult.success).toBe(true);
+
+    const resetLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ usernameOrEmailOrStudentId: 'managed_teacher', password: 'reset654' });
+    const resetLogin = unwrap(resetLoginResponse);
+    expect(resetLogin.token).toBeTruthy();
+
+    const invalidImportResponse = await request(app.getHttpServer())
+      .post('/api/users/batch-import')
+      .set(authHeader(relogin.token))
+      .send({ items: [] })
+      .expect(400);
+    expect(invalidImportResponse.body.message).toBeTruthy();
+
     const aiModelsResponse = await request(app.getHttpServer())
       .get('/api/admin/ai-models')
       .set(authHeader(relogin.token));
@@ -637,6 +673,17 @@ describe('Backend e2e', () => {
     );
     expect(resetPasswordLog).toBeTruthy();
     expect(resetPasswordLog.responseData.data.newPassword).toBe('[REDACTED]');
+
+    const forgotPasswordLogsResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20, endpoint: '/api/v1/auth/forgot-password' });
+    const forgotPasswordLogs = unwrap(forgotPasswordLogsResponse);
+    const forgotPasswordLog = forgotPasswordLogs.items.find((item: any) =>
+      item.endpoint.includes('/api/v1/auth/forgot-password'),
+    );
+    expect(forgotPasswordLog).toBeTruthy();
+    expect(forgotPasswordLog.responseData.data.resetToken).toBe('[REDACTED]');
 
     const aiModelLogsResponse = await request(app.getHttpServer())
       .get('/api/logs')
