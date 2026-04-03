@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { randomBytes } from 'crypto';
 import { AppService } from '../app.service';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
@@ -12,9 +13,11 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { AuthContextService } from './auth-context.service';
 import type { AuthenticatedUser } from './authenticated-user.interface';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { PasswordService, TokenService } from './auth.helpers';
 import { AuthSession, AuthSessionDocument } from './schemas/auth-session.schema';
 
@@ -285,11 +288,77 @@ export class AuthService {
     return this.changePassword(currentUser, body);
   }
 
-  forgotPassword() {
-    return this.appService.envelope({ success: true }, 'success');
+  async forgotPassword(body: ForgotPasswordDto) {
+    const user = await this.userModel.findOne({ email: body.email.toLowerCase().trim() });
+    if (!user) {
+      return this.appService.envelope(
+        { success: true, message: 'If the account exists, a reset token has been issued.' },
+        'success',
+      );
+    }
+
+    const resetToken = randomBytes(24).toString('hex');
+    user.passwordResetTokenHash = await this.passwordService.hash(resetToken);
+    user.passwordResetExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
+
+    return this.appService.envelope(
+      {
+        success: true,
+        message: 'If the account exists, a reset token has been issued.',
+        ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
+      },
+      'success',
+    );
   }
 
-  resetPassword() {
+  async resetPassword(body: ResetPasswordDto) {
+    if ((body.confirmPassword || body.password) !== body.password) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const candidates = await this.userModel.find({
+      passwordResetTokenHash: { $ne: null },
+      passwordResetExpiresAt: { $gt: new Date() },
+    });
+
+    let matchedUser: UserDocument | null = null;
+    for (const candidate of candidates) {
+      if (!candidate.passwordResetTokenHash) {
+        continue;
+      }
+
+      const matched = await this.passwordService.compare(
+        body.token,
+        candidate.passwordResetTokenHash,
+      );
+      if (matched) {
+        matchedUser = candidate;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      throw new BadRequestException('Reset token is invalid or expired');
+    }
+
+    matchedUser.passwordHash = await this.passwordService.hash(body.password);
+    matchedUser.passwordChangedAt = new Date();
+    matchedUser.mustChangePassword = false;
+    matchedUser.lastLogoutAt = new Date();
+    matchedUser.tokenVersion = (matchedUser.tokenVersion ?? 0) + 1;
+    matchedUser.passwordResetTokenHash = null;
+    matchedUser.passwordResetExpiresAt = null;
+    if (!matchedUser.firstLoginAt) {
+      matchedUser.firstLoginAt = new Date();
+    }
+    await matchedUser.save();
+
+    await this.authSessionModel.updateMany(
+      { userId: matchedUser._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+
     return this.appService.envelope({ success: true }, 'success');
   }
 

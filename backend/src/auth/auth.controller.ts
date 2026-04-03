@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -9,9 +10,13 @@ import {
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthenticatedUser } from './authenticated-user.interface';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { CompatLoginDto } from './dto/compat-login.dto';
+import { CompatRegisterDto } from './dto/compat-register.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 
@@ -25,10 +30,15 @@ export class AuthController {
   }
 
   @Post('auth/login')
-  loginCompat(@Body() body: any) {
+  loginCompat(@Body() body: CompatLoginDto) {
+    const usernameOrEmailOrStudentId =
+      body.usernameOrEmailOrStudentId || body.email || body.username;
+    if (!usernameOrEmailOrStudentId) {
+      throw new BadRequestException('usernameOrEmailOrStudentId, email, or username is required');
+    }
+
     return this.authService.login({
-      usernameOrEmailOrStudentId:
-        body.usernameOrEmailOrStudentId || body.email || body.username,
+      usernameOrEmailOrStudentId,
       password: body.password,
       rememberMe: body.rememberMe,
     });
@@ -70,13 +80,13 @@ export class AuthController {
   }
 
   @Post('v1/auth/forgot-password')
-  forgotPassword() {
-    return this.authService.forgotPassword();
+  forgotPassword(@Body() body: ForgotPasswordDto) {
+    return this.authService.forgotPassword(body);
   }
 
   @Post('v1/auth/reset-password')
-  resetPassword() {
-    return this.authService.resetPassword();
+  resetPassword(@Body() body: ResetPasswordDto) {
+    return this.authService.resetPassword(body);
   }
 
   @Post('v1/auth/register')
@@ -85,7 +95,7 @@ export class AuthController {
   }
 
   @Post('auth/register')
-  registerCompat(@Body() body: any) {
+  registerCompat(@Body() body: CompatRegisterDto) {
     return this.authService.register({
       username: body.username || body.email || body.name,
       email: body.email,
