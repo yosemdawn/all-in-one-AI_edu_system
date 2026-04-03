@@ -3,12 +3,11 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
-import { TokenService } from '../auth/auth.helpers';
+import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
@@ -39,15 +38,13 @@ export class AssignmentsService {
     private readonly submissionModel: Model<SubmissionDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    private readonly tokenService: TokenService,
     private readonly appService: AppService,
   ) {}
 
-  async listAssignments(authorization: string | undefined, query: AssignmentQueryDto) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+  async listAssignments(currentUser: AuthenticatedUser, query: AssignmentQueryDto) {
+    this.assertTeacherPrivileges(currentUser);
 
-    const filter = this.buildTeacherAssignmentFilter(user, query);
+    const filter = this.buildTeacherAssignmentFilter(currentUser, query);
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 10);
     const skip = (page - 1) * pageSize;
@@ -79,39 +76,37 @@ export class AssignmentsService {
         pageSize,
         totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
-      '获取成功',
+      'success',
     );
   }
 
-  async getAssignment(authorization: string | undefined, id: string) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+  async getAssignment(currentUser: AuthenticatedUser, id: string) {
+    this.assertTeacherPrivileges(currentUser);
 
     const item = await this.assignmentModel.findById(id).lean();
     if (!item) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
 
-    this.assertCanManageAssignment(user, item.teacherId);
+    this.assertCanManageAssignment(currentUser, item.teacherId);
     const stats = await this.getAssignmentStats(item);
 
-    return this.appService.envelope(this.toAssignmentDetail(item, stats), '获取成功');
+    return this.appService.envelope(this.toAssignmentDetail(item, stats), 'success');
   }
 
   async getAssignmentStudents(
-    authorization: string | undefined,
+    currentUser: AuthenticatedUser,
     id: string,
     query?: Record<string, any>,
   ) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+    this.assertTeacherPrivileges(currentUser);
 
     const assignment = await this.assignmentModel.findById(id).lean();
     if (!assignment) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
 
-    this.assertCanManageAssignment(user, assignment.teacherId);
+    this.assertCanManageAssignment(currentUser, assignment.teacherId);
 
     const assignmentClassIds = assignment.classes.map((item) => item.id);
     const selectedClassIds =
@@ -202,20 +197,19 @@ export class AssignmentsService {
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
-      '获取成功',
+      'success',
     );
   }
 
-  async createAssignment(authorization: string | undefined, payload: CreateAssignmentDto) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+  async createAssignment(currentUser: AuthenticatedUser, payload: CreateAssignmentDto) {
+    this.assertTeacherPrivileges(currentUser);
 
-    const classes = await this.resolveAssignmentClasses(user, payload.classes);
+    const classes = await this.resolveAssignmentClasses(currentUser, payload.classes);
     const item = await this.assignmentModel.create({
       title: payload.title,
       description: payload.description,
-      teacherId: user.id,
-      teacherName: user.name,
+      teacherId: currentUser.id,
+      teacherName: currentUser.name,
       classes,
       aiRule: payload.aiRule || null,
       questionMaterial: payload.questionMaterial || null,
@@ -229,26 +223,25 @@ export class AssignmentsService {
     });
 
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '创建成功');
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
   }
 
   async updateAssignment(
-    authorization: string | undefined,
+    currentUser: AuthenticatedUser,
     id: string,
     payload: UpdateAssignmentDto,
   ) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+    this.assertTeacherPrivileges(currentUser);
 
     const item = await this.assignmentModel.findById(id);
     if (!item) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
 
-    this.assertCanManageAssignment(user, item.teacherId);
+    this.assertCanManageAssignment(currentUser, item.teacherId);
 
     if (payload.classes) {
-      item.classes = await this.resolveAssignmentClasses(user, payload.classes);
+      item.classes = await this.resolveAssignmentClasses(currentUser, payload.classes);
     }
 
     if (payload.title !== undefined) item.title = payload.title;
@@ -264,62 +257,59 @@ export class AssignmentsService {
 
     await item.save();
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '更新成功');
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
   }
 
   async updateAssignmentStatus(
-    authorization: string | undefined,
+    currentUser: AuthenticatedUser,
     id: string,
     payload: UpdateAssignmentStatusDto,
   ) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+    this.assertTeacherPrivileges(currentUser);
 
     const item = await this.assignmentModel.findById(id);
     if (!item) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
 
-    this.assertCanManageAssignment(user, item.teacherId);
+    this.assertCanManageAssignment(currentUser, item.teacherId);
     item.status = payload.status;
     item.terminatedReason =
       payload.status === 'terminated' ? payload.terminatedReason : undefined;
     await item.save();
 
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), '更新成功');
+    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
   }
 
-  async deleteAssignment(authorization: string | undefined, id: string) {
-    const user = await this.getUserFromAuthorization(authorization);
-    this.assertTeacherPrivileges(user);
+  async deleteAssignment(currentUser: AuthenticatedUser, id: string) {
+    this.assertTeacherPrivileges(currentUser);
 
     const item = await this.assignmentModel.findById(id).lean();
     if (!item) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
 
-    this.assertCanManageAssignment(user, item.teacherId);
+    this.assertCanManageAssignment(currentUser, item.teacherId);
 
     await Promise.all([
       this.assignmentModel.findByIdAndDelete(id),
       this.submissionModel.deleteMany({ assignmentId: id }),
     ]);
 
-    return this.appService.envelope(null, '删除成功');
+    return this.appService.envelope(null, 'success');
   }
 
   async getStudentAssignments(
-    authorization: string | undefined,
+    currentUser: AuthenticatedUser,
     query?: AssignmentQueryDto,
   ) {
-    const user = await this.getUserFromAuthorization(authorization);
-    if (user.role !== 'student') {
-      throw new ForbiddenException('只有学生可以查看学生端作业');
+    if (currentUser.role !== 'student') {
+      throw new ForbiddenException('Only students can access student assignments');
     }
 
     const memberships = await this.membershipModel
-      .find({ studentId: user.id, status: 'active' })
+      .find({ studentId: currentUser.id, status: 'active' })
       .lean();
     const classIds = memberships.map((item) => item.classId);
 
@@ -331,7 +321,7 @@ export class AssignmentsService {
           page: Number(query?.page || 1),
           pageSize: Number(query?.pageSize || 10),
         },
-        '获取成功',
+        'success',
       );
     }
 
@@ -345,7 +335,7 @@ export class AssignmentsService {
     const submissions = await this.submissionModel
       .find({
         assignmentId: { $in: assignments.map((item) => item._id.toString()) },
-        studentId: user.id,
+        studentId: currentUser.id,
       })
       .lean();
     const submissionMap = new Map(submissions.map((item) => [item.assignmentId, item]));
@@ -375,8 +365,8 @@ export class AssignmentsService {
         submissionId: submission?._id?.toString?.(),
         allowAttachments: !!item.allowAttachments,
         createdAt: item.createdAt,
-        classId: matchedClass?.id || user.classId || '',
-        className: matchedClass?.name || user.className || '',
+        classId: matchedClass?.id || currentUser.classId || '',
+        className: matchedClass?.name || currentUser.className || '',
       };
     });
 
@@ -409,12 +399,12 @@ export class AssignmentsService {
         pageSize,
         totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
-      '获取成功',
+      'success',
     );
   }
 
-  async getStudentAssignmentStatistics(authorization?: string) {
-    const response = await this.getStudentAssignments(authorization, {
+  async getStudentAssignmentStatistics(currentUser: AuthenticatedUser) {
+    const response = await this.getStudentAssignments(currentUser, {
       page: 1,
       pageSize: 1000,
     });
@@ -432,49 +422,50 @@ export class AssignmentsService {
         reviewedCount: items.filter((item: any) => item.submissionStatus === 'teacher_reviewed')
           .length,
       },
-      '获取成功',
+      'success',
     );
   }
 
   async getStudentAssignment(
-    authorization: string | undefined,
+    currentUser: AuthenticatedUser,
     assignmentId: string,
     classId?: string,
   ) {
-    const user = await this.getUserFromAuthorization(authorization);
-    if (user.role !== 'student') {
-      throw new ForbiddenException('只有学生可以查看学生端作业');
+    if (currentUser.role !== 'student') {
+      throw new ForbiddenException('Only students can access student assignments');
     }
 
     const assignment = await this.assignmentModel.findById(assignmentId).lean();
     if (!assignment) {
-      throw new NotFoundException('作业不存在');
+      throw new NotFoundException('Assignment not found');
     }
     if (assignment.status === 'draft') {
-      throw new ForbiddenException('草稿作业暂不可查看');
+      throw new ForbiddenException('Draft assignments are not visible to students');
     }
 
     const memberships = await this.membershipModel
       .find({
-        studentId: user.id,
+        studentId: currentUser.id,
         classId: { $in: assignment.classes.map((item) => item.id) },
         status: 'active',
       })
       .lean();
 
     if (!memberships.length) {
-      throw new ForbiddenException('你不在当前作业所属班级中');
+      throw new ForbiddenException('Student is not in any class for this assignment');
     }
 
     const availableClassIds = memberships.map((item) => item.classId);
     if (classId && !availableClassIds.includes(classId)) {
-      throw new ForbiddenException('你不在指定班级中');
+      throw new ForbiddenException('Student is not in the requested class');
     }
     const resolvedClassId =
       classId && availableClassIds.includes(classId) ? classId : availableClassIds[0];
     const matchedClass = assignment.classes.find((item) => item.id === resolvedClassId);
 
-    const submission = await this.submissionModel.findOne({ assignmentId, studentId: user.id }).lean();
+    const submission = await this.submissionModel
+      .findOne({ assignmentId, studentId: currentUser.id })
+      .lean();
     const normalizedStatus = submission
       ? this.normalizeSubmissionStatus(submission.status)
       : undefined;
@@ -509,18 +500,18 @@ export class AssignmentsService {
         canSubmit,
         createdAt: assignment.createdAt,
         classId: matchedClass?.id || resolvedClassId,
-        className: matchedClass?.name || user.className,
+        className: matchedClass?.name || currentUser.className,
         aiRule: assignment.aiRule,
         questionMaterial: assignment.questionMaterial,
         referenceAnswer: assignment.referenceAnswer,
         gradingNotes: assignment.gradingNotes,
         submissionFormat: assignment.submissionFormat,
       },
-      '获取成功',
+      'success',
     );
   }
 
-  private buildTeacherAssignmentFilter(user: UserDocument, query: AssignmentQueryDto) {
+  private buildTeacherAssignmentFilter(user: AuthenticatedUser, query: AssignmentQueryDto) {
     const filter: Record<string, unknown> = {};
     const keyword = query.search || query.title;
 
@@ -603,21 +594,21 @@ export class AssignmentsService {
     return filter;
   }
 
-  private async resolveAssignmentClasses(user: UserDocument, classIds: string[]) {
+  private async resolveAssignmentClasses(user: AuthenticatedUser, classIds: string[]) {
     const uniqueClassIds = [...new Set(classIds || [])];
     if (!uniqueClassIds.length) {
-      throw new BadRequestException('请至少选择一个班级');
+      throw new BadRequestException('At least one class is required');
     }
 
     const classes = await this.classModel.find({ _id: { $in: uniqueClassIds } }).lean();
     if (classes.length !== uniqueClassIds.length) {
-      throw new BadRequestException('存在无效的班级');
+      throw new BadRequestException('One or more classes are invalid');
     }
 
     if (user.role !== 'superadmin') {
       const invalidClass = classes.find((item) => item.teacherId !== user.id);
       if (invalidClass) {
-        throw new ForbiddenException('只能给自己的班级布置作业');
+        throw new ForbiddenException('Teachers can only assign to their own classes');
       }
     }
 
@@ -676,32 +667,16 @@ export class AssignmentsService {
     };
   }
 
-  private async getUserFromAuthorization(authorization?: string) {
-    const token = authorization?.replace('Bearer ', '').trim();
-    if (!token) {
-      throw new UnauthorizedException('未登录');
-    }
-
-    const decoded = this.tokenService.verifyAccessToken(token);
-    const user = await this.userModel.findById(decoded.sub);
-    if (!user) {
-      throw new UnauthorizedException('登录失效');
-    }
-
-    this.assertTokenFreshForUser(user, decoded.iat);
-    return user;
-  }
-
-  private assertTeacherPrivileges(user: UserDocument) {
+  private assertTeacherPrivileges(user: AuthenticatedUser) {
     if (!['teacher', 'superadmin'].includes(user.role)) {
-      throw new ForbiddenException('当前用户无权执行教师端操作');
+      throw new ForbiddenException('Teacher privileges required');
     }
   }
 
-  private assertCanManageAssignment(user: UserDocument, teacherId: string) {
+  private assertCanManageAssignment(user: AuthenticatedUser, teacherId: string) {
     this.assertTeacherPrivileges(user);
     if (user.role !== 'superadmin' && user.id !== teacherId) {
-      throw new ForbiddenException('只能管理自己的作业');
+      throw new ForbiddenException('You can only manage your own assignments');
     }
   }
 
@@ -710,24 +685,6 @@ export class AssignmentsService {
       return 'submitted';
     }
     return status as NormalizedSubmissionStatus;
-  }
-
-  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number) {
-    const issuedAtDate = issuedAt ? new Date(issuedAt * 1000) : null;
-    if (
-      issuedAtDate &&
-      user.lastLogoutAt &&
-      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
-    ) {
-      throw new UnauthorizedException('登录已失效');
-    }
-    if (
-      issuedAtDate &&
-      user.passwordChangedAt &&
-      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
-    ) {
-      throw new UnauthorizedException('登录已失效');
-    }
   }
 
   private isExpired(endDate: string | Date) {

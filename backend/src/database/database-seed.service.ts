@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
-import { Model } from 'mongoose';
+import { Connection, Model } from 'mongoose';
 import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
@@ -12,6 +12,8 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DatabaseSeedService.name);
 
   constructor(
+    @InjectConnection()
+    private readonly connection: Connection,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     @InjectModel(ClassEntity.name)
@@ -27,9 +29,14 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
   }
 
   private async seedIfNeeded() {
-    const existingUsers = await this.userModel.countDocuments();
-    if (existingUsers > 0) {
-      return;
+    const isTestEnv = process.env.NODE_ENV === 'test';
+    if (isTestEnv) {
+      await this.connection.dropDatabase();
+    } else {
+      const existingUsers = await this.userModel.countDocuments();
+      if (existingUsers > 0) {
+        return;
+      }
     }
 
     const passwordHash = await bcrypt.hash('123456', 10);
@@ -38,7 +45,7 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       {
         username: 'admin',
         email: 'admin@nengdou.local',
-        name: '管理员',
+        name: 'Admin',
         role: 'superadmin',
         status: 'active',
         passwordHash,
@@ -46,7 +53,7 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       {
         username: 'teacher1',
         email: 'teacher@nengdou.local',
-        name: '王老师',
+        name: 'Teacher One',
         role: 'teacher',
         status: 'active',
         passwordHash,
@@ -55,7 +62,7 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
         username: 'student1',
         email: 'student@nengdou.local',
         studentId: '20250001',
-        name: '张同学',
+        name: 'Student One',
         role: 'student',
         status: 'active',
         passwordHash,
@@ -63,14 +70,14 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
     ]);
 
     const classItem = await this.classModel.create({
-      name: '高一(1)班',
+      name: 'Demo Class 1',
       code: 'A1001',
       teacherId: teacher.id,
       teacherName: teacher.name,
       status: 'active',
       studentCount: 1,
       maxStudents: 60,
-      description: '英语写作提升班',
+      description: 'Seeded demo class',
     });
 
     await this.membershipModel.create({
@@ -90,26 +97,26 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
     await student.save();
 
     await this.assignmentModel.create({
-      title: '英语阅读理解训练 1',
-      description: '<p>请完成阅读理解并提交答案。</p>',
+      title: 'Seed Assignment 1',
+      description: '<p>Please complete the seeded assignment.</p>',
       teacherId: teacher.id,
       teacherName: teacher.name,
       classes: [{ id: classItem.id, name: classItem.name }],
       aiRule: {
         id: 'rule-1',
-        name: '标准答题批改模板',
+        name: 'Default Review Rule',
         modelType: 'doubao',
-        prompt: '请根据题目、标准答案和学生答案进行评分，并给出问题与建议。',
+        prompt: 'Provide a score and short improvement advice.',
         originalRuleId: 'rule-1',
         snapshotAt: new Date().toISOString(),
       },
       questionMaterial: {
-        content: '<p>题目原文：请根据文章回答 5 个问题。</p>',
+        content: '<p>Answer the five reading comprehension questions.</p>',
       },
       referenceAnswer: {
-        content: '<p>标准答案：1.A 2.C 3.B 4.D 5.A</p>',
+        content: '<p>1.A 2.C 3.B 4.D 5.A</p>',
       },
-      gradingNotes: '按题号逐项给分，错题说明原因。',
+      gradingNotes: 'Score each question and explain mistakes briefly.',
       submissionFormat: 'answers_only',
       startDate: new Date(),
       endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

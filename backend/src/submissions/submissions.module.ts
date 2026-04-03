@@ -13,6 +13,7 @@ import { AiReviewProcessor } from './ai-review.processor';
 import { AiReviewQueueService } from './ai-review-queue.service';
 import { DoubaoAiReviewService } from './doubao-ai-review.service';
 import { Submission, SubmissionSchema } from './schemas/submission.schema';
+import { SubmissionsController } from './submissions.controller';
 import { SubmissionsService } from './submissions.service';
 
 const redisUrl = process.env.REDIS_URL;
@@ -29,6 +30,7 @@ const queueProviders = redisUrl
   : [];
 
 @Module({
+  controllers: [SubmissionsController],
   imports: [
     AuthModule,
     ...queueImports,

@@ -1,13 +1,13 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { PasswordService, TokenService } from '../auth/auth.helpers';
+import { AuthContextService } from '../auth/auth-context.service';
+import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
+import { PasswordService } from '../auth/auth.helpers';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
@@ -26,7 +26,7 @@ export class UsersService {
     private readonly membershipModel: Model<ClassMembershipDocument>,
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
-    private readonly tokenService: TokenService,
+    private readonly authContextService: AuthContextService,
     private readonly passwordService: PasswordService,
   ) {}
 
@@ -77,19 +77,19 @@ export class UsersService {
   async getUser(id: string) {
     const user = await this.userModel.findById(id).lean();
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException('User not found');
     }
 
     return this.toUserPayload(user);
   }
 
-  async getCurrentUserProfile(authorization?: string) {
-    const user = await this.getUserFromAuthorization(authorization);
+  async getCurrentUserProfile(currentUser: AuthenticatedUser) {
+    const user = await this.getCurrentUserDocument(currentUser);
     return this.toUserPayload(user, true);
   }
 
-  async updateCurrentUserProfile(authorization: string | undefined, body: any) {
-    const user = await this.getUserFromAuthorization(authorization);
+  async updateCurrentUserProfile(currentUser: AuthenticatedUser, body: any) {
+    const user = await this.getCurrentUserDocument(currentUser);
 
     if (body.email) {
       const duplicated = await this.userModel.exists({
@@ -97,7 +97,7 @@ export class UsersService {
         email: body.email,
       });
       if (duplicated) {
-        throw new BadRequestException('邮箱已存在');
+        throw new BadRequestException('Email already exists');
       }
     }
 
@@ -111,13 +111,13 @@ export class UsersService {
     return this.toUserPayload(user, true);
   }
 
-  async updateCurrentUserPassword(authorization: string | undefined, body: any) {
-    const user = await this.getUserFromAuthorization(authorization);
+  async updateCurrentUserPassword(currentUser: AuthenticatedUser, body: any) {
+    const user = await this.getCurrentUserDocument(currentUser);
     const currentPassword = body?.currentPassword;
     const newPassword = body?.newPassword;
 
     if (!currentPassword) {
-      throw new BadRequestException('当前密码不能为空');
+      throw new BadRequestException('Current password is required');
     }
 
     const passwordMatched = await this.passwordService.compare(
@@ -126,11 +126,11 @@ export class UsersService {
     );
 
     if (!passwordMatched) {
-      throw new BadRequestException('当前密码错误');
+      throw new BadRequestException('Current password is incorrect');
     }
 
     if (!newPassword || String(newPassword).length < 6) {
-      throw new BadRequestException('新密码长度不能少于 6 位');
+      throw new BadRequestException('New password must be at least 6 characters');
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -144,7 +144,7 @@ export class UsersService {
 
   async createUser(body: any) {
     if (!body.username || !body.email || !body.password || !body.name) {
-      throw new BadRequestException('用户名、姓名、邮箱和密码不能为空');
+      throw new BadRequestException('username, email, name, and password are required');
     }
 
     const normalizedRole = (body.role || 'student') as AllowedRole;
@@ -178,7 +178,7 @@ export class UsersService {
   async updateUser(id: string, body: any) {
     const user = await this.userModel.findById(id);
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException('User not found');
     }
 
     const nextRole = (body.role || user.role) as AllowedRole;
@@ -210,12 +210,12 @@ export class UsersService {
   async updateUserPassword(id: string, body: any) {
     const user = await this.userModel.findById(id);
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException('User not found');
     }
 
     const newPassword = body?.newPassword;
     if (!newPassword || String(newPassword).length < 6) {
-      throw new BadRequestException('新密码长度不能少于 6 位');
+      throw new BadRequestException('New password must be at least 6 characters');
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -224,18 +224,18 @@ export class UsersService {
     user.lastLogoutAt = new Date();
     await user.save();
 
-    return { success: true, message: '修改成功' };
+    return { success: true, message: 'password updated' };
   }
 
   async resetUserPassword(id: string, body?: any) {
     const user = await this.userModel.findById(id);
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException('User not found');
     }
 
     const newPassword = body?.newPassword || '123456';
     if (String(newPassword).length < 6) {
-      throw new BadRequestException('新密码长度不能少于 6 位');
+      throw new BadRequestException('New password must be at least 6 characters');
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -244,16 +244,16 @@ export class UsersService {
     user.lastLogoutAt = new Date();
     await user.save();
 
-    return { success: true, message: '重置成功', id, newPassword };
+    return { success: true, message: 'password reset', id, newPassword };
   }
 
   async deleteUser(id: string) {
     const user = await this.userModel.findById(id);
     if (!user) {
-      throw new NotFoundException('用户不存在');
+      throw new NotFoundException('User not found');
     }
     if (user.role === 'superadmin') {
-      throw new BadRequestException('超级管理员不能删除');
+      throw new BadRequestException('Cannot delete superadmin');
     }
 
     const memberships = await this.membershipModel.find({ studentId: user.id }).lean();
@@ -299,7 +299,7 @@ export class UsersService {
         });
         successCount += 1;
       } catch (error: any) {
-        failures.push({ index, reason: error?.message || '导入失败' });
+        failures.push({ index, reason: error?.message || 'import failed' });
       }
     }
 
@@ -322,7 +322,7 @@ export class UsersService {
         await this.deleteUser(userId);
         successCount += 1;
       } catch (error: any) {
-        failures.push({ userId, reason: error?.message || '删除失败' });
+        failures.push({ userId, reason: error?.message || 'delete failed' });
       }
     }
 
@@ -335,6 +335,10 @@ export class UsersService {
     };
   }
 
+  private async getCurrentUserDocument(currentUser: AuthenticatedUser) {
+    return this.authContextService.requireUser(currentUser.id);
+  }
+
   private async assertUniqueUserFields(
     payload: { username?: string; email?: string; studentId?: string },
     excludeId?: string,
@@ -345,7 +349,7 @@ export class UsersService {
         username: payload.username,
       });
       if (existing) {
-        throw new BadRequestException('用户名已存在');
+        throw new BadRequestException('Username already exists');
       }
     }
 
@@ -355,7 +359,7 @@ export class UsersService {
         email: payload.email,
       });
       if (existing) {
-        throw new BadRequestException('邮箱已存在');
+        throw new BadRequestException('Email already exists');
       }
     }
 
@@ -365,42 +369,8 @@ export class UsersService {
         studentId: payload.studentId,
       });
       if (existing) {
-        throw new BadRequestException('学号已存在');
+        throw new BadRequestException('Student ID already exists');
       }
-    }
-  }
-
-  private async getUserFromAuthorization(authorization?: string) {
-    const token = authorization?.replace('Bearer ', '').trim();
-    if (!token) {
-      throw new UnauthorizedException('未登录');
-    }
-
-    const decoded = this.tokenService.verifyAccessToken(token);
-    const user = await this.userModel.findById(decoded.sub);
-    if (!user) {
-      throw new UnauthorizedException('登录失效');
-    }
-
-    this.assertTokenFreshForUser(user, decoded.iat);
-    return user;
-  }
-
-  private assertTokenFreshForUser(user: UserDocument, issuedAt?: number) {
-    const issuedAtDate = issuedAt ? new Date(issuedAt * 1000) : null;
-    if (
-      issuedAtDate &&
-      user.lastLogoutAt &&
-      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
-    ) {
-      throw new UnauthorizedException('登录已失效');
-    }
-    if (
-      issuedAtDate &&
-      user.passwordChangedAt &&
-      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
-    ) {
-      throw new UnauthorizedException('登录已失效');
     }
   }
 
