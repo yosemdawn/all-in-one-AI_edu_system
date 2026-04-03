@@ -14,6 +14,14 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { AssignRoleMenusDto } from './dto/assign-role-menus.dto';
+import { AssignUserRolesDto } from './dto/assign-user-roles.dto';
+import { CreateMenuDto } from './dto/create-menu.dto';
+import { CreateRoleDto } from './dto/create-role.dto';
+import { MenuListQueryDto } from './dto/menu-list-query.dto';
+import { RoleListQueryDto } from './dto/role-list-query.dto';
+import { UpdateMenuDto } from './dto/update-menu.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 import { PermissionsService } from './permissions.service';
 
 @Controller('permissions')
@@ -58,14 +66,14 @@ export class PermissionsController {
   assignRoles(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param('userId') userId: string,
-    @Body() body: any,
+    @Body() body: AssignUserRolesDto,
   ) {
     return this.permissionsService.assignRolesToUser(userId, body?.roleIds || [], currentUser);
   }
 
   @Roles('superadmin')
   @Get('roles')
-  getRoleList(@Query() query: any) {
+  getRoleList(@Query() query: RoleListQueryDto) {
     return this.permissionsService.getRoleList(query);
   }
 
@@ -83,13 +91,13 @@ export class PermissionsController {
 
   @Roles('superadmin')
   @Post('roles')
-  createRole(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: any) {
+  createRole(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateRoleDto) {
     return this.permissionsService.createRole(body, currentUser);
   }
 
   @Roles('superadmin')
   @Put('roles/:id')
-  updateRole(@Param('id') id: string, @Body() body: any) {
+  updateRole(@Param('id') id: string, @Body() body: UpdateRoleDto) {
     return this.permissionsService.updateRole(id, body);
   }
 
@@ -101,13 +109,13 @@ export class PermissionsController {
 
   @Roles('superadmin')
   @Put('roles/:id/menus')
-  assignMenus(@Param('id') id: string, @Body() body: any) {
+  assignMenus(@Param('id') id: string, @Body() body: AssignRoleMenusDto) {
     return this.permissionsService.assignMenusToRole(id, body?.menuIds || []);
   }
 
   @Roles('superadmin')
   @Get('menus')
-  getMenuList(@Query() query: any) {
+  getMenuList(@Query() query: MenuListQueryDto) {
     return this.permissionsService.getMenuList(query);
   }
 
@@ -119,13 +127,13 @@ export class PermissionsController {
 
   @Roles('superadmin')
   @Post('menus')
-  createMenu(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: any) {
+  createMenu(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateMenuDto) {
     return this.permissionsService.createMenu(body, currentUser);
   }
 
   @Roles('superadmin')
   @Put('menus/:id')
-  updateMenu(@Param('id') id: string, @Body() body: any) {
+  updateMenu(@Param('id') id: string, @Body() body: UpdateMenuDto) {
     return this.permissionsService.updateMenu(id, body);
   }
 

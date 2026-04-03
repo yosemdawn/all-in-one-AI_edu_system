@@ -8,7 +8,17 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface';
+import { AiRuleListQueryDto } from './dto/ai-rule-list-query.dto';
 import { AiRule, AiRuleDocument } from './schemas/ai-rule.schema';
+
+const ALLOWED_AI_RULE_SORT_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  'name',
+  'modelType',
+  'status',
+  'visibility',
+]);
 
 @Injectable()
 export class AiRulesService {
@@ -18,7 +28,7 @@ export class AiRulesService {
     private readonly appService: AppService,
   ) {}
 
-  async getAiRuleList(currentUser: AuthenticatedUser, query: any) {
+  async getAiRuleList(currentUser: AuthenticatedUser, query: AiRuleListQueryDto) {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
     if (query?.visibility) filter.visibility = query.visibility;
@@ -48,7 +58,9 @@ export class AiRulesService {
 
     const page = Number(query?.page || 1);
     const pageSize = Number(query?.pageSize || 10);
-    const sortField = query?.sort || 'createdAt';
+    const sortField = ALLOWED_AI_RULE_SORT_FIELDS.has(query?.sort || '')
+      ? query!.sort!
+      : 'createdAt';
     const sortOrder = query?.order === 'asc' ? 1 : -1;
     const skip = (page - 1) * pageSize;
 

@@ -9,11 +9,12 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AiModelsController } from './ai-models.controller';
+import { AiModelsPublicController } from './ai-models-public.controller';
 import { AiModelsService } from './ai-models.service';
 import { AiModel, AiModelSchema } from './schemas/ai-model.schema';
 
 @Module({
-  controllers: [AdminController, AiModelsController],
+  controllers: [AdminController, AiModelsController, AiModelsPublicController],
   imports: [
     AuthModule,
     MongooseModule.forFeature([

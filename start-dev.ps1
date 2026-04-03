@@ -1,3 +1,3 @@
-# 启动前端开发服务器
-Write-Host "启动前端开发服务器..."
-npm run dev 
+# Start frontend and backend dev servers together
+Write-Host "Starting frontend and backend dev servers..."
+npm run dev:full

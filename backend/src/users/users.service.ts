@@ -11,9 +11,20 @@ import { PasswordService } from '../auth/auth.helpers';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import { UserListQueryDto } from './dto/user-list-query.dto';
 import { User, UserDocument } from './schemas/user.schema';
 
 type AllowedRole = 'superadmin' | 'teacher' | 'student';
+const ALLOWED_USER_SORT_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  'username',
+  'email',
+  'name',
+  'role',
+  'status',
+  'studentId',
+]);
 
 @Injectable()
 export class UsersService {
@@ -30,7 +41,7 @@ export class UsersService {
     private readonly passwordService: PasswordService,
   ) {}
 
-  async getUsers(query: any) {
+  async getUsers(query: UserListQueryDto) {
     const filter: Record<string, unknown> = {};
 
     if (query?.role) {
@@ -53,7 +64,9 @@ export class UsersService {
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 10);
     const skip = (page - 1) * limit;
-    const sortField = query?.sortField || 'createdAt';
+    const sortField = ALLOWED_USER_SORT_FIELDS.has(query?.sortField || '')
+      ? query!.sortField!
+      : 'createdAt';
     const sortOrder = query?.sortOrder === 'asc' ? 1 : -1;
 
     const [items, total] = await Promise.all([

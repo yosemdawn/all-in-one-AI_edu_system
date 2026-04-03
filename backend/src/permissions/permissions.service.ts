@@ -9,11 +9,14 @@ import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { MenuListQueryDto } from './dto/menu-list-query.dto';
+import { RoleListQueryDto } from './dto/role-list-query.dto';
 import { Menu, MenuDocument } from './schemas/menu.schema';
 import { Role, RoleDocument } from './schemas/role.schema';
 import { UserRoleAssignment, UserRoleAssignmentDocument } from './schemas/user-role.schema';
 
 const PRIMARY_ROLE_CODES = new Set(['superadmin', 'teacher', 'student']);
+const ALLOWED_ROLE_SORT_FIELDS = new Set(['createdAt', 'updatedAt', 'name', 'code', 'status']);
 
 @Injectable()
 export class PermissionsService {
@@ -97,7 +100,7 @@ export class PermissionsService {
     return this.appService.envelope(true, 'success');
   }
 
-  async getRoleList(query: any) {
+  async getRoleList(query: RoleListQueryDto) {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
     if (query?.isSystem !== undefined) filter.isSystem = String(query.isSystem) === 'true';
@@ -112,7 +115,9 @@ export class PermissionsService {
 
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 10);
-    const sortField = query?.sort || 'createdAt';
+    const sortField = ALLOWED_ROLE_SORT_FIELDS.has(query?.sort || '')
+      ? query!.sort!
+      : 'createdAt';
     const sortOrder = query?.order === 'asc' ? 1 : -1;
     const skip = (page - 1) * limit;
 
@@ -254,7 +259,7 @@ export class PermissionsService {
     return this.appService.envelope(this.toRolePayload(role), 'success');
   }
 
-  async getMenuList(query: any) {
+  async getMenuList(query: MenuListQueryDto) {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
     if (query?.type) filter.type = query.type;
@@ -265,7 +270,7 @@ export class PermissionsService {
     const menus = await this.menuModel.find(filter).sort({ sort: 1, createdAt: 1 }).lean();
     const payload = menus.map((menu) => this.toMenuPayload(menu));
     return this.appService.envelope(
-      query?.tree === 'true' ? this.buildMenuTree(payload) : payload,
+      query?.tree ? this.buildMenuTree(payload) : payload,
       'success',
     );
   }

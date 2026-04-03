@@ -26,7 +26,7 @@ export class AiModelsService implements OnApplicationBootstrap {
     const models = await this.aiModelModel.find().sort({ createdAt: 1 }).lean();
     return this.appService.envelope(
       {
-        models: models.map((model) => this.toPayload(model)),
+        models: models.map((model) => this.toAdminPayload(model)),
         summary: this.buildSummary(models),
       },
       'success',
@@ -38,7 +38,10 @@ export class AiModelsService implements OnApplicationBootstrap {
       .find({ status: 'active' })
       .sort({ createdAt: 1 })
       .lean();
-    return this.appService.envelope(models.map((model) => this.toPayload(model)), 'success');
+    return this.appService.envelope(
+      models.map((model) => this.toPublicPayload(model)),
+      'success',
+    );
   }
 
   async getModel(code: string) {
@@ -47,7 +50,7 @@ export class AiModelsService implements OnApplicationBootstrap {
       throw new NotFoundException('AI model not found');
     }
 
-    return this.appService.envelope(this.toPayload(model), 'success');
+    return this.appService.envelope(this.toAdminPayload(model), 'success');
   }
 
   async updateModel(code: string, body: any) {
@@ -72,7 +75,7 @@ export class AiModelsService implements OnApplicationBootstrap {
     }
 
     await model.save();
-    return this.appService.envelope(this.toPayload(model), 'success');
+    return this.appService.envelope(this.toAdminPayload(model), 'success');
   }
 
   async setDefaultModel(code: string) {
@@ -222,16 +225,13 @@ export class AiModelsService implements OnApplicationBootstrap {
     };
   }
 
-  private toPayload(model: AiModelDocument | AiModel) {
+  private toPublicPayload(model: AiModelDocument | AiModel) {
     return {
       code: model.code,
       name: model.name,
       provider: model.provider,
       modelName: model.modelName,
       baseUrl: model.baseUrl,
-      apiKey: model.apiKey,
-      accessKey: model.accessKey,
-      secretKey: model.secretKey,
       status: model.status,
       isDefault: !!model.isDefault,
       totalUsage: Number(model.totalUsage || 0),
@@ -242,6 +242,15 @@ export class AiModelsService implements OnApplicationBootstrap {
       lastBalanceCheck: model.lastBalanceCheck,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
+    };
+  }
+
+  private toAdminPayload(model: AiModelDocument | AiModel) {
+    return {
+      ...this.toPublicPayload(model),
+      apiKey: model.apiKey,
+      accessKey: model.accessKey,
+      secretKey: model.secretKey,
     };
   }
 }
