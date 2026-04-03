@@ -1,0 +1,98 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { AuthenticatedUser } from './authenticated-user.interface';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthService } from './auth.service';
+
+@Controller()
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('v1/auth/login')
+  login(@Body() body: LoginDto) {
+    return this.authService.login(body);
+  }
+
+  @Post('auth/login')
+  loginCompat(@Body() body: any) {
+    return this.authService.login({
+      usernameOrEmailOrStudentId:
+        body.usernameOrEmailOrStudentId || body.email || body.username,
+      password: body.password,
+      rememberMe: body.rememberMe,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('v1/auth/logout')
+  logout(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.authService.logout(currentUser);
+  }
+
+  @Post('v1/auth/refresh-token')
+  refresh(@Body() body: RefreshTokenDto) {
+    return this.authService.refresh(body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('v1/auth/profile')
+  profile(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.authService.profile(currentUser);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('v1/auth/password')
+  changePassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(currentUser, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('v1/auth/first-password-change')
+  firstChangePassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.firstChangePassword(currentUser, body);
+  }
+
+  @Post('v1/auth/forgot-password')
+  forgotPassword() {
+    return this.authService.forgotPassword();
+  }
+
+  @Post('v1/auth/reset-password')
+  resetPassword() {
+    return this.authService.resetPassword();
+  }
+
+  @Post('v1/auth/register')
+  register(@Body() body: RegisterDto) {
+    return this.authService.register(body);
+  }
+
+  @Post('auth/register')
+  registerCompat(@Body() body: any) {
+    return this.authService.register({
+      username: body.username || body.email || body.name,
+      email: body.email,
+      password: body.password,
+      confirmPassword: body.confirmPassword || body.password,
+      name: body.name,
+      classId: body.classId,
+    });
+  }
+}

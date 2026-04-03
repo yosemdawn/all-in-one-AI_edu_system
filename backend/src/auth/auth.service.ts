@@ -9,12 +9,14 @@ import { AppService } from '../app.service';
 import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { AuthSession, AuthSessionDocument } from './schemas/auth-session.schema';
+import { AuthContextService } from './auth-context.service';
+import type { AuthenticatedUser } from './authenticated-user.interface';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { PasswordService, TokenService } from './auth.helpers';
+import { AuthSession, AuthSessionDocument } from './schemas/auth-session.schema';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +30,7 @@ export class AuthService {
     private readonly membershipModel: Model<ClassMembershipDocument>,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
+    private readonly authContextService: AuthContextService,
     private readonly appService: AppService,
   ) {}
 
@@ -41,7 +44,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('账号或密码错误');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     const passwordMatched = await this.passwordService.compare(
@@ -50,7 +53,7 @@ export class AuthService {
     );
 
     if (!passwordMatched) {
-      throw new UnauthorizedException('账号或密码错误');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     const accessToken = this.tokenService.issueAccessToken({
@@ -78,7 +81,7 @@ export class AuthService {
         isFirstLogin: !user.firstLoginAt,
         user: this.toUserPayload(user),
       },
-      '登录成功',
+      'success',
     );
   }
 
@@ -100,12 +103,12 @@ export class AuthService {
     }
 
     if (!matchedSession) {
-      throw new UnauthorizedException('refresh token 无效');
+      throw new UnauthorizedException('Refresh token is invalid');
     }
 
     const user = await this.userModel.findById(matchedSession.userId);
     if (!user) {
-      throw new UnauthorizedException('用户不存在');
+      throw new UnauthorizedException('User not found');
     }
 
     this.assertTokenFreshForUser(user, matchedSession.createdAt);
@@ -132,16 +135,12 @@ export class AuthService {
         refreshToken,
         expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
       },
-      '刷新成功',
+      'success',
     );
   }
 
-  async logout(authorization?: string) {
-    if (!authorization) {
-      return this.appService.envelope({ success: true }, '退出成功');
-    }
-
-    const user = await this.getUserFromAuthorization(authorization);
+  async logout(currentUser: AuthenticatedUser) {
+    const user = await this.getUserById(currentUser.id);
     user.lastLogoutAt = new Date();
     await user.save();
 
@@ -150,17 +149,17 @@ export class AuthService {
       { $set: { revokedAt: new Date() } },
     );
 
-    return this.appService.envelope({ success: true }, '退出成功');
+    return this.appService.envelope({ success: true }, 'success');
   }
 
-  async profile(authorization?: string) {
-    const user = await this.getUserFromAuthorization(authorization);
-    return this.appService.envelope({ user: this.toProfilePayload(user) }, '获取成功');
+  async profile(currentUser: AuthenticatedUser) {
+    const user = await this.getUserById(currentUser.id);
+    return this.appService.envelope({ user: this.toProfilePayload(user) }, 'success');
   }
 
   async register(body: RegisterDto) {
     if (body.password !== body.confirmPassword) {
-      throw new BadRequestException('两次输入的密码不一致');
+      throw new BadRequestException('Passwords do not match');
     }
 
     const existingUser = await this.userModel.findOne({
@@ -169,22 +168,22 @@ export class AuthService {
 
     if (existingUser) {
       if (existingUser.email === body.email) {
-        throw new BadRequestException('邮箱已存在');
+        throw new BadRequestException('Email already exists');
       }
-      throw new BadRequestException('用户名已存在');
+      throw new BadRequestException('Username already exists');
     }
 
     let classItem: ClassDocument | null = null;
     if (body.classId) {
       classItem = await this.classModel.findById(body.classId);
       if (!classItem) {
-        throw new BadRequestException('班级不存在');
+        throw new BadRequestException('Class not found');
       }
       if (classItem.status !== 'active') {
-        throw new BadRequestException('当前班级不可加入');
+        throw new BadRequestException('Class is not available');
       }
       if ((classItem.studentCount || 0) >= (classItem.maxStudents || 60)) {
-        throw new BadRequestException('班级人数已满');
+        throw new BadRequestException('Class is full');
       }
     }
 
@@ -237,27 +236,27 @@ export class AuthService {
         token,
         refreshToken,
         success: true,
-        message: '注册成功',
+        message: 'registered',
         userId: user.id,
         expiresIn: this.tokenService.getAccessTokenExpiresInSeconds(),
       },
-      '注册成功',
+      'success',
     );
   }
 
-  async changePassword(authorization: string | undefined, body: ChangePasswordDto) {
+  async changePassword(currentUser: AuthenticatedUser, body: ChangePasswordDto) {
     if (body.newPassword !== body.confirmPassword) {
-      throw new BadRequestException('两次输入的密码不一致');
+      throw new BadRequestException('Passwords do not match');
     }
 
-    const user = await this.getUserFromAuthorization(authorization);
+    const user = await this.getUserById(currentUser.id);
     const passwordMatched = await this.passwordService.compare(
       body.currentPassword,
       user.passwordHash,
     );
 
     if (!passwordMatched) {
-      throw new BadRequestException('当前密码错误');
+      throw new BadRequestException('Current password is incorrect');
     }
 
     user.passwordHash = await this.passwordService.hash(body.newPassword);
@@ -274,59 +273,45 @@ export class AuthService {
       { $set: { revokedAt: new Date() } },
     );
 
-    return this.appService.envelope({ message: '修改成功' }, '修改成功');
+    return this.appService.envelope({ message: 'password updated' }, 'success');
   }
 
-  async firstChangePassword(authorization: string | undefined, body: ChangePasswordDto) {
-    return this.changePassword(authorization, body);
+  async firstChangePassword(currentUser: AuthenticatedUser, body: ChangePasswordDto) {
+    return this.changePassword(currentUser, body);
   }
 
   forgotPassword() {
-    return this.appService.envelope({ success: true }, '邮件已发送');
+    return this.appService.envelope({ success: true }, 'success');
   }
 
   resetPassword() {
-    return this.appService.envelope({ success: true }, '重置成功');
+    return this.appService.envelope({ success: true }, 'success');
   }
 
-  private async getUserFromAuthorization(authorization?: string) {
-    const token = authorization?.replace('Bearer ', '').trim();
-    if (!token) {
-      throw new UnauthorizedException('未登录');
-    }
-
-    const decoded = this.tokenService.verifyAccessToken(token);
-    const user = await this.userModel.findById(decoded.sub);
-    if (!user) {
-      throw new UnauthorizedException('登录失效');
-    }
-
-    this.assertTokenFreshForUser(user, decoded.iat);
-    return user;
+  private async getUserById(userId: string) {
+    return this.authContextService.requireUser(userId);
   }
 
   private assertTokenFreshForUser(user: UserDocument, issuedAt?: number | Date) {
-    const issuedAtDate =
+    const issuedAtSeconds =
       issuedAt instanceof Date
-        ? issuedAt
-        : issuedAt
-          ? new Date(issuedAt * 1000)
-          : null;
+        ? Math.floor(issuedAt.getTime() / 1000)
+        : issuedAt ?? null;
 
     if (
-      issuedAtDate &&
+      issuedAtSeconds !== null &&
       user.lastLogoutAt &&
-      user.lastLogoutAt.getTime() > issuedAtDate.getTime()
+      Math.floor(user.lastLogoutAt.getTime() / 1000) > issuedAtSeconds
     ) {
-      throw new UnauthorizedException('登录已失效');
+      throw new UnauthorizedException('Login expired');
     }
 
     if (
-      issuedAtDate &&
+      issuedAtSeconds !== null &&
       user.passwordChangedAt &&
-      user.passwordChangedAt.getTime() > issuedAtDate.getTime()
+      Math.floor(user.passwordChangedAt.getTime() / 1000) > issuedAtSeconds
     ) {
-      throw new UnauthorizedException('登录已失效');
+      throw new UnauthorizedException('Login expired');
     }
   }
 

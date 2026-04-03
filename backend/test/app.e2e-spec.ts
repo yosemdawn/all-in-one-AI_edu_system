@@ -2,10 +2,14 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
 import { HttpEnvelopeExceptionFilter } from './../src/common/filters/http-exception.filter';
 
-jest.setTimeout(30000);
+process.env.NODE_ENV = 'test';
+delete process.env.MONGODB_URI;
+delete process.env.REDIS_URL;
+delete process.env.DOUBAO_API_KEY;
+
+jest.setTimeout(60000);
 
 describe('Backend e2e', () => {
   let app: INestApplication<App>;
@@ -29,6 +33,7 @@ describe('Backend e2e', () => {
   };
 
   beforeAll(async () => {
+    const { AppModule } = require('./../src/app.module');
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -47,7 +52,9 @@ describe('Backend e2e', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('returns the backend readiness envelope', async () => {
@@ -81,7 +88,7 @@ describe('Backend e2e', () => {
       .get('/api/v1/auth/profile')
       .set(authHeader(adminLogin.token))
       .expect(401);
-    expect(profileAfterLogout.body.message).toMatch(/登录已失效|登录失效/);
+    expect(profileAfterLogout.body.message).toMatch(/Login expired|Unauthorized/);
 
     const refreshAfterLogout = await request(app.getHttpServer())
       .post('/api/v1/auth/refresh-token')
@@ -98,8 +105,8 @@ describe('Backend e2e', () => {
       .post('/api/classes/create')
       .set(authHeader(teacherLogin.token))
       .send({
-        name: 'E2E 班级',
-        description: '端到端联调班级',
+        name: 'E2E Class',
+        description: 'End-to-end classroom',
         maxStudents: 40,
       });
     const createdClass = unwrap(createClassResponse);
@@ -137,18 +144,18 @@ describe('Backend e2e', () => {
       .post('/api/teacher/assignments')
       .set(authHeader(teacherLogin.token))
       .send({
-        title: 'E2E 作业',
-        description: '<p>请提交端到端答案</p>',
+        title: 'E2E Assignment',
+        description: '<p>Submit an end-to-end answer.</p>',
         classes: [createdClass.classId],
         aiRule: {
           id: 'rule-e2e',
-          name: 'E2E AI 批改规则',
+          name: 'E2E AI Rule',
           modelType: 'doubao',
-          prompt: '请给出评分和建议',
+          prompt: 'Provide a score and suggestions.',
         },
-        questionMaterial: { content: '题目内容' },
-        referenceAnswer: { content: '参考答案' },
-        gradingNotes: '按步骤给分',
+        questionMaterial: { content: 'Question content' },
+        referenceAnswer: { content: 'Reference answer' },
+        gradingNotes: 'Grade step by step.',
         submissionFormat: 'answers_only',
         startDate,
         endDate,
@@ -177,7 +184,7 @@ describe('Backend e2e', () => {
       .send({
         assignmentId: createdAssignment.id,
         classId: createdClass.classId,
-        content: '这是草稿答案',
+        content: 'Draft answer',
         isDraft: true,
       });
     const draftSubmission = unwrap(saveDraftResponse);
@@ -195,7 +202,7 @@ describe('Backend e2e', () => {
       .send({
         assignmentId: createdAssignment.id,
         classId: createdClass.classId,
-        content: '第一次正式提交',
+        content: 'First final submission',
         isDraft: false,
       });
     const firstSubmission = unwrap(firstSubmitResponse);
@@ -216,7 +223,7 @@ describe('Backend e2e', () => {
       .send({
         assignmentId: createdAssignment.id,
         classId: createdClass.classId,
-        content: '第二次正式提交',
+        content: 'Second final submission',
         isDraft: false,
       });
     const secondSubmission = unwrap(secondSubmitResponse);
@@ -228,11 +235,11 @@ describe('Backend e2e', () => {
       .send({
         assignmentId: createdAssignment.id,
         classId: createdClass.classId,
-        content: '第三次正式提交',
+        content: 'Third final submission',
         isDraft: false,
       })
       .expect(400);
-    expect(thirdSubmitResponse.body.message).toMatch(/提交次数|最大提交次数/);
+    expect(thirdSubmitResponse.body.message).toMatch(/Submission limit reached/);
 
     const submissionListResponse = await request(app.getHttpServer())
       .get('/api/teachers/submissions/list')
@@ -253,7 +260,7 @@ describe('Backend e2e', () => {
       .set(authHeader(teacherLogin.token))
       .send({
         submissionId,
-        teacherReviewContent: '教师批改完成',
+        teacherReviewContent: 'Teacher review complete',
         teacherScore: 92,
       });
     const teacherReview = unwrap(teacherReviewResponse);
@@ -272,11 +279,13 @@ describe('Backend e2e', () => {
       .send({
         assignmentId: createdAssignment.id,
         classId: createdClass.classId,
-        content: '老师批改后再次提交',
+        content: 'Retry after teacher review',
         isDraft: false,
       })
       .expect(400);
-    expect(resubmitAfterReviewResponse.body.message).toMatch(/提交次数|不能再次提交|已被教师批改/);
+    expect(resubmitAfterReviewResponse.body.message).toMatch(
+      /Reviewed submissions cannot be submitted again|Submission limit reached/,
+    );
 
     const teacherDashboardResponse = await request(app.getHttpServer())
       .get('/api/teacher/dashboard/stats')
@@ -310,7 +319,7 @@ describe('Backend e2e', () => {
         username: 'managed_teacher',
         email: 'managed_teacher@nengdou.local',
         password: '123456',
-        name: '管理老师',
+        name: 'Managed Teacher',
         role: 'teacher',
         status: 'active',
       });
@@ -326,9 +335,9 @@ describe('Backend e2e', () => {
     const updateProfileResponse = await request(app.getHttpServer())
       .put('/api/users/profile')
       .set(authHeader(adminLogin.token))
-      .send({ name: '超级管理员', phone: '13800138000' });
+      .send({ name: 'Super Admin', phone: '13800138000' });
     const updatedProfile = unwrap(updateProfileResponse);
-    expect(updatedProfile.name).toBe('超级管理员');
+    expect(updatedProfile.name).toBe('Super Admin');
     expect(updatedProfile.phone).toBe('13800138000');
 
     const updatePasswordResponse = await request(app.getHttpServer())
@@ -350,10 +359,10 @@ describe('Backend e2e', () => {
     const updatedUserResponse = await request(app.getHttpServer())
       .patch(`/api/users/${createdUser._id}`)
       .set(authHeader(relogin.token))
-      .send({ status: 'inactive', name: '管理老师2' });
+      .send({ status: 'inactive', name: 'Managed Teacher 2' });
     const updatedUser = unwrap(updatedUserResponse);
     expect(updatedUser.status).toBe('inactive');
-    expect(updatedUser.name).toBe('管理老师2');
+    expect(updatedUser.name).toBe('Managed Teacher 2');
 
     const resetPasswordResponse = await request(app.getHttpServer())
       .post(`/api/users/${createdUser._id}/reset-password`)

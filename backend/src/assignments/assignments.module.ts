@@ -6,10 +6,12 @@ import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { Submission, SubmissionSchema } from '../submissions/schemas/submission.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { AssignmentsController } from './assignments.controller';
 import { AssignmentsService } from './assignments.service';
 import { Assignment, AssignmentSchema } from './schemas/assignment.schema';
 
 @Module({
+  controllers: [AssignmentsController],
   imports: [
     AuthModule,
     MongooseModule.forFeature([

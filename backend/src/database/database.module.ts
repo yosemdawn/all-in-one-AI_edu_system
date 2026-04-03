@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { Assignment, AssignmentSchema } from '../assignments/schemas/assignment.schema';
 import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { DatabaseSeedService } from './database-seed.service';
+import { MemoryDatabaseService, memoryDatabaseManager } from './memory-database.service';
 
 @Module({
   imports: [
@@ -14,6 +14,14 @@ import { DatabaseSeedService } from './database-seed.service';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
+        if (configService.get<string>('NODE_ENV') === 'test') {
+          return {
+            uri:
+              configService.get<string>('TEST_MONGODB_URI') ??
+              'mongodb://127.0.0.1:27017/nengdou_ai_test',
+          };
+        }
+
         const configuredUri = configService.get<string>('MONGODB_URI');
         if (configuredUri) {
           return {
@@ -21,14 +29,8 @@ import { DatabaseSeedService } from './database-seed.service';
           };
         }
 
-        const memoryServer = await MongoMemoryServer.create({
-          instance: {
-            dbName: 'nengdou_ai',
-          },
-        });
-
         return {
-          uri: memoryServer.getUri(),
+          uri: await memoryDatabaseManager.getUri('nengdou_ai'),
         };
       },
     }),
@@ -39,6 +41,6 @@ import { DatabaseSeedService } from './database-seed.service';
       { name: Assignment.name, schema: AssignmentSchema },
     ]),
   ],
-  providers: [DatabaseSeedService],
+  providers: [DatabaseSeedService, MemoryDatabaseService],
 })
 export class DatabaseModule {}

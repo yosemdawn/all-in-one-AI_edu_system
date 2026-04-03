@@ -37,6 +37,7 @@ const queueImports = redisUrl
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       envFilePath: ['.env.local', '.env'],
       validate: validateEnvironment,
     }),
