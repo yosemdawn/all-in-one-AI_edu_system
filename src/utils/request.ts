@@ -118,18 +118,16 @@ service.interceptors.response.use(
     const originalRequest = error.config as any;
     console.log("处理HTTP状态码", error.response?.status, originalRequest?.url);
     
-    // 处理HTTP 403状态码（用户被禁用等权限问题）
+    // 处理HTTP 403状态码，作为权限不足而不是登录失效
     if (error.response?.status === 403) {
       let errorMessage = "访问被拒绝";
-      let errorCode = "";
       
       if (error.response?.data && typeof error.response.data === "object") {
         const data = error.response.data as any;
         errorMessage = data.message || errorMessage;
-        errorCode = data.code || "";
       }
       
-      handleAuthError(errorMessage, errorCode);
+      ElMessage.error(errorMessage);
       return Promise.reject(error);
     }
     

@@ -328,6 +328,15 @@ describe('Backend e2e', () => {
     const availableAiRules = unwrap(availableAiRulesResponse);
     expect(availableAiRules.some((item: any) => item.id === createdAiRule.id)).toBe(true);
 
+    const activeAiModelsResponse = await request(app.getHttpServer())
+      .get('/api/v1/ai-models/active')
+      .set(authHeader(teacherLogin.token));
+    const activeAiModels = unwrap(activeAiModelsResponse);
+    expect(activeAiModels.length).toBeGreaterThanOrEqual(1);
+    expect(activeAiModels[0].apiKey).toBeUndefined();
+    expect(activeAiModels[0].accessKey).toBeUndefined();
+    expect(activeAiModels[0].secretKey).toBeUndefined();
+
     const copyAiRuleResponse = await request(app.getHttpServer())
       .post(`/api/v1/ai-rules/${createdAiRule.id}/copy`)
       .set(authHeader(teacherLogin.token))
@@ -464,6 +473,13 @@ describe('Backend e2e', () => {
     const roles = unwrap(rolesResponse);
     expect(roles.items.length).toBeGreaterThanOrEqual(3);
 
+    const invalidRoleQueryResponse = await request(app.getHttpServer())
+      .get('/api/permissions/roles')
+      .set(authHeader(relogin.token))
+      .query({ sort: 'dropDatabase' })
+      .expect(400);
+    expect(invalidRoleQueryResponse.body.message).toBeTruthy();
+
     const menusResponse = await request(app.getHttpServer())
       .get('/api/permissions/menus')
       .set(authHeader(relogin.token));
@@ -552,6 +568,13 @@ describe('Backend e2e', () => {
     const aiModelDetail = unwrap(aiModelDetailResponse);
     expect(aiModelDetail.code).toBe(aiModelCode);
 
+    const invalidAiModelUpdateResponse = await request(app.getHttpServer())
+      .put(`/api/admin/ai-models/${aiModelCode}`)
+      .set(authHeader(relogin.token))
+      .send({ status: 'broken-status' })
+      .expect(400);
+    expect(invalidAiModelUpdateResponse.body.message).toBeTruthy();
+
     const updateAiModelResponse = await request(app.getHttpServer())
       .put(`/api/admin/ai-models/${aiModelCode}`)
       .set(authHeader(relogin.token))
@@ -592,6 +615,40 @@ describe('Backend e2e', () => {
     const logs = unwrap(logsResponse);
     expect(logs.total).toBeGreaterThan(0);
     expect(logs.items[0].endpoint).toBeTruthy();
+
+    const loginLogsResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20, endpoint: '/api/v1/auth/login' });
+    const loginLogs = unwrap(loginLogsResponse);
+    const loginLog = loginLogs.items.find((item: any) => item.endpoint.includes('/api/v1/auth/login'));
+    expect(loginLog).toBeTruthy();
+    expect(loginLog.requestParams.body.password).toBe('[REDACTED]');
+    expect(loginLog.responseData.data.token).toBe('[REDACTED]');
+    expect(loginLog.responseData.data.refreshToken).toBe('[REDACTED]');
+
+    const resetPasswordLogsResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20, endpoint: '/reset-password' });
+    const resetPasswordLogs = unwrap(resetPasswordLogsResponse);
+    const resetPasswordLog = resetPasswordLogs.items.find((item: any) =>
+      item.endpoint.includes(`/api/users/${createdUser._id}/reset-password`),
+    );
+    expect(resetPasswordLog).toBeTruthy();
+    expect(resetPasswordLog.responseData.data.newPassword).toBe('[REDACTED]');
+
+    const aiModelLogsResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20, endpoint: `/api/admin/ai-models/${aiModelCode}` });
+    const aiModelLogs = unwrap(aiModelLogsResponse);
+    const aiModelLog = aiModelLogs.items.find(
+      (item: any) =>
+        item.method === 'PUT' && item.endpoint.includes(`/api/admin/ai-models/${aiModelCode}`),
+    );
+    expect(aiModelLog).toBeTruthy();
+    expect(aiModelLog.requestParams.body.apiKey).toBe('[REDACTED]');
 
     const deleteUserResponse = await request(app.getHttpServer())
       .delete(`/api/users/${createdUser._id}`)

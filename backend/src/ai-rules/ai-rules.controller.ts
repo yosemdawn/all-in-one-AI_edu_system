@@ -4,6 +4,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { AiRuleListQueryDto } from './dto/ai-rule-list-query.dto';
+import { CopyAiRuleDto } from './dto/copy-ai-rule.dto';
+import { CreateAiRuleDto } from './dto/create-ai-rule.dto';
+import { UpdateAiRuleDto } from './dto/update-ai-rule.dto';
 import { AiRulesService } from './ai-rules.service';
 
 @Controller('v1/ai-rules')
@@ -13,7 +17,7 @@ export class AiRulesController {
   constructor(private readonly aiRulesService: AiRulesService) {}
 
   @Get()
-  getAiRuleList(@CurrentUser() currentUser: AuthenticatedUser, @Query() query: any) {
+  getAiRuleList(@CurrentUser() currentUser: AuthenticatedUser, @Query() query: AiRuleListQueryDto) {
     return this.aiRulesService.getAiRuleList(currentUser, query);
   }
 
@@ -31,7 +35,7 @@ export class AiRulesController {
   }
 
   @Post()
-  createAiRule(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: any) {
+  createAiRule(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateAiRuleDto) {
     return this.aiRulesService.createAiRule(currentUser, body);
   }
 
@@ -39,7 +43,7 @@ export class AiRulesController {
   updateAiRule(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() body: UpdateAiRuleDto,
   ) {
     return this.aiRulesService.updateAiRule(currentUser, id, body);
   }
@@ -53,7 +57,7 @@ export class AiRulesController {
   copyAiRule(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param('id') id: string,
-    @Body() body: any,
+    @Body() body: CopyAiRuleDto,
   ) {
     return this.aiRulesService.copyAiRule(currentUser, id, body);
   }

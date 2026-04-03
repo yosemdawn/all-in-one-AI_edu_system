@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/comm
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { UpdateAiModelDto } from './dto/update-ai-model.dto';
 import { AiModelsService } from './ai-models.service';
 
 @Controller('admin/ai-models')
@@ -16,6 +17,7 @@ export class AiModelsController {
   }
 
   @Get('active')
+  @Roles('teacher', 'superadmin')
   getActiveAiModels() {
     return this.aiModelsService.getActiveModels();
   }
@@ -26,7 +28,7 @@ export class AiModelsController {
   }
 
   @Put(':code')
-  updateAiModel(@Param('code') code: string, @Body() body: any) {
+  updateAiModel(@Param('code') code: string, @Body() body: UpdateAiModelDto) {
     return this.aiModelsService.updateModel(code, body);
   }
 

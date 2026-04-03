@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "dev:backend": "npm --prefix backend run start:dev",
+    "dev:full": "run-p dev dev:backend",
     "build": "run-p type-check build-only", 
     "preview": "vite preview",
     "build-only": "vite build",
