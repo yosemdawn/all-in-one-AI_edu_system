@@ -1,11 +1,20 @@
 import axios from "axios";
-import type { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
-import { ElMessage, ElMessageBox, ElLoading } from "element-plus";
-import router from "@/router";
+import type { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
+import { ElLoading, ElMessage, ElMessageBox } from "element-plus";
 import store from "@/store";
 import { getAuthConfig } from "./auth-codes";
 
-// 创建axios实例
+const AUTH_ENTRY_ENDPOINTS = [
+  "/v1/auth/login",
+  "/auth/login",
+  "/v1/auth/register",
+  "/auth/register",
+  "/v1/auth/forgot-password",
+  "/v1/auth/reset-password",
+];
+
+const AUTH_RESPONSE_CODES = new Set([401, 10002, 10003, 10004, 10006, 10012, 10015]);
+
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   timeout: 15000,
@@ -14,306 +23,226 @@ const service = axios.create({
   },
 });
 
-// 标记是否正在处理401错误，防止多次弹框
 let isHandling401 = false;
-// 标记是否正在刷新token，防止多次刷新
 let isRefreshing = false;
-// 等待刷新完成的请求队列
 let failedQueue: Array<{ resolve: Function; reject: Function }> = [];
 
-// 处理等待队列中的请求
+const isAuthEntryRequest = (url?: string): boolean => {
+  if (!url) return false;
+  return AUTH_ENTRY_ENDPOINTS.some((endpoint) => url.includes(endpoint));
+};
+
+const getResponseErrorMessage = (error: AxiosError, fallback = "请求失败") => {
+  if (error.response && typeof error.response.data === "object") {
+    const responseData = error.response.data as any;
+    return responseData?.message || responseData?.error?.message || fallback;
+  }
+
+  return fallback;
+};
+
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
       reject(error);
-    } else {
-      resolve(token);
+      return;
     }
+
+    resolve(token);
   });
 
   failedQueue = [];
 };
 
-// 检查token是否即将过期（提前30秒刷新）
-const isTokenExpiringSoon = (): boolean => {
-  const userInfo = store.getters["user/getUserInfo"];
-  if (!userInfo?.tokenExpiresAt) return false;
-
-  const now = Date.now();
-  const expiresAt = userInfo.tokenExpiresAt;
-  const timeUntilExpiry = expiresAt - now;
-
-  // 只有当token存在超过1分钟且即将在30秒内过期时才刷新
-  // 避免登录后立即刷新
-  const tokenAge = now - (expiresAt - (userInfo.expiresIn || 900) * 1000);
-  return timeUntilExpiry <= 30000 && tokenAge > 60000;
-};
-
-// 请求拦截器
 service.interceptors.request.use(
   async (config) => {
-    // 从localStorage获取token，确保取到最新值
     const token = localStorage.getItem("token");
 
     if (token) {
       try {
-        // 检查token是否有效（不包含非ASCII字符）
         if (/^[\x00-\x7F]*$/.test(token)) {
-          // 设置token到请求头
-          config.headers["Authorization"] = `Bearer ${token}`;
+          const headers = (config.headers || {}) as any;
+          headers.Authorization = `Bearer ${token}`;
+          config.headers = headers;
         } else {
-          // token包含非法字符，移除它并触发重新登录
           console.error("Invalid token format detected, removing token");
           store.dispatch("auth/clearPermissions", null, { root: true });
-          // 注意：这里不直接跳转，避免中断当前请求
         }
-      } catch (e) {
-        console.error("Error processing token:", e);
-        // 出错时清除token
+      } catch (requestError) {
+        console.error("Error processing token:", requestError);
         store.dispatch("auth/clearPermissions", null, { root: true });
       }
     }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// 响应拦截器
 service.interceptors.response.use(
-  // 成功响应处理
   (response: AxiosResponse) => {
-    // 如果是二进制数据，直接返回
     if (response.config.responseType === "blob") {
       return response;
     }
 
     const res = response.data;
-
-    // 处理后端标准响应格式（code/message/data结构）
-    if (res.code === 200) {
+    if (res?.code === 200) {
       return res.data;
-    } else if (
-      res.code === 401 ||
-      [10002, 10003, 10004, 10006, 10012, 10015].includes(
-        res.code
-      )
-    ) {
-      // 处理401错误和认证相关错误码（移除10001登录失败、10005账户禁用、10014用户未激活，它们现在通过HTTP状态码处理）
-
-      console.log("处理401错误和认证相关错误码", res);
-      const errorMsg = res.message || "未授权，请重新登录";
-      const errorCode = res.code || res.errorCode;
-      handleAuthError(errorMsg, errorCode);
-      return Promise.reject(new Error(errorMsg));
-    } else {
-      // 业务错误
-      const errorMsg = res.message || "请求失败";
-      ElMessage.error(errorMsg);
-      return Promise.reject(new Error(errorMsg));
     }
-  },
 
-  // 错误响应处理
-  async (error: AxiosError) => {
-    const originalRequest = error.config as any;
-    console.log("处理HTTP状态码", error.response?.status, originalRequest?.url);
-    
-    // 处理HTTP 403状态码，作为权限不足而不是登录失效
-    if (error.response?.status === 403) {
-      let errorMessage = "访问被拒绝";
-      
-      if (error.response?.data && typeof error.response.data === "object") {
-        const data = error.response.data as any;
-        errorMessage = data.message || errorMessage;
+    const errorCode = res?.code || res?.errorCode;
+    const errorMessage = res?.message || "请求失败";
+
+    if (AUTH_RESPONSE_CODES.has(errorCode)) {
+      if (isAuthEntryRequest(response.config.url)) {
+        return Promise.reject(new Error(errorMessage));
       }
-      
-      ElMessage.error(errorMessage);
+
+      handleAuthError(errorMessage, errorCode);
+      return Promise.reject(new Error(errorMessage));
+    }
+
+    ElMessage.error(errorMessage);
+    return Promise.reject(new Error(errorMessage));
+  },
+  async (error: AxiosError) => {
+    const originalRequest = (error.config || {}) as AxiosRequestConfig & {
+      _retry?: boolean;
+      headers?: any;
+    };
+
+    console.log("处理HTTP状态码", error.response?.status, originalRequest?.url);
+
+    if (error.response?.status === 403) {
+      ElMessage.error(getResponseErrorMessage(error, "访问被拒绝"));
       return Promise.reject(error);
     }
-    
-    // 处理HTTP 401状态码
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      // 如果是刷新token接口本身返回401，直接处理认证错误，不要重试
+
+    if (error.response?.status === 401) {
+      const errorMessage = getResponseErrorMessage(error, "认证失败");
+
+      if (isAuthEntryRequest(originalRequest?.url)) {
+        return Promise.reject(new Error(errorMessage));
+      }
+
       if (originalRequest.url?.includes("/auth/refresh-token")) {
-        console.log("刷新token接口返回401，停止重试");
-        // 提取错误信息
-        let errorMessage = "登录会话已过期，请重新登录";
-        let errorCode = 10012;
-        handleAuthError(errorMessage, errorCode);
+        handleAuthError(errorMessage, 10012);
         return Promise.reject(error);
       }
-      // 如果正在刷新token，将请求加入队列
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          if (token) {
-            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+
+      if (!originalRequest._retry) {
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          }).then((token) => {
+            if (!token) {
+              return Promise.reject(error);
+            }
+
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${token}`;
             return service(originalRequest);
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          await store.dispatch("user/refreshToken");
+          const newToken = localStorage.getItem("token");
+
+          if (!newToken) {
+            throw new Error("刷新后未获取到新 token");
           }
-          return Promise.reject(error);
-        });
-      }
 
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        console.log("尝试刷新token");
-        // 尝试刷新token
-        await store.dispatch("user/refreshToken");
-        const newToken = localStorage.getItem("token");
-
-        if (newToken) {
-          console.log("刷新token成功");
-          // 刷新成功，处理队列中的请求
           processQueue(null, newToken);
-          originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return service(originalRequest);
-        } else {
-          throw new Error("刷新后未获取到新token");
+        } catch (refreshError: any) {
+          processQueue(refreshError, null);
+
+          let refreshErrorMessage = "登录已过期，请重新登录";
+          let refreshErrorCode: string | number | undefined = 10012;
+
+          if (refreshError?.response?.data && typeof refreshError.response.data === "object") {
+            refreshErrorMessage = refreshError.response.data.message || refreshErrorMessage;
+            refreshErrorCode =
+              refreshError.response.data.code || refreshError.response.data.errorCode || 10012;
+          }
+
+          handleAuthError(refreshErrorMessage, refreshErrorCode);
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
         }
-      } catch (refreshError: any) {
-        console.log("刷新token失败", refreshError);
-        // 刷新失败，处理队列并跳转登录
-        processQueue(refreshError, null);
-
-        // 从刷新token的错误中提取错误信息
-        let errorMessage = "登录已过期，请重新登录";
-        let errorCode = "";
-
-        if (
-          refreshError.response?.data &&
-          typeof refreshError.response.data === "object"
-        ) {
-          const data = refreshError.response.data as any;
-          errorMessage = data.message || errorMessage;
-          errorCode = data.code || "";
-        }
-
-        handleAuthError(errorMessage, errorCode);
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 
-    // 其他错误处理
-    let errorMessage = "请求失败";
-    if (error.response && typeof error.response.data === "object") {
-      const responseData = error.response.data as any;
-      errorMessage =
-        responseData?.message || responseData?.error?.message || errorMessage;
-    }
-
-    // 显示错误消息
-    ElMessage.error(errorMessage);
+    ElMessage.error(getResponseErrorMessage(error));
     return Promise.reject(error);
   }
 );
 
-/**
- * 处理授权错误，防止死循环
- * @param message 错误信息
- * @param code 错误码
- */
 function handleAuthError(message: string, code?: string | number) {
-  console.log("handleAuthError 被调用:", { message, code, isHandling401 });
-
-  // 如果已经在处理401错误，不再重复处理
   if (isHandling401) {
-    console.log("已在处理401错误，跳过");
     return;
   }
 
-  isHandling401 = true; // 立即标记为正在处理
-
-  // 获取对应的认证配置
+  isHandling401 = true;
   const config = getAuthConfig(code);
-  console.log("认证错误配置:", config);
 
-  ElMessageBox.confirm(config.message, config.title, {
+  ElMessageBox.confirm(config.message || message, config.title, {
     confirmButtonText: config.confirmButtonText,
     showCancelButton: config.showCancelButton,
     type: config.type,
   }).finally(() => {
-    console.log("弹框关闭，开始清理状态");
-
-    // 清除登录状态
     try {
       store.dispatch("auth/clearPermissions", null, { root: true });
-      console.log("权限清理完成");
-    } catch (error) {
-      console.error("清理权限时出错:", error);
+    } catch (clearError) {
+      console.error("清理权限失败:", clearError);
     }
 
-    // 如果需要重定向到登录页
     if (config.needRedirect) {
-      // 获取重定向路径，避免循环
       const getRedirectPath = () => {
         const { pathname, search } = window.location;
-
-        // 不在登录页面，直接使用当前路径
         if (pathname !== "/login") return pathname + search;
 
-        // 在登录页面，提取有效的redirect参数
         const redirect = new URLSearchParams(search).get("redirect");
-        return redirect && !redirect.includes("/login")
-          ? decodeURIComponent(redirect)
-          : "/";
+        return redirect && !redirect.includes("/login") ? decodeURIComponent(redirect) : "/";
       };
 
-      // 跳转到登录页
-      const redirectUrl = `/login?redirect=${encodeURIComponent(
-        getRedirectPath()
-      )}`;
-      console.log("准备跳转到登录页:", redirectUrl);
+      const redirectUrl = `/login?redirect=${encodeURIComponent(getRedirectPath())}`;
 
-      // 使用router跳转而不是window.location，避免白屏
-      try {
-        // 导入router并跳转
-        import("@/router").then(({ default: router }) => {
+      import("@/router")
+        .then(({ default: router }) => {
           router.push(redirectUrl);
+        })
+        .catch((routerError) => {
+          console.error("使用 router 跳转失败，改用 window.location:", routerError);
+          window.location.href = redirectUrl;
         });
-      } catch (routerError) {
-        console.error("使用router跳转失败，使用window.location:", routerError);
-        window.location.href = redirectUrl;
-      }
     }
 
-    // 延迟重置处理状态
     setTimeout(() => {
       isHandling401 = false;
-      console.log("401处理状态已重置");
     }, 800);
   });
 }
 
-/**
- * 验证是否为Blob对象
- * @param data 响应数据
- * @returns 是否为Blob
- */
 const isBlob = (data: any): boolean => {
   return data instanceof Blob && data.type !== "application/json";
 };
 
-/**
- * 通用文件下载方法
- * @param url 下载地址
- * @param params 请求参数
- * @param filename 文件名
- * @param config 额外配置
- */
 export const downloadFile = async (
   url: string,
   params?: any,
   filename?: string,
   config?: any
 ) => {
-  // 创建loading实例
   const loadingInstance = ElLoading.service({
-    text: "正在下载文件，请稍候",
+    text: "正在下载文件，请稍候...",
     background: "rgba(0, 0, 0, 0.7)",
   });
 
@@ -326,47 +255,38 @@ export const downloadFile = async (
       ...config,
     });
 
-    // 验证响应是否为Blob
     if (isBlob(response.data)) {
-      // 创建Blob对象
       const blob = new Blob([response.data]);
-
-      // 创建下载链接
       const link = document.createElement("a");
+
       link.href = window.URL.createObjectURL(blob);
       link.download = filename || "download";
 
-      // 触发下载
       document.body.appendChild(link);
       link.click();
-
-      // 清理
       document.body.removeChild(link);
       window.URL.revokeObjectURL(link.href);
 
       ElMessage.success("文件下载成功");
-    } else {
-      // 如果不是Blob，尝试解析错误信息
-      const text = await response.data.text();
-      try {
-        const errorData = JSON.parse(text);
-        ElMessage.error(errorData.message || "下载失败");
-      } catch {
-        ElMessage.error("下载失败，请稍后重试");
-      }
+      return;
     }
-  } catch (error: any) {
-    console.error("文件下载错误:", error);
-    ElMessage.error(error.message || "下载文件出现错误，请联系管理员");
+
+    const text = await response.data.text();
+
+    try {
+      const errorData = JSON.parse(text);
+      ElMessage.error(errorData.message || "下载失败");
+    } catch {
+      ElMessage.error("下载失败，请稍后重试");
+    }
+  } catch (downloadError: any) {
+    console.error("文件下载错误:", downloadError);
+    ElMessage.error(downloadError.message || "下载文件出现错误，请联系管理员");
   } finally {
-    // 关闭loading
     loadingInstance.close();
   }
 };
 
-// 导出请求方法
-export default function request<T = any>(
-  config: AxiosRequestConfig
-): Promise<T> {
+export default function request<T = any>(config: AxiosRequestConfig): Promise<T> {
   return service(config) as unknown as Promise<T>;
 }
