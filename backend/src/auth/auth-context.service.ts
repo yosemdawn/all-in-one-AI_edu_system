@@ -24,6 +24,10 @@ export class AuthContextService {
       throw new UnauthorizedException('Login expired');
     }
 
+    if ((decoded.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new UnauthorizedException('Login expired');
+    }
+
     this.assertTokenFreshForUser(user, decoded.iat);
     return this.toAuthenticatedUser(user);
   }

@@ -137,6 +137,7 @@ export class UsersService {
     user.passwordChangedAt = new Date();
     user.mustChangePassword = false;
     user.lastLogoutAt = new Date();
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     return { success: true };
@@ -222,6 +223,7 @@ export class UsersService {
     user.passwordChangedAt = new Date();
     user.mustChangePassword = false;
     user.lastLogoutAt = new Date();
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     return { success: true, message: 'password updated' };
@@ -242,6 +244,7 @@ export class UsersService {
     user.passwordChangedAt = new Date();
     user.mustChangePassword = true;
     user.lastLogoutAt = new Date();
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
 
     return { success: true, message: 'password reset', id, newPassword };

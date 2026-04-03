@@ -8,9 +8,12 @@ import { Submission, SubmissionSchema } from '../submissions/schemas/submission.
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AiModelsController } from './ai-models.controller';
+import { AiModelsService } from './ai-models.service';
+import { AiModel, AiModelSchema } from './schemas/ai-model.schema';
 
 @Module({
-  controllers: [AdminController],
+  controllers: [AdminController, AiModelsController],
   imports: [
     AuthModule,
     MongooseModule.forFeature([
@@ -18,9 +21,10 @@ import { AdminService } from './admin.service';
       { name: ClassEntity.name, schema: ClassSchema },
       { name: Assignment.name, schema: AssignmentSchema },
       { name: Submission.name, schema: SubmissionSchema },
+      { name: AiModel.name, schema: AiModelSchema },
     ]),
   ],
-  providers: [AdminService, AppService],
-  exports: [AdminService],
+  providers: [AdminService, AiModelsService, AppService],
+  exports: [AdminService, AiModelsService],
 })
 export class AdminModule {}

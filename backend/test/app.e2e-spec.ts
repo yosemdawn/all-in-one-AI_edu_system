@@ -287,6 +287,61 @@ describe('Backend e2e', () => {
       /Reviewed submissions cannot be submitted again|Submission limit reached/,
     );
 
+    const aiRuleListResponse = await request(app.getHttpServer())
+      .get('/api/v1/ai-rules')
+      .set(authHeader(teacherLogin.token))
+      .query({ page: 1, pageSize: 20 });
+    const aiRuleList = unwrap(aiRuleListResponse);
+    expect(aiRuleList.total).toBeGreaterThanOrEqual(1);
+
+    const createAiRuleResponse = await request(app.getHttpServer())
+      .post('/api/v1/ai-rules')
+      .set(authHeader(teacherLogin.token))
+      .send({
+        name: 'Teacher Custom Rule',
+        description: 'Teacher-owned AI rule',
+        modelType: 'doubao',
+        prompt: 'Give short advice.',
+        visibility: 'private',
+        tags: ['custom', 'teacher'],
+      });
+    const createdAiRule = unwrap(createAiRuleResponse);
+    expect(createdAiRule.success).toBe(true);
+
+    const aiRuleDetailResponse = await request(app.getHttpServer())
+      .get(`/api/v1/ai-rules/${createdAiRule.id}`)
+      .set(authHeader(teacherLogin.token));
+    const aiRuleDetail = unwrap(aiRuleDetailResponse);
+    expect(aiRuleDetail.name).toBe('Teacher Custom Rule');
+
+    const updateAiRuleResponse = await request(app.getHttpServer())
+      .post(`/api/v1/ai-rules/${createdAiRule.id}/update`)
+      .set(authHeader(teacherLogin.token))
+      .send({ name: 'Teacher Custom Rule Updated', status: 'active' });
+    const updatedAiRule = unwrap(updateAiRuleResponse);
+    expect(updatedAiRule.success).toBe(true);
+
+    const availableAiRulesResponse = await request(app.getHttpServer())
+      .get('/api/v1/ai-rules/available/list')
+      .set(authHeader(teacherLogin.token))
+      .query({ status: 'active' });
+    const availableAiRules = unwrap(availableAiRulesResponse);
+    expect(availableAiRules.some((item: any) => item.id === createdAiRule.id)).toBe(true);
+
+    const copyAiRuleResponse = await request(app.getHttpServer())
+      .post(`/api/v1/ai-rules/${createdAiRule.id}/copy`)
+      .set(authHeader(teacherLogin.token))
+      .send({ name: 'Teacher Custom Rule Copy' });
+    const copiedAiRule = unwrap(copyAiRuleResponse);
+    expect(copiedAiRule.success).toBe(true);
+
+    const deleteCopiedAiRuleResponse = await request(app.getHttpServer())
+      .post(`/api/v1/ai-rules/${copiedAiRule.id}/delete`)
+      .set(authHeader(teacherLogin.token))
+      .send({});
+    const deletedCopiedAiRule = unwrap(deleteCopiedAiRuleResponse);
+    expect(deletedCopiedAiRule.success).toBe(true);
+
     const teacherDashboardResponse = await request(app.getHttpServer())
       .get('/api/teacher/dashboard/stats')
       .set(authHeader(teacherLogin.token));
@@ -394,11 +449,167 @@ describe('Backend e2e', () => {
     const health = unwrap(healthResponse);
     expect(health.db).toBe('ok');
 
+    const resourcesResponse = await request(app.getHttpServer())
+      .get('/api/permissions/user-roles/users/current/resources')
+      .set(authHeader(relogin.token));
+    const resources = unwrap(resourcesResponse);
+    expect(resources.roles.length).toBeGreaterThan(0);
+    expect(resources.permissions).toContain('system:manage');
+    expect(resources.menus.length).toBeGreaterThan(0);
+
+    const rolesResponse = await request(app.getHttpServer())
+      .get('/api/permissions/roles')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20 });
+    const roles = unwrap(rolesResponse);
+    expect(roles.items.length).toBeGreaterThanOrEqual(3);
+
+    const menusResponse = await request(app.getHttpServer())
+      .get('/api/permissions/menus')
+      .set(authHeader(relogin.token));
+    const menus = unwrap(menusResponse);
+    expect(menus.length).toBeGreaterThan(0);
+
+    const createMenuResponse = await request(app.getHttpServer())
+      .post('/api/permissions/menus')
+      .set(authHeader(relogin.token))
+      .send({
+        name: 'E2E Custom Menu',
+        code: 'e2e:custom-menu',
+        path: '/system/e2e-menu',
+        component: 'system/e2e/menu',
+        type: 'menu',
+        sort: 999,
+        status: 'active',
+        meta: { title: 'E2E Menu' },
+      });
+    const createdMenu = unwrap(createMenuResponse);
+    expect(createdMenu.code).toBe('e2e:custom-menu');
+
+    const updateMenuResponse = await request(app.getHttpServer())
+      .put(`/api/permissions/menus/${createdMenu._id}`)
+      .set(authHeader(relogin.token))
+      .send({ path: '/system/e2e-menu-updated', meta: { title: 'E2E Menu Updated' } });
+    const updatedMenu = unwrap(updateMenuResponse);
+    expect(updatedMenu.path).toBe('/system/e2e-menu-updated');
+
+    const createRoleResponse = await request(app.getHttpServer())
+      .post('/api/permissions/roles')
+      .set(authHeader(relogin.token))
+      .send({
+        name: 'E2E Custom Role',
+        code: 'e2e_custom_role',
+        description: 'Role created in e2e',
+        menuIds: [createdMenu._id],
+        permissions: ['e2e:access'],
+      });
+    const createdRole = unwrap(createRoleResponse);
+    expect(createdRole.code).toBe('e2e_custom_role');
+
+    const roleWithMenusResponse = await request(app.getHttpServer())
+      .get(`/api/permissions/roles/${createdRole._id}/with-menus`)
+      .set(authHeader(relogin.token));
+    const roleWithMenus = unwrap(roleWithMenusResponse);
+    expect(roleWithMenus.menus.some((item: any) => item._id === createdMenu._id)).toBe(true);
+
+    const updateRoleResponse = await request(app.getHttpServer())
+      .put(`/api/permissions/roles/${createdRole._id}`)
+      .set(authHeader(relogin.token))
+      .send({ description: 'Updated role description' });
+    const updatedRole = unwrap(updateRoleResponse);
+    expect(updatedRole.description).toBe('Updated role description');
+
+    const assignRoleResponse = await request(app.getHttpServer())
+      .put(`/api/permissions/user-roles/users/${createdUser._id}/roles`)
+      .set(authHeader(relogin.token))
+      .send({ roleIds: [createdRole._id] });
+    const assignedRole = unwrap(assignRoleResponse);
+    expect(assignedRole).toBe(true);
+
+    const createdUserResourcesResponse = await request(app.getHttpServer())
+      .get(`/api/permissions/user-roles/users/${createdUser._id}/resources`)
+      .set(authHeader(relogin.token));
+    const createdUserResources = unwrap(createdUserResourcesResponse);
+    expect(createdUserResources.roles.some((item: any) => item._id === createdRole._id)).toBe(true);
+    expect(createdUserResources.permissions).toContain('e2e:access');
+
+    const aiModelsResponse = await request(app.getHttpServer())
+      .get('/api/admin/ai-models')
+      .set(authHeader(relogin.token));
+    const aiModels = unwrap(aiModelsResponse);
+    expect(aiModels.summary.totalModels).toBeGreaterThanOrEqual(1);
+    const aiModelCode = aiModels.models[0].code;
+
+    const activeAiModelsResponse = await request(app.getHttpServer())
+      .get('/api/admin/ai-models/active')
+      .set(authHeader(relogin.token));
+    const activeAiModels = unwrap(activeAiModelsResponse);
+    expect(activeAiModels.some((item: any) => item.code === aiModelCode)).toBe(true);
+
+    const aiModelDetailResponse = await request(app.getHttpServer())
+      .get(`/api/admin/ai-models/${aiModelCode}`)
+      .set(authHeader(relogin.token));
+    const aiModelDetail = unwrap(aiModelDetailResponse);
+    expect(aiModelDetail.code).toBe(aiModelCode);
+
+    const updateAiModelResponse = await request(app.getHttpServer())
+      .put(`/api/admin/ai-models/${aiModelCode}`)
+      .set(authHeader(relogin.token))
+      .send({ apiKey: 'e2e-api-key', status: 'active' });
+    const updatedAiModel = unwrap(updateAiModelResponse);
+    expect(updatedAiModel.apiKey).toBe('e2e-api-key');
+
+    const balanceResponse = await request(app.getHttpServer())
+      .get(`/api/admin/ai-models/${aiModelCode}/balance`)
+      .set(authHeader(relogin.token));
+    const balance = unwrap(balanceResponse);
+    expect(balance.status).toBe('success');
+
+    const testModelResponse = await request(app.getHttpServer())
+      .post(`/api/admin/ai-models/${aiModelCode}/test`)
+      .set(authHeader(relogin.token))
+      .send({});
+    const testModel = unwrap(testModelResponse);
+    expect(typeof testModel.success).toBe('boolean');
+
+    const modelStatsResponse = await request(app.getHttpServer())
+      .get(`/api/admin/ai-models/${aiModelCode}/stats`)
+      .set(authHeader(relogin.token));
+    const modelStats = unwrap(modelStatsResponse);
+    expect(Array.isArray(modelStats.dailyUsage)).toBe(true);
+
+    const initializeModelsResponse = await request(app.getHttpServer())
+      .post('/api/admin/ai-models/initialize')
+      .set(authHeader(relogin.token))
+      .send({});
+    const initializeModels = unwrap(initializeModelsResponse);
+    expect(initializeModels.success).toBe(true);
+
+    const logsResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20 });
+    const logs = unwrap(logsResponse);
+    expect(logs.total).toBeGreaterThan(0);
+    expect(logs.items[0].endpoint).toBeTruthy();
+
     const deleteUserResponse = await request(app.getHttpServer())
       .delete(`/api/users/${createdUser._id}`)
       .set(authHeader(relogin.token));
     const deletedUser = unwrap(deleteUserResponse);
     expect(deletedUser.success).toBe(true);
+
+    const deleteRoleResponse = await request(app.getHttpServer())
+      .delete(`/api/permissions/roles/${createdRole._id}`)
+      .set(authHeader(relogin.token));
+    const deletedRole = unwrap(deleteRoleResponse);
+    expect(deletedRole.success).toBe(true);
+
+    const deleteMenuResponse = await request(app.getHttpServer())
+      .delete(`/api/permissions/menus/${createdMenu._id}`)
+      .set(authHeader(relogin.token));
+    const deletedMenu = unwrap(deleteMenuResponse);
+    expect(deletedMenu.success).toBe(true);
 
     const restorePasswordResponse = await request(app.getHttpServer())
       .put('/api/users/password')

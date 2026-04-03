@@ -6,6 +6,7 @@ import { Assignment, AssignmentDocument } from '../assignments/schemas/assignmen
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { AiModelsService } from './ai-models.service';
 
 @Injectable()
 export class AdminService {
@@ -18,6 +19,7 @@ export class AdminService {
     private readonly assignmentModel: Model<AssignmentDocument>,
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
+    private readonly aiModelsService: AiModelsService,
     private readonly appService: AppService,
   ) {}
 
@@ -30,13 +32,13 @@ export class AdminService {
         this.submissionModel.countDocuments(),
       ]);
 
-    const [usersByRole, classesByStatus, submissionsByStatus] = await Promise.all([
-      this.userModel.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
-      this.classModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      this.submissionModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-    ]);
-
-    const aiModels = this.appService.getAiModels().data;
+    const [usersByRole, classesByStatus, submissionsByStatus, aiModels] =
+      await Promise.all([
+        this.userModel.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
+        this.classModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        this.submissionModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        this.aiModelsService.getSummary(),
+      ]);
 
     return this.appService.envelope(
       {
@@ -44,7 +46,7 @@ export class AdminService {
         totalClasses,
         totalAssignments,
         totalSubmissions,
-        aiModelCount: aiModels.summary.totalModels,
+        aiModelCount: aiModels.totalModels,
         userRoleDistribution: this.toRoleDistribution(usersByRole, totalUsers),
         classStatusDistribution: this.toStatusDistribution(classesByStatus, totalClasses),
         submissionStatusDistribution: this.toStatusDistribution(
@@ -53,7 +55,7 @@ export class AdminService {
         ),
         lastUpdated: new Date().toISOString(),
       },
-      '获取成功',
+      'success',
     );
   }
 
@@ -75,7 +77,7 @@ export class AdminService {
           status: item.status,
         })),
       },
-      '获取成功',
+      'success',
     );
   }
 
@@ -89,7 +91,7 @@ export class AdminService {
         redis: process.env.REDIS_URL ? 'configured' : 'disabled',
         ai: process.env.DOUBAO_API_KEY ? 'configured' : 'not_configured',
       },
-      '获取成功',
+      'success',
     );
   }
 
