@@ -20,6 +20,11 @@ export class AdminController {
     return this.adminService.getRecentUsers(limit);
   }
 
+  @Get('ai-models')
+  getAiModelStats() {
+    return this.adminService.getAiModelStats();
+  }
+
   @Get('health')
   getHealth() {
     return this.adminService.getHealth();

@@ -192,6 +192,56 @@ export class AiModelsService implements OnApplicationBootstrap {
     return this.buildSummary(models);
   }
 
+  async getDashboardStats() {
+    const models = await this.aiModelModel.find().sort({ createdAt: 1 }).lean();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const reviewedSubmissions = await this.submissionModel
+      .find({
+        aiReviewedAt: { $ne: null },
+      })
+      .lean();
+
+    const stats = models.reduce<Record<string, Record<string, unknown>>>((result, model) => {
+      const modelKey = model.code;
+      const modelReviews = reviewedSubmissions.filter((item) => {
+        const provider = String(item.aiReviewMetadata?.provider || 'doubao');
+        return provider === modelKey;
+      });
+
+      const todayUsage = modelReviews.filter((item) => {
+        const reviewedAt = item.aiReviewedAt ? new Date(item.aiReviewedAt) : null;
+        return reviewedAt ? reviewedAt >= startOfToday : false;
+      }).length;
+
+      const totalUsage =
+        Number(model.totalUsage || 0) > 0 ? Number(model.totalUsage || 0) : modelReviews.length;
+      const totalTokens =
+        Number(model.totalTokens || 0) > 0
+          ? Number(model.totalTokens || 0)
+          : modelReviews.reduce((sum, item) => {
+              const usage = item.aiReviewMetadata?.usage as Record<string, unknown> | undefined;
+              const totalTokensValue =
+                Number(usage?.total_tokens || usage?.totalTokens || item.aiReviewMetadata?.tokenUsed || 0);
+              return sum + (Number.isFinite(totalTokensValue) ? totalTokensValue : 0);
+            }, 0);
+
+      const credentialsConfigured = !!(model.apiKey || model.accessKey || model.secretKey);
+      result[modelKey] = {
+        isOnline: model.status === 'active' && credentialsConfigured,
+        balance: Number(model.lastBalance || 0),
+        totalUsage,
+        totalTokens,
+        todayUsage,
+        lastBalanceCheck: model.lastBalanceCheck || model.updatedAt || model.createdAt,
+      };
+      return result;
+    }, {});
+
+    return this.appService.envelope(stats, 'success');
+  }
+
   private async ensureDefaultModels() {
     await this.aiModelModel.updateOne(
       { code: 'doubao' },
