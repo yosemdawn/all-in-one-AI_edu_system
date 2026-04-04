@@ -112,6 +112,9 @@ export class PermissionsService {
         { description: { $regex: keyword, $options: 'i' } },
       ];
     }
+    if (query?.code) {
+      filter.code = { $regex: String(query.code).trim(), $options: 'i' };
+    }
 
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 10);

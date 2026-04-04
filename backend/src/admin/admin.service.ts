@@ -95,6 +95,10 @@ export class AdminService {
     );
   }
 
+  async getAiModelStats() {
+    return this.aiModelsService.getDashboardStats();
+  }
+
   private toRoleDistribution(items: Array<{ _id: string; count: number }>, total: number) {
     const order = ['superadmin', 'teacher', 'student'];
     return order.map((role) => {

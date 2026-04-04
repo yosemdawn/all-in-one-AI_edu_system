@@ -6,7 +6,7 @@ import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { DatabaseSeedService } from './database-seed.service';
-import { MemoryDatabaseService, memoryDatabaseManager } from './memory-database.service';
+import { MemoryDatabaseService } from './memory-database.service';
 
 @Module({
   imports: [
@@ -15,10 +15,9 @@ import { MemoryDatabaseService, memoryDatabaseManager } from './memory-database.
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
         if (configService.get<string>('NODE_ENV') === 'test') {
+          const testUri = configService.get<string>('TEST_MONGODB_URI');
           return {
-            uri:
-              configService.get<string>('TEST_MONGODB_URI') ??
-              'mongodb://127.0.0.1:27017/nengdou_ai_test',
+            uri: testUri ?? 'mongodb://127.0.0.1:27017/nengdou_ai_test',
           };
         }
 
@@ -30,7 +29,7 @@ import { MemoryDatabaseService, memoryDatabaseManager } from './memory-database.
         }
 
         return {
-          uri: await memoryDatabaseManager.getUri('nengdou_ai'),
+          uri: 'mongodb://127.0.0.1:27017/nengdou_ai',
         };
       },
     }),

@@ -15,6 +15,10 @@ export class RoleListQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
   @ToNumber()
   @IsInt()
   @Min(1)

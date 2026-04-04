@@ -1,17 +1,31 @@
 import { Injectable, OnApplicationShutdown } from '@nestjs/common';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+
+type MemoryServerInstance = {
+  getUri(): string;
+  stop(): Promise<boolean>;
+};
 
 class MemoryDatabaseManager {
-  private memoryServers = new Map<string, Promise<MongoMemoryServer>>();
+  private memoryServers = new Map<string, Promise<MemoryServerInstance>>();
+
+  private async createMemoryServer(dbName: string): Promise<MemoryServerInstance> {
+    const { MongoMemoryServer } = require('mongodb-memory-server') as {
+      MongoMemoryServer: {
+        create(options?: Record<string, unknown>): Promise<MemoryServerInstance>;
+      };
+    };
+
+    return MongoMemoryServer.create({
+      instance: {
+        dbName,
+      },
+    });
+  }
 
   async getUri(dbName: string) {
     let serverPromise = this.memoryServers.get(dbName);
     if (!serverPromise) {
-      serverPromise = MongoMemoryServer.create({
-        instance: {
-          dbName,
-        },
-      });
+      serverPromise = this.createMemoryServer(dbName);
       this.memoryServers.set(dbName, serverPromise);
     }
 
