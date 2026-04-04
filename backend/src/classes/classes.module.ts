@@ -4,12 +4,13 @@ import { AuthModule } from '../auth/auth.module';
 import { AppService } from '../app.service';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { ClassesController } from './classes.controller';
+import { ClassesPublicController } from './classes-public.controller';
 import { ClassesService } from './classes.service';
 import { ClassMembership, ClassMembershipSchema } from './schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from './schemas/class.schema';
 
 @Module({
-  controllers: [ClassesController],
+  controllers: [ClassesController, ClassesPublicController],
   imports: [
     AuthModule,
     MongooseModule.forFeature([

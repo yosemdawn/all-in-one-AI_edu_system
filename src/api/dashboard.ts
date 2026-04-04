@@ -69,6 +69,30 @@ export interface RecentUsersResponse {
   }>;
 }
 
+export interface SystemHealthResponse {
+  db: "ok" | "error";
+  redis: "ok" | "error" | "disabled";
+  ai: "configured" | "not_configured";
+  checkedAt?: string;
+  details?: {
+    db?: {
+      status: "ok" | "error";
+      readyState?: number;
+      databaseName?: string;
+      error?: string;
+    };
+    redis?: {
+      status: "ok" | "error" | "disabled";
+      configured?: boolean;
+      error?: string;
+    };
+    ai?: {
+      provider: string;
+      configured: boolean;
+    };
+  };
+}
+
 export interface TeacherStatsResponse {
   myClasses: number;
   myAssignments: number;
@@ -152,7 +176,7 @@ export interface StudentStatsResponse {
  * 获取管理员看板概览统计
  */
 export function getAdminOverview(
-  refresh = false
+  refresh = false,
 ): Promise<AdminOverviewResponse> {
   const params = refresh ? { refresh: true } : {};
   return request({
@@ -166,7 +190,7 @@ export function getAdminOverview(
  * 获取AI模型使用统计
  */
 export function getAiModelStats(
-  refresh = false
+  refresh = false,
 ): Promise<AiModelStatsResponse> {
   const params = refresh ? { refresh: true } : {};
   return request({
@@ -191,7 +215,7 @@ export function getRecentUsers(limit = 10): Promise<RecentUsersResponse> {
  * 获取教师看板个人统计
  */
 export function getTeacherStats(
-  refresh = false
+  refresh = false,
 ): Promise<TeacherStatsResponse> {
   const params = refresh ? { refresh: true } : {};
   return request({
@@ -215,7 +239,7 @@ export function getTeacherPendingTasks(): Promise<TeacherPendingTasksResponse> {
  * 获取学生看板个人统计
  */
 export function getStudentStats(
-  refresh = false
+  refresh = false,
 ): Promise<StudentStatsResponse> {
   const params = refresh ? { refresh: true } : {};
   return request({
@@ -278,7 +302,7 @@ export function getStudentStudyRecommendations(): Promise<any> {
 /**
  * 获取系统健康状态
  */
-export function getSystemHealth(): Promise<any> {
+export function getSystemHealth(): Promise<SystemHealthResponse> {
   return request({
     url: "/admin/dashboard/health",
     method: "get",

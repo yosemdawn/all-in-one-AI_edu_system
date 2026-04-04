@@ -1,10 +1,18 @@
+import '../config/preload-env';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AiModel, AiModelSchema } from '../admin/schemas/ai-model.schema';
 import { AuthModule } from '../auth/auth.module';
 import { AppService } from '../app.service';
-import { Assignment, AssignmentSchema } from '../assignments/schemas/assignment.schema';
-import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
+import {
+  Assignment,
+  AssignmentSchema,
+} from '../assignments/schemas/assignment.schema';
+import {
+  ClassMembership,
+  ClassMembershipSchema,
+} from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AiReviewConfigService } from './ai-review-config.service';
@@ -40,6 +48,7 @@ const queueProviders = redisUrl
       { name: ClassEntity.name, schema: ClassSchema },
       { name: ClassMembership.name, schema: ClassMembershipSchema },
       { name: User.name, schema: UserSchema },
+      { name: AiModel.name, schema: AiModelSchema },
     ]),
   ],
   providers: [

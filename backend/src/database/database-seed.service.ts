@@ -2,8 +2,14 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import { Connection, Model } from 'mongoose';
-import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 
@@ -30,13 +36,22 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
 
   private async seedIfNeeded() {
     const isTestEnv = process.env.NODE_ENV === 'test';
+    const isProductionEnv = process.env.NODE_ENV === 'production';
+    const demoSeedEnabled = process.env.ENABLE_DEMO_SEED === 'true';
+
     if (isTestEnv) {
       await this.connection.dropDatabase();
-    } else {
-      const existingUsers = await this.userModel.countDocuments();
-      if (existingUsers > 0) {
-        return;
-      }
+    } else if (isProductionEnv && !demoSeedEnabled) {
+      this.logger.log('Skipping demo seed in production environment');
+      return;
+    }
+
+    const existingUsers = await this.userModel.countDocuments();
+    if (!isTestEnv && existingUsers > 0) {
+      this.logger.log(
+        'Skipping demo seed because the target database already contains users',
+      );
+      return;
     }
 
     const passwordHash = await bcrypt.hash('123456', 10);

@@ -1,23 +1,14 @@
 <template>
-  <div style="height: 100%">
-    <!-- 批改结果标签页 -->
-    <el-card v-if="showReviewTabs" class="shadow-sm review-card">
-      <!-- <template #header>
-        <h2 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <el-icon><Document /></el-icon>
-          批改结果
-        </h2>
-      </template> -->
-
+  <div class="review-results">
+    <el-card v-if="showReviewTabs" class="review-card">
       <el-tabs v-model="activeTab" tab-position="left" class="review-tabs">
-        <!-- AI批改结果标签页 -->
-        <el-tab-pane name="ai" class="tab-content" :disabled="!aiReview">
+        <el-tab-pane name="ai" :disabled="!showAiPane">
           <template #label>
             <div class="tab-label">
               <el-icon><Monitor /></el-icon>
               <span>AI批改</span>
               <el-tag
-                v-if="aiReview && aiReview.score"
+                v-if="aiReview && typeof aiReview.score === 'number'"
                 type="primary"
                 size="small"
                 class="ml-2"
@@ -25,96 +16,95 @@
                 {{ aiReview.score }}分
               </el-tag>
               <el-tag
-                v-else-if="!aiReview"
+                v-else-if="showAiReviewError"
+                type="danger"
+                size="small"
+                class="ml-2"
+                effect="plain"
+              >
+                失败
+              </el-tag>
+              <el-tag
+                v-else-if="showAiReviewSkipped"
+                type="warning"
+                size="small"
+                class="ml-2"
+                effect="plain"
+              >
+                已跳过
+              </el-tag>
+              <el-tag
+                v-else-if="showAiReviewProcessing"
                 type="info"
                 size="small"
                 class="ml-2"
                 effect="plain"
               >
-                评价中
+                批改中
               </el-tag>
             </div>
           </template>
 
-          <!-- 🔥 AI评价错误状态 -->
-          <div v-if="aiReview?.aiReviewMetadata?.error" class="review-error">
+          <div v-if="showAiReviewError" class="review-pane">
             <el-alert
-              title="AI评价失败"
-              :description="aiReview.aiReviewMetadata.error"
+              title="AI批改失败"
+              :description="aiErrorMessage"
               type="error"
               show-icon
               :closable="false"
-            >
-              <template #default>
-                <div class="error-details">
-                  <p class="mb-2">{{ aiReview.aiReviewMetadata.error }}</p>
-                  <p
-                    class="text-sm text-gray-500"
-                    v-if="aiReview.aiReviewMetadata.errorTime"
-                  >
-                    失败时间：{{
-                      formatDate(aiReview.aiReviewMetadata.errorTime)
-                    }}
-                  </p>
-                  <p
-                    class="text-sm text-gray-500"
-                    v-if="aiReview.aiReviewMetadata.modelUsed"
-                  >
-                    使用模型：{{ aiReview.aiReviewMetadata.modelUsed }}
-                  </p>
-                </div>
-              </template>
-            </el-alert>
+            />
+            <div v-if="aiErrorTime || aiModelUsed" class="meta-block">
+              <div v-if="aiErrorTime">失败时间：{{ formatDate(aiErrorTime) }}</div>
+              <div v-if="aiModelUsed">使用模型：{{ aiModelUsed }}</div>
+            </div>
           </div>
 
-          <!-- AI评价成功内容 -->
-          <div v-else-if="aiReview && aiReview.content" class="review-content">
-            <div class="review-meta mb-4">
-              <div class="text-sm text-gray-500">
+          <div v-else-if="showAiReviewSkipped" class="review-pane">
+            <el-alert
+              title="AI批改未执行"
+              :description="aiSkippedMessage"
+              type="warning"
+              show-icon
+              :closable="false"
+            />
+          </div>
+
+          <div
+            v-else-if="aiReview && (aiReview.content || typeof aiReview.score === 'number')"
+            class="review-pane"
+          >
+            <div class="meta-block">
+              <div v-if="aiReview.reviewedAt">
                 批改时间：{{ formatDate(aiReview.reviewedAt) }}
               </div>
+              <div v-if="aiModelUsed">使用模型：{{ aiModelUsed }}</div>
             </div>
-            <div class="review-content-scroll">
-              <div
-                class="prose max-w-none whitespace-pre-wrap"
-                v-html="formatReviewContent(aiReview.content)"
-              ></div>
-            </div>
+            <div
+              class="review-content"
+              v-html="formatReviewContent(aiReview.content || '')"
+            />
           </div>
 
-          <!-- AI评价进行中 -->
-          <div v-else class="no-review-content">
-            <div class="ai-empty-state">
-              <div class="ai-loading-container large">
-                <img
-                  src="@/assets/image/ai_loading.gif"
-                  alt="AI正在批改"
-                  class="ai-loading-gif large"
-                />
-              </div>
-              <div class="empty-description">
-                <h4 class="text-gray-700 mb-2 text-lg">🤖 AI智能评价中</h4>
-                <p class="text-gray-500 mb-1">人工智能正在仔细分析您的作业</p>
-                <p class="text-gray-400 text-sm">
-                  评价完成后会自动显示结果，请耐心等待
-                </p>
-              </div>
-            </div>
+          <div v-else class="pending-pane">
+            <img
+              src="@/assets/image/ai_loading.gif"
+              alt="AI批改中"
+              class="loading-image"
+            />
+            <h4>AI 正在批改中</h4>
+            <p>
+              {{ pollingHint }}
+            </p>
           </div>
         </el-tab-pane>
 
-        <!-- 教师批改结果标签页 -->
-        <el-tab-pane
-          name="teacher"
-          class="tab-content"
-          :disabled="!teacherReview"
-        >
+        <el-tab-pane name="teacher" :disabled="!teacherReview">
           <template #label>
             <div class="tab-label">
               <el-icon><User /></el-icon>
               <span>教师批改</span>
               <el-tag
-                v-if="teacherReview && teacherReview.score"
+                v-if="teacherReview && typeof teacherReview.score === 'number'"
                 type="success"
                 size="small"
                 class="ml-2"
@@ -122,7 +112,7 @@
                 {{ teacherReview.score }}分
               </el-tag>
               <el-tag
-                v-else-if="!teacherReview"
+                v-else
                 type="warning"
                 size="small"
                 class="ml-2"
@@ -133,60 +123,45 @@
             </div>
           </template>
 
-          <div v-if="teacherReview" class="review-content">
-            <div class="review-meta mb-4">
-              <div class="text-sm text-gray-500">
-                批改时间：{{ formatDate(teacherReview.reviewedAt) }}
-              </div>
+          <div v-if="teacherReview" class="review-pane">
+            <div class="meta-block">
+              批改时间：{{ formatDate(teacherReview.reviewedAt) }}
             </div>
-            <div class="review-content-scroll">
-              <div
-                class="prose max-w-none whitespace-pre-wrap"
-                v-html="formatReviewContent(teacherReview.content)"
-              ></div>
-            </div>
+            <div
+              class="review-content"
+              v-html="formatReviewContent(teacherReview.content || '')"
+            />
           </div>
-          <div v-else class="no-review-content">
-            <el-empty description="等待教师批改" :image-size="80">
-              <template #description>
-                <div class="empty-description">
-                  <p class="text-gray-500 mb-2">教师还没有批改这份作业</p>
-                  <p class="text-gray-400 text-sm">
-                    请耐心等待老师的评价和打分
-                  </p>
-                </div>
-              </template>
-            </el-empty>
+
+          <div v-else class="pending-pane">
+            <el-empty description="等待教师批改" :image-size="80" />
           </div>
         </el-tab-pane>
       </el-tabs>
     </el-card>
 
-    <!-- 提示信息 - 只在不显示标签页时显示 -->
-    <template v-if="!showReviewTabs">
-      <!-- 教师尚未打分提示 -->
-      <el-card v-if="showTeacherPendingTip" class="shadow-sm border-orange-200">
-        <div class="flex items-center gap-3 text-orange-600">
+    <template v-else>
+      <el-card
+        v-if="showTeacherPendingTip"
+        class="tip-card border-orange-200"
+      >
+        <div class="tip-row warning">
           <el-icon><Clock /></el-icon>
-          <span class="text-sm">老师尚未打分，请耐心等待...</span>
+          <span>教师尚未评分，请耐心等待。</span>
         </div>
       </el-card>
 
-      <!-- 作业过期提示 -->
-      <el-card v-if="showOverdueTip" class="shadow-sm border-orange-200">
-        <div class="flex items-center gap-3 text-orange-600">
+      <el-card v-else-if="showOverdueTip" class="tip-card border-orange-200">
+        <div class="tip-row warning">
           <el-icon><Clock /></el-icon>
-          <span class="text-sm"
-            >作业已过期，不支持AI智能评价。请等待老师人工批改。</span
-          >
+          <span>作业已过期，不再进行 AI 批改，请等待教师人工批改。</span>
         </div>
       </el-card>
 
-      <!-- 无评价结果提示 -->
-      <el-card v-if="showNoReviewTip" class="shadow-sm border-gray-200">
-        <div class="flex items-center gap-3 text-gray-500">
+      <el-card v-else-if="showNoReviewTip" class="tip-card border-gray-200">
+        <div class="tip-row neutral">
           <el-icon><InfoFilled /></el-icon>
-          <span class="text-sm">作业尚未批改，请等待AI或老师评价</span>
+          <span>作业尚未批改，请等待 AI 或教师评阅。</span>
         </div>
       </el-card>
     </template>
@@ -196,16 +171,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import {
-  Monitor,
-  User,
-  Loading,
   Clock,
   InfoFilled,
-  Document,
+  Monitor,
+  User,
 } from "@element-plus/icons-vue";
 import type { AiReview, TeacherReview } from "../../../../api/submissions";
-import { useSubmissionUtils } from "../composables";
 import { checkAiSupport } from "../../../../config/ai-config";
+import { useSubmissionUtils } from "../composables";
 
 interface Props {
   aiReview?: AiReview | null;
@@ -217,63 +190,101 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
 const { formatDate } = useSubmissionUtils();
-
-// 当前激活的标签页 - 默认显示AI评价
 const activeTab = ref("ai");
 
-// 是否显示批改结果标签页
+const aiQueueStatus = computed(() => props.aiReview?.aiReviewMetadata?.queueStatus);
+const aiModelUsed = computed(() => props.aiReview?.aiReviewMetadata?.modelUsed);
+const aiErrorTime = computed(
+  () =>
+    props.aiReview?.aiReviewMetadata?.failedAt ||
+    props.aiReview?.aiReviewMetadata?.errorTime
+);
+const aiErrorMessage = computed(
+  () => props.aiReview?.aiReviewMetadata?.error || "AI 批改失败"
+);
+const aiSkippedMessage = computed(() => {
+  const skippedReason = props.aiReview?.aiReviewMetadata?.skippedReason;
+  if (skippedReason === "queue_disabled") {
+    return "AI 批改队列未启用，请联系管理员检查 Redis 配置。";
+  }
+  return "当前提交未进入 AI 批改队列，请稍后重试或联系管理员。";
+});
+
 const showReviewTabs = computed(() => {
-  // 如果作业已提交，就显示标签页（即使还没有批改结果）
   return (
-    props.submissionStatus &&
+    !!props.submissionStatus &&
     props.submissionStatus !== "draft" &&
     props.submissionStatus !== "not_submitted"
   );
 });
 
-// 监听评价数据变化，自动切换到合适的标签页
+const showAiPane = computed(() => {
+  return (
+    props.submissionStatus === "submitted" ||
+    props.submissionStatus === "ai_reviewed" ||
+    props.submissionStatus === "ai_review_failed" ||
+    !!props.aiReview
+  );
+});
+
+const showAiReviewError = computed(() => {
+  return (
+    aiQueueStatus.value === "failed" ||
+    !!props.aiReview?.aiReviewMetadata?.error
+  );
+});
+
+const showAiReviewSkipped = computed(() => aiQueueStatus.value === "skipped");
+
+const showAiReviewProcessing = computed(() => {
+  if (!showAiPane.value) return false;
+  if (showAiReviewError.value || showAiReviewSkipped.value) return false;
+  if (props.aiReview?.content || typeof props.aiReview?.score === "number") {
+    return false;
+  }
+  return (
+    props.submissionStatus === "submitted" ||
+    aiQueueStatus.value === "queued" ||
+    aiQueueStatus.value === "processing"
+  );
+});
+
+const pollingHint = computed(() => {
+  if (props.isPolling) {
+    return `系统正在刷新批改结果，当前第 ${props.pollingCount || 0} 次检查。`;
+  }
+  if (aiQueueStatus.value === "queued" || aiQueueStatus.value === "processing") {
+    return "AI 任务已入队，结果生成后会自动显示。";
+  }
+  return "结果生成后会自动显示，请稍候。";
+});
+
 watch(
   () => [props.aiReview, props.teacherReview],
   ([aiReview, teacherReview]) => {
-    // 默认优先显示AI评价，如果没有AI评价则显示教师评价
     if (aiReview) {
       activeTab.value = "ai";
-    } else if (teacherReview) {
-      activeTab.value = "teacher";
-    } else {
-      // 如果都没有，默认显示AI标签页
-      activeTab.value = "ai";
+      return;
     }
+    if (teacherReview) {
+      activeTab.value = "teacher";
+      return;
+    }
+    activeTab.value = "ai";
   },
   { immediate: true }
 );
 
-// 显示AI处理中提示（已删除导航条，保留逻辑用于其他判断）
-const showAiProcessingTip = computed(() => {
-  return false; // 不再显示顶部AI处理提示条
-});
-
-// 显示教师待评价提示
 const showTeacherPendingTip = computed(() => {
   return props.submissionStatus === "ai_reviewed" && !props.teacherReview;
 });
 
-// 显示无评价结果提示
-// 显示作业过期提示
 const showOverdueTip = computed(() => {
-  // 如果已经有AI评价或教师评价，不显示过期提示
   if (props.aiReview || props.teacherReview) {
     return false;
   }
 
-  // 如果已经在显示AI处理提示，不显示过期提示
-  if (showAiProcessingTip.value) {
-    return false;
-  }
-
-  // 检查作业是否过期
   if (props.assignment && props.submissionStatus === "submitted") {
     const aiSupport = checkAiSupport(props.assignment);
     return !aiSupport.supported && aiSupport.reason.includes("过期");
@@ -286,22 +297,19 @@ const showNoReviewTip = computed(() => {
   return (
     !props.aiReview &&
     !props.teacherReview &&
-    props.submissionStatus &&
-    !showAiProcessingTip.value &&
+    !!props.submissionStatus &&
     !showTeacherPendingTip.value &&
     !showOverdueTip.value
   );
 });
 
-// 格式化评价内容
 const formatReviewContent = (content: string) => {
   if (!content) return "";
 
-  // 将换行符转换为HTML换行
   return content
     .replace(/\n/g, "<br>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // 加粗
-    .replace(/\*(.*?)\*/g, "<em>$1</em>"); // 斜体
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>");
 };
 
 defineOptions({
@@ -310,295 +318,108 @@ defineOptions({
 </script>
 
 <style scoped>
-.prose {
-  max-width: none;
+.review-results {
+  height: 100%;
 }
 
-/* 组件根容器 */
-.review-card {
+.review-card,
+.tip-card {
   height: 100%;
-  overflow: hidden;
 }
 
 .review-card :deep(.el-card__body) {
   height: 100%;
   padding: 0;
-  overflow: hidden;
 }
 
-/* 标签页样式 - 实现左侧固定，右侧滚动 */
 .review-tabs {
   height: 100%;
-  display: flex;
 }
 
 .review-tabs :deep(.el-tabs__header) {
   margin: 0;
   width: 200px;
-  flex-shrink: 0;
-  height: 100%;
-  background: #f8fafc;
-  border-radius: 0;
   border-right: 1px solid #e5e7eb;
-}
-
-.review-tabs :deep(.el-tabs__nav-wrap) {
-  height: 100%;
-  background: transparent;
-  border-radius: 0;
-  padding: 16px 0;
-}
-
-.review-tabs :deep(.el-tabs__nav-scroll) {
-  height: 100%;
-  background: transparent;
-}
-
-.review-tabs :deep(.el-tabs__nav) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.review-tabs :deep(.el-tabs__item) {
-  padding: 12px 20px !important;
-  margin: 4px 8px;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-  border: none !important;
-  background: transparent;
-  color: #6b7280;
-  font-weight: 500;
-  height: auto;
-  line-height: 1.4;
-}
-
-.review-tabs :deep(.el-tabs__item.is-active) {
-  background: #3b82f6;
-  color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-.review-tabs :deep(.el-tabs__item:hover:not(.is-active):not(.is-disabled)) {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-.review-tabs :deep(.el-tabs__item.is-disabled) {
-  background: #f3f4f6;
-  color: #9ca3af;
-  cursor: not-allowed;
-  opacity: 0.6;
+  background: #f8fafc;
 }
 
 .review-tabs :deep(.el-tabs__content) {
-  flex: 1;
   height: 100%;
-  overflow: hidden;
-  padding: 0;
-  background: #ffffff;
 }
 
-.review-tabs :deep(.el-tab-pane) {
-  height: 100%;
-  overflow: hidden;
+.review-pane {
+  padding: 24px;
+}
+
+.pending-pane {
+  min-height: 360px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  color: #6b7280;
 }
 
-.review-tabs :deep(.el-tabs__active-bar) {
-  display: none;
+.loading-image {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
 }
 
-/* 标签页标签样式 */
 .tab-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  white-space: nowrap;
   min-width: 120px;
-  width: 100%;
 }
 
-.tab-label .el-icon {
-  font-size: 16px;
-}
-
-.tab-label .el-tag {
-  font-weight: 600;
-  font-family: "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", monospace;
-}
-
-/* 标签页内容样式 */
-.tab-content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.meta-block {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #6b7280;
+  line-height: 1.8;
 }
 
 .review-content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-  overflow: hidden;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: #1f2937;
 }
 
-.review-meta {
-  flex-shrink: 0;
-  padding: 12px 16px;
-  background: #f8fafc;
-  border-radius: 6px;
-  border-left: 3px solid #3b82f6;
-  margin-bottom: 16px;
-}
-
-.review-content-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 8px;
-  margin-right: -8px;
-}
-
-/* 自定义滚动条样式 */
-.review-content-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.review-content-scroll::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.review-content-scroll::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.review-content-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
-
-.no-review-content {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #9ca3af;
-  padding: 24px;
-}
-
-.empty-description {
-  text-align: center;
-  line-height: 1.6;
-}
-
-.empty-description p {
-  margin: 0;
-}
-
-/* AI Loading样式 */
-.ai-loading-container.large {
-  width: 80px;
-  height: 80px;
-  border-radius: 16px;
-  margin-bottom: 16px;
+.tip-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(59, 130, 246, 0.1);
+  gap: 12px;
 }
 
-.ai-loading-gif.large {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
-  object-fit: cover;
+.tip-row.warning {
+  color: #d97706;
 }
 
-.ai-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 40px 20px;
-  height: 100%;
+.tip-row.neutral {
+  color: #6b7280;
 }
 
-.empty-description h4 {
-  margin: 0;
-  font-weight: 600;
-}
-
-.empty-description p {
-  margin: 4px 0;
-  line-height: 1.5;
-}
-
-/* 响应式设计 */
 @media (max-width: 768px) {
   .review-tabs :deep(.el-tabs__header) {
-    width: 140px;
-  }
-
-  .review-tabs :deep(.el-tabs__nav-wrap) {
-    padding: 8px 0;
-  }
-
-  .review-tabs :deep(.el-tabs__item) {
-    padding: 8px 12px !important;
-    margin: 2px 4px;
-    font-size: 13px;
-  }
-
-  .review-content {
-    padding: 16px;
-  }
-
-  .tab-label {
-    min-width: 100px;
-    font-size: 13px;
-  }
-
-  .tab-label .el-icon {
-    font-size: 14px;
+    width: 148px;
   }
 }
 
 @media (max-width: 480px) {
   .review-tabs {
-    flex-direction: column;
-    height: auto;
+    display: block;
   }
 
   .review-tabs :deep(.el-tabs__header) {
     width: 100%;
-    height: auto;
     border-right: none;
     border-bottom: 1px solid #e5e7eb;
-  }
-
-  .review-tabs :deep(.el-tabs__nav-wrap) {
-    height: auto;
-    padding: 8px 16px;
-  }
-
-  .review-tabs :deep(.el-tabs__nav) {
-    height: auto;
-    flex-direction: row;
-    justify-content: space-around;
-  }
-
-  .review-tabs :deep(.el-tabs__content) {
-    height: 400px;
-  }
-
-  .tab-label {
-    min-width: auto;
-    justify-content: center;
   }
 }
 </style>

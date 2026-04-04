@@ -13,10 +13,19 @@ import { MenuListQueryDto } from './dto/menu-list-query.dto';
 import { RoleListQueryDto } from './dto/role-list-query.dto';
 import { Menu, MenuDocument } from './schemas/menu.schema';
 import { Role, RoleDocument } from './schemas/role.schema';
-import { UserRoleAssignment, UserRoleAssignmentDocument } from './schemas/user-role.schema';
+import {
+  UserRoleAssignment,
+  UserRoleAssignmentDocument,
+} from './schemas/user-role.schema';
 
 const PRIMARY_ROLE_CODES = new Set(['superadmin', 'teacher', 'student']);
-const ALLOWED_ROLE_SORT_FIELDS = new Set(['createdAt', 'updatedAt', 'name', 'code', 'status']);
+const ALLOWED_ROLE_SORT_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  'name',
+  'code',
+  'status',
+]);
 
 @Injectable()
 export class PermissionsService {
@@ -34,8 +43,13 @@ export class PermissionsService {
 
   async getResources(currentUser: AuthenticatedUser, requestedUserId: string) {
     const targetUser = await this.getTargetUser(currentUser, requestedUserId);
-    const roles = await this.getAssignedRoles(targetUser._id.toString(), targetUser.role);
-    const permissions = [...new Set(roles.flatMap((role) => role.permissions || []))];
+    const roles = await this.getAssignedRoles(
+      targetUser._id.toString(),
+      targetUser.role,
+    );
+    const permissions = [
+      ...new Set(roles.flatMap((role) => role.permissions || [])),
+    ];
     const menus = await this.getMenusForRoles(roles);
 
     return this.appService.envelope(
@@ -53,7 +67,10 @@ export class PermissionsService {
     return this.appService.envelope(resources.data.roles, 'success');
   }
 
-  async getUserPermissions(currentUser: AuthenticatedUser, requestedUserId: string) {
+  async getUserPermissions(
+    currentUser: AuthenticatedUser,
+    requestedUserId: string,
+  ) {
     const resources = await this.getResources(currentUser, requestedUserId);
     return this.appService.envelope(resources.data.permissions, 'success');
   }
@@ -63,7 +80,11 @@ export class PermissionsService {
     return this.appService.envelope(resources.data.menus, 'success');
   }
 
-  async assignRolesToUser(userId: string, roleIds: string[], assignedBy: AuthenticatedUser) {
+  async assignRolesToUser(
+    userId: string,
+    roleIds: string[],
+    assignedBy: AuthenticatedUser,
+  ) {
     const targetUser = await this.userModel.findById(userId);
     if (!targetUser) {
       throw new NotFoundException('User not found');
@@ -74,7 +95,9 @@ export class PermissionsService {
       throw new BadRequestException('At least one role must be assigned');
     }
 
-    const roles = await this.roleModel.find({ _id: { $in: normalizedRoleIds } });
+    const roles = await this.roleModel.find({
+      _id: { $in: normalizedRoleIds },
+    });
     if (roles.length !== normalizedRoleIds.length) {
       throw new BadRequestException('One or more roles do not exist');
     }
@@ -93,7 +116,10 @@ export class PermissionsService {
 
     const primaryRole = roles.find((role) => PRIMARY_ROLE_CODES.has(role.code));
     if (primaryRole) {
-      targetUser.role = primaryRole.code as 'superadmin' | 'teacher' | 'student';
+      targetUser.role = primaryRole.code as
+        | 'superadmin'
+        | 'teacher'
+        | 'student';
       await targetUser.save();
     }
 
@@ -103,7 +129,8 @@ export class PermissionsService {
   async getRoleList(query: RoleListQueryDto) {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
-    if (query?.isSystem !== undefined) filter.isSystem = String(query.isSystem) === 'true';
+    if (query?.isSystem !== undefined)
+      filter.isSystem = String(query.isSystem) === 'true';
     if (query?.search) {
       const keyword = String(query.search).trim();
       filter.$or = [
@@ -118,10 +145,11 @@ export class PermissionsService {
 
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 10);
-    const sortField = ALLOWED_ROLE_SORT_FIELDS.has(query?.sort || '')
-      ? query!.sort!
+    const normalizedSortField = query?.sortField || query?.sort;
+    const sortField = ALLOWED_ROLE_SORT_FIELDS.has(normalizedSortField || '')
+      ? normalizedSortField!
       : 'createdAt';
-    const sortOrder = query?.order === 'asc' ? 1 : -1;
+    const sortOrder = (query?.sortOrder || query?.order) === 'asc' ? 1 : -1;
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
@@ -225,7 +253,9 @@ export class PermissionsService {
     if (body.status !== undefined) role.status = body.status;
     if (body.remark !== undefined) role.remark = body.remark;
     if (body.permissions !== undefined) {
-      role.permissions = Array.isArray(body.permissions) ? body.permissions : [];
+      role.permissions = Array.isArray(body.permissions)
+        ? body.permissions
+        : [];
     }
     if (body.menuIds !== undefined) {
       role.menuIds = await this.ensureMenusExist(body.menuIds);
@@ -266,11 +296,30 @@ export class PermissionsService {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
     if (query?.type) filter.type = query.type;
-    if (query?.hidden !== undefined) filter.hidden = String(query.hidden) === 'true';
-    if (query?.name) filter.name = { $regex: String(query.name), $options: 'i' };
-    if (query?.path) filter.path = { $regex: String(query.path), $options: 'i' };
+    if (query?.hidden !== undefined)
+      filter.hidden = String(query.hidden) === 'true';
+    if (query?.name)
+      filter.name = { $regex: String(query.name), $options: 'i' };
+    if (query?.path)
+      filter.path = { $regex: String(query.path), $options: 'i' };
 
-    const menus = await this.menuModel.find(filter).sort({ sort: 1, createdAt: 1 }).lean();
+    const normalizedSortField = query?.sortField || query?.sort;
+    const sortField = [
+      'sort',
+      'createdAt',
+      'updatedAt',
+      'name',
+      'path',
+      'code',
+    ].includes(normalizedSortField || '')
+      ? normalizedSortField!
+      : 'sort';
+    const sortOrder = (query?.sortOrder || query?.order) === 'desc' ? -1 : 1;
+
+    const menus = await this.menuModel
+      .find(filter)
+      .sort({ [sortField]: sortOrder, createdAt: 1 })
+      .lean();
     const payload = menus.map((menu) => this.toMenuPayload(menu));
     return this.appService.envelope(
       query?.tree ? this.buildMenuTree(payload) : payload,
@@ -391,8 +440,12 @@ export class PermissionsService {
     return this.appService.envelope({ success: true, id }, 'success');
   }
 
-  private async getTargetUser(currentUser: AuthenticatedUser, requestedUserId: string) {
-    const targetUserId = requestedUserId === 'current' ? currentUser.id : requestedUserId;
+  private async getTargetUser(
+    currentUser: AuthenticatedUser,
+    requestedUserId: string,
+  ) {
+    const targetUserId =
+      requestedUserId === 'current' ? currentUser.id : requestedUserId;
     if (
       requestedUserId !== 'current' &&
       currentUser.id !== targetUserId &&
@@ -426,11 +479,15 @@ export class PermissionsService {
   }
 
   private async findFallbackRoleIds(fallbackRoleCode: string) {
-    const fallbackRole = await this.roleModel.findOne({ code: fallbackRoleCode }).lean();
+    const fallbackRole = await this.roleModel
+      .findOne({ code: fallbackRoleCode })
+      .lean();
     return fallbackRole ? [fallbackRole._id] : [];
   }
 
-  private async getMenusForRoles(roles: Array<RoleDocument | (Role & { _id: string })>) {
+  private async getMenusForRoles(
+    roles: Array<RoleDocument | (Role & { _id: string })>,
+  ) {
     const menuIds = [...new Set(roles.flatMap((role) => role.menuIds || []))];
     if (!menuIds.length) {
       return [];

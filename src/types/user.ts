@@ -21,6 +21,8 @@ export interface User {
   avatar?: string;
   meta?: Record<string, any>;
   permissions?: string[];
+  classId?: string;
+  className?: string;
   lastLogin?: Date;
   createdAt?: Date;
   updatedAt?: Date;

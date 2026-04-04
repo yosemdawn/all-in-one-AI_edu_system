@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { SubmissionDocument } from './schemas/submission.schema';
 import { AiReviewConfigService } from './ai-review-config.service';
+import { SubmissionDocument } from './schemas/submission.schema';
 
 @Injectable()
 export class DoubaoAiReviewService {
@@ -31,7 +31,7 @@ export class DoubaoAiReviewService {
           {
             role: 'system',
             content:
-              '你是作业批改助手。请返回 JSON，格式为 {"score": number, "review": string, "highlights": string[] }。score 取 0-100。',
+              '你是作业批改助手。请返回 JSON，格式为 {"score": number, "review": string, "highlights": string[]}。score 只能是 0-100。',
           },
           {
             role: 'user',
@@ -79,14 +79,17 @@ export class DoubaoAiReviewService {
     };
   }
 
-  private buildPrompt(submission: SubmissionDocument, assignment: AssignmentDocument) {
+  private buildPrompt(
+    submission: SubmissionDocument,
+    assignment: AssignmentDocument,
+  ) {
     return [
       `作业标题：${assignment.title}`,
       `作业描述：${assignment.description}`,
       `评分说明：${assignment.gradingNotes || '无'}`,
       `题目材料：${JSON.stringify(assignment.questionMaterial || {}, null, 2)}`,
       `参考答案：${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
-      `AI规则：${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
+      `AI 规则：${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
       `学生答案：${submission.content}`,
     ].join('\n\n');
   }

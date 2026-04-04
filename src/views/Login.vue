@@ -204,7 +204,7 @@ import { useStore } from "vuex";
 import { ElMessage } from "element-plus";
 import { QuestionFilled } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
-import { getClassList } from "@/api/classes";
+import { getPublicClassList } from "@/api/classes";
 
 // 路由实例
 const router = useRouter();
@@ -221,7 +221,7 @@ const isRegister = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const classLoading = ref(false);
-const availableClasses = ref<any[]>([]);
+const availableClasses = ref<Array<{ _id: string; name: string; teacherName?: string }>>([]);
 
 // 表单数据
 const form = reactive({
@@ -292,7 +292,11 @@ const loadAvailableClasses = async () => {
 
   classLoading.value = true;
   try {
-    const response = await getClassList({ page: 1, limit: 100, status: "active" });
+    const response = await getPublicClassList({
+      page: 1,
+      limit: 100,
+      status: "active",
+    });
     availableClasses.value = response.items || [];
   } catch (err) {
     availableClasses.value = [];

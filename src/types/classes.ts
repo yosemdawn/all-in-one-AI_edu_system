@@ -22,6 +22,15 @@ export interface Class {
   updatedAt: string;
 }
 
+export interface PublicClass {
+  _id: string;
+  name: string;
+  teacherName?: string;
+  status: ClassStatus;
+  studentCount: number;
+  maxStudents: number;
+}
+
 // 班级学生信息
 export interface ClassStudent {
   _id: string;
@@ -95,6 +104,13 @@ export interface UpdateStudentStatusParams {
 // 班级列表响应
 export interface ClassListResponse {
   items: Class[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PublicClassListResponse {
+  items: PublicClass[];
   total: number;
   page: number;
   limit: number;
