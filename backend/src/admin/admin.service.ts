@@ -1,10 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import Redis from 'ioredis';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
-import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
-import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import {
+  Submission,
+  SubmissionDocument,
+} from '../submissions/schemas/submission.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AiModelsService } from './ai-models.service';
 
@@ -34,9 +41,15 @@ export class AdminService {
 
     const [usersByRole, classesByStatus, submissionsByStatus, aiModels] =
       await Promise.all([
-        this.userModel.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
-        this.classModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-        this.submissionModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+        this.userModel.aggregate([
+          { $group: { _id: '$role', count: { $sum: 1 } } },
+        ]),
+        this.classModel.aggregate([
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]),
+        this.submissionModel.aggregate([
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ]),
         this.aiModelsService.getSummary(),
       ]);
 
@@ -48,7 +61,10 @@ export class AdminService {
         totalSubmissions,
         aiModelCount: aiModels.totalModels,
         userRoleDistribution: this.toRoleDistribution(usersByRole, totalUsers),
-        classStatusDistribution: this.toStatusDistribution(classesByStatus, totalClasses),
+        classStatusDistribution: this.toStatusDistribution(
+          classesByStatus,
+          totalClasses,
+        ),
         submissionStatusDistribution: this.toStatusDistribution(
           submissionsByStatus,
           totalSubmissions,
@@ -81,15 +97,26 @@ export class AdminService {
     );
   }
 
-  getHealth() {
-    const dbReadyState = this.userModel.db.readyState;
-    const db = dbReadyState === 1 ? 'ok' : 'error';
+  async getHealth() {
+    const checkedAt = new Date().toISOString();
+    const dbStatus = await this.checkDatabase();
+    const redisStatus = await this.checkRedis();
+    const aiConfigured = !!process.env.DOUBAO_API_KEY;
 
     return this.appService.envelope(
       {
-        db,
-        redis: process.env.REDIS_URL ? 'configured' : 'disabled',
-        ai: process.env.DOUBAO_API_KEY ? 'configured' : 'not_configured',
+        db: dbStatus.status,
+        redis: redisStatus.status,
+        ai: aiConfigured ? 'configured' : 'not_configured',
+        checkedAt,
+        details: {
+          db: dbStatus,
+          redis: redisStatus,
+          ai: {
+            provider: 'doubao',
+            configured: aiConfigured,
+          },
+        },
       },
       'success',
     );
@@ -99,7 +126,10 @@ export class AdminService {
     return this.aiModelsService.getDashboardStats();
   }
 
-  private toRoleDistribution(items: Array<{ _id: string; count: number }>, total: number) {
+  private toRoleDistribution(
+    items: Array<{ _id: string; count: number }>,
+    total: number,
+  ) {
     const order = ['superadmin', 'teacher', 'student'];
     return order.map((role) => {
       const found = items.find((item) => item._id === role);
@@ -127,5 +157,67 @@ export class AdminService {
     if (role === 'superadmin') return 'SUPER_ADMIN';
     if (role === 'teacher') return 'TEACHER';
     return 'STUDENT';
+  }
+
+  private async checkDatabase() {
+    const dbReadyState = this.userModel.db.readyState;
+    const detail = {
+      status: dbReadyState === 1 ? 'ok' : 'error',
+      readyState: dbReadyState,
+      databaseName: this.userModel.db.name,
+    };
+
+    if (dbReadyState !== 1 || !this.userModel.db.db) {
+      return detail;
+    }
+
+    try {
+      await this.userModel.db.db.admin().ping();
+      return detail;
+    } catch (error: unknown) {
+      return {
+        ...detail,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'database ping failed',
+      };
+    }
+  }
+
+  private async checkRedis() {
+    if (!process.env.REDIS_URL) {
+      return {
+        status: 'disabled',
+        configured: false,
+      };
+    }
+
+    const client = new Redis(process.env.REDIS_URL, {
+      lazyConnect: true,
+      connectTimeout: 1500,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+
+    try {
+      const pingResponse = await Promise.race([
+        client.ping(),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('redis ping timeout')), 2000),
+        ),
+      ]);
+
+      return {
+        status: pingResponse === 'PONG' ? 'ok' : 'error',
+        configured: true,
+      };
+    } catch (error: unknown) {
+      return {
+        status: 'error',
+        configured: true,
+        error: error instanceof Error ? error.message : 'redis ping failed',
+      };
+    } finally {
+      client.disconnect();
+    }
   }
 }

@@ -8,9 +8,15 @@ import { Model } from 'mongoose';
 import { AuthContextService } from '../auth/auth-context.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { PasswordService } from '../auth/auth.helpers';
-import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
-import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import {
+  Submission,
+  SubmissionDocument,
+} from '../submissions/schemas/submission.schema';
 import { ImportUserRowDto } from './dto/import-user-row.dto';
 import { UserListQueryDto } from './dto/user-list-query.dto';
 import { User, UserDocument } from './schemas/user.schema';
@@ -51,24 +57,26 @@ export class UsersService {
     if (query?.status) {
       filter.status = query.status;
     }
-    if (query?.keyword) {
-      const keyword = String(query.keyword).trim();
+    const keyword = query?.keyword || query?.search;
+    if (keyword) {
+      const normalizedKeyword = String(keyword).trim();
       filter.$or = [
-        { username: { $regex: keyword, $options: 'i' } },
-        { email: { $regex: keyword, $options: 'i' } },
-        { name: { $regex: keyword, $options: 'i' } },
-        { studentId: { $regex: keyword, $options: 'i' } },
-        { phone: { $regex: keyword, $options: 'i' } },
+        { username: { $regex: normalizedKeyword, $options: 'i' } },
+        { email: { $regex: normalizedKeyword, $options: 'i' } },
+        { name: { $regex: normalizedKeyword, $options: 'i' } },
+        { studentId: { $regex: normalizedKeyword, $options: 'i' } },
+        { phone: { $regex: normalizedKeyword, $options: 'i' } },
       ];
     }
 
     const page = Number(query?.page || 1);
     const limit = Number(query?.limit || 10);
     const skip = (page - 1) * limit;
-    const sortField = ALLOWED_USER_SORT_FIELDS.has(query?.sortField || '')
-      ? query!.sortField!
+    const normalizedSortField = query?.sortField || query?.sort;
+    const sortField = ALLOWED_USER_SORT_FIELDS.has(normalizedSortField || '')
+      ? normalizedSortField!
       : 'createdAt';
-    const sortOrder = query?.sortOrder === 'asc' ? 1 : -1;
+    const sortOrder = (query?.sortOrder || query?.order) === 'asc' ? 1 : -1;
 
     const [items, total] = await Promise.all([
       this.userModel
@@ -144,7 +152,9 @@ export class UsersService {
     }
 
     if (!newPassword || String(newPassword).length < 6) {
-      throw new BadRequestException('New password must be at least 6 characters');
+      throw new BadRequestException(
+        'New password must be at least 6 characters',
+      );
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -159,7 +169,9 @@ export class UsersService {
 
   async createUser(body: any) {
     if (!body.username || !body.email || !body.password || !body.name) {
-      throw new BadRequestException('username, email, name, and password are required');
+      throw new BadRequestException(
+        'username, email, name, and password are required',
+      );
     }
 
     const normalizedRole = (body.role || 'student') as AllowedRole;
@@ -178,7 +190,8 @@ export class UsersService {
       status: body.status || 'active',
       studentId:
         normalizedRole === 'student'
-          ? body.studentId || `${Math.floor(10000000 + Math.random() * 90000000)}`
+          ? body.studentId ||
+            `${Math.floor(10000000 + Math.random() * 90000000)}`
           : undefined,
       phone: body.phone,
       avatar: body.avatar,
@@ -202,7 +215,9 @@ export class UsersService {
         username: body.username,
         email: body.email,
         studentId:
-          nextRole === 'student' ? body.studentId ?? user.studentId : undefined,
+          nextRole === 'student'
+            ? (body.studentId ?? user.studentId)
+            : undefined,
       },
       id,
     );
@@ -213,7 +228,7 @@ export class UsersService {
     if (body.role !== undefined) user.role = nextRole;
     if (body.status !== undefined) user.status = body.status;
     user.studentId =
-      nextRole === 'student' ? body.studentId ?? user.studentId : undefined;
+      nextRole === 'student' ? (body.studentId ?? user.studentId) : undefined;
     if (body.phone !== undefined) user.phone = body.phone;
     if (body.avatar !== undefined) user.avatar = body.avatar;
     if (body.meta !== undefined) user.meta = body.meta;
@@ -230,7 +245,9 @@ export class UsersService {
 
     const newPassword = body?.newPassword;
     if (!newPassword || String(newPassword).length < 6) {
-      throw new BadRequestException('New password must be at least 6 characters');
+      throw new BadRequestException(
+        'New password must be at least 6 characters',
+      );
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -251,7 +268,9 @@ export class UsersService {
 
     const newPassword = body?.newPassword || '123456';
     if (String(newPassword).length < 6) {
-      throw new BadRequestException('New password must be at least 6 characters');
+      throw new BadRequestException(
+        'New password must be at least 6 characters',
+      );
     }
 
     user.passwordHash = await this.passwordService.hash(newPassword);
@@ -273,7 +292,9 @@ export class UsersService {
       throw new BadRequestException('Cannot delete superadmin');
     }
 
-    const memberships = await this.membershipModel.find({ studentId: user.id }).lean();
+    const memberships = await this.membershipModel
+      .find({ studentId: user.id })
+      .lean();
 
     if (memberships.length > 0) {
       const classIds = memberships.map((item) => item.classId);
@@ -302,7 +323,8 @@ export class UsersService {
           item.name?.trim() ||
           `user${Date.now()}${index}`;
         const email =
-          item.email?.trim() || `${username.toLowerCase()}_${Date.now()}@import.local`;
+          item.email?.trim() ||
+          `${username.toLowerCase()}_${Date.now()}@import.local`;
 
         await this.createUser({
           username,

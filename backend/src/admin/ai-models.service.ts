@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
-import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
+import {
+  Submission,
+  SubmissionDocument,
+} from '../submissions/schemas/submission.schema';
 import { AiModel, AiModelDocument } from './schemas/ai-model.schema';
 
 @Injectable()
@@ -67,8 +77,10 @@ export class AiModelsService implements OnApplicationBootstrap {
     if (body.accessKey !== undefined) model.accessKey = body.accessKey;
     if (body.secretKey !== undefined) model.secretKey = body.secretKey;
     if (body.status !== undefined) model.status = body.status;
-    if (body.lastBalance !== undefined) model.lastBalance = Number(body.lastBalance);
-    if (body.balanceCurrency !== undefined) model.balanceCurrency = body.balanceCurrency;
+    if (body.lastBalance !== undefined)
+      model.lastBalance = Number(body.lastBalance);
+    if (body.balanceCurrency !== undefined)
+      model.balanceCurrency = body.balanceCurrency;
     if (body.isDefault) {
       await this.aiModelModel.updateMany({}, { $set: { isDefault: false } });
       model.isDefault = true;
@@ -88,7 +100,10 @@ export class AiModelsService implements OnApplicationBootstrap {
     model.isDefault = true;
     await model.save();
 
-    return this.appService.envelope({ success: true, message: 'default updated' }, 'success');
+    return this.appService.envelope(
+      { success: true, message: 'default updated' },
+      'success',
+    );
   }
 
   async getModelBalance(code: string) {
@@ -103,7 +118,9 @@ export class AiModelsService implements OnApplicationBootstrap {
         currency: model.balanceCurrency,
         lastUpdated: model.lastBalanceCheck || model.updatedAt || new Date(),
         status: 'success',
-        message: model.apiKey || model.accessKey ? 'configured' : 'missing credentials',
+        message: this.hasCredentials(model)
+          ? 'configured'
+          : 'missing credentials',
       },
       'success',
     );
@@ -115,13 +132,15 @@ export class AiModelsService implements OnApplicationBootstrap {
       throw new NotFoundException('AI model not found');
     }
 
-    const configured = !!(model.apiKey || model.accessKey || process.env.DOUBAO_API_KEY);
+    const configured = this.hasCredentials(model);
 
     return this.appService.envelope(
       {
         success: configured,
         responseTime: configured ? 120 : 0,
-        message: configured ? `${code} connection ok` : `${code} credentials are missing`,
+        message: configured
+          ? `${code} connection ok`
+          : `${code} credentials are missing`,
       },
       'success',
     );
@@ -135,23 +154,37 @@ export class AiModelsService implements OnApplicationBootstrap {
 
     const reviewedSubmissions = await this.submissionModel
       .find({
-        $or: [{ aiReviewedAt: { $ne: null } }, { aiReviewMetadata: { $ne: null } }],
+        $or: [
+          { aiReviewedAt: { $ne: null } },
+          { aiReviewMetadata: { $ne: null } },
+        ],
       })
       .sort({ updatedAt: -1 })
       .lean();
+    const matchedSubmissions = reviewedSubmissions.filter((submission) =>
+      this.matchesModel(submission, code),
+    );
 
     const relatedAssignments = await this.assignmentModel
-      .find({ _id: { $in: reviewedSubmissions.map((item) => item.assignmentId) } })
+      .find({
+        _id: { $in: matchedSubmissions.map((item) => item.assignmentId) },
+      })
       .lean();
     const assignmentTitleMap = new Map(
-      relatedAssignments.map((assignment) => [assignment._id.toString(), assignment.title]),
+      relatedAssignments.map((assignment) => [
+        assignment._id.toString(),
+        assignment.title,
+      ]),
     );
 
     const dailyUsageMap = new Map<string, number>();
     const monthlyUsageMap = new Map<string, number>();
 
-    reviewedSubmissions.forEach((submission) => {
-      const timestamp = submission.aiReviewedAt || submission.submittedAt || submission.updatedAt;
+    matchedSubmissions.forEach((submission) => {
+      const timestamp =
+        submission.aiReviewedAt ||
+        submission.submittedAt ||
+        submission.updatedAt;
       if (!timestamp) {
         return;
       }
@@ -171,11 +204,15 @@ export class AiModelsService implements OnApplicationBootstrap {
         monthlyUsage: [...monthlyUsageMap.entries()]
           .sort((left, right) => left[0].localeCompare(right[0]))
           .map(([month, count]) => ({ month, count })),
-        recentActivity: reviewedSubmissions.slice(0, 10).map((submission) => ({
+        recentActivity: matchedSubmissions.slice(0, 10).map((submission) => ({
           assignmentId: submission.assignmentId,
-          assignmentTitle: assignmentTitleMap.get(submission.assignmentId) || '',
-          usedAt: submission.aiReviewedAt || submission.submittedAt || submission.updatedAt,
-          tokenUsed: Number(submission.aiReviewMetadata?.tokenUsed || 0),
+          assignmentTitle:
+            assignmentTitleMap.get(submission.assignmentId) || '',
+          usedAt:
+            submission.aiReviewedAt ||
+            submission.submittedAt ||
+            submission.updatedAt,
+          tokenUsed: this.resolveUsageTokens(submission),
         })),
       },
       'success',
@@ -184,7 +221,10 @@ export class AiModelsService implements OnApplicationBootstrap {
 
   async initializeModels() {
     await this.ensureDefaultModels();
-    return this.appService.envelope({ success: true, message: 'initialized' }, 'success');
+    return this.appService.envelope(
+      { success: true, message: 'initialized' },
+      'success',
+    );
   }
 
   async getSummary() {
@@ -203,43 +243,72 @@ export class AiModelsService implements OnApplicationBootstrap {
       })
       .lean();
 
-    const stats = models.reduce<Record<string, Record<string, unknown>>>((result, model) => {
-      const modelKey = model.code;
-      const modelReviews = reviewedSubmissions.filter((item) => {
-        const provider = String(item.aiReviewMetadata?.provider || 'doubao');
-        return provider === modelKey;
-      });
+    const stats = models.reduce<Record<string, Record<string, unknown>>>(
+      (result, model) => {
+        const modelKey = model.code;
+        const modelReviews = reviewedSubmissions.filter((item) =>
+          this.matchesModel(item, modelKey),
+        );
 
-      const todayUsage = modelReviews.filter((item) => {
-        const reviewedAt = item.aiReviewedAt ? new Date(item.aiReviewedAt) : null;
-        return reviewedAt ? reviewedAt >= startOfToday : false;
-      }).length;
+        const todayUsage = modelReviews.filter((item) => {
+          const reviewedAt = item.aiReviewedAt
+            ? new Date(item.aiReviewedAt)
+            : null;
+          return reviewedAt ? reviewedAt >= startOfToday : false;
+        }).length;
 
-      const totalUsage =
-        Number(model.totalUsage || 0) > 0 ? Number(model.totalUsage || 0) : modelReviews.length;
-      const totalTokens =
-        Number(model.totalTokens || 0) > 0
-          ? Number(model.totalTokens || 0)
-          : modelReviews.reduce((sum, item) => {
-              const usage = item.aiReviewMetadata?.usage as Record<string, unknown> | undefined;
-              const totalTokensValue =
-                Number(usage?.total_tokens || usage?.totalTokens || item.aiReviewMetadata?.tokenUsed || 0);
-              return sum + (Number.isFinite(totalTokensValue) ? totalTokensValue : 0);
-            }, 0);
+        const totalUsage =
+          Number(model.totalUsage || 0) > 0
+            ? Number(model.totalUsage || 0)
+            : modelReviews.length;
+        const totalTokens =
+          Number(model.totalTokens || 0) > 0
+            ? Number(model.totalTokens || 0)
+            : modelReviews.reduce(
+                (sum, item) => sum + this.resolveUsageTokens(item),
+                0,
+              );
 
-      const credentialsConfigured = !!(model.apiKey || model.accessKey || model.secretKey);
-      result[modelKey] = {
-        isOnline: model.status === 'active' && credentialsConfigured,
-        balance: Number(model.lastBalance || 0),
-        totalUsage,
-        totalTokens,
-        todayUsage,
-        lastBalanceCheck: model.lastBalanceCheck || model.updatedAt || model.createdAt,
-      };
-      return result;
-    }, {});
+        const credentialsConfigured = this.hasCredentials(model);
+        result[modelKey] = {
+          isOnline: model.status === 'active' && credentialsConfigured,
+          balance: Number(model.lastBalance || 0),
+          totalUsage,
+          totalTokens,
+          todayUsage,
+          lastBalanceCheck:
+            model.lastBalanceCheck || model.updatedAt || model.createdAt,
+        };
+        return result;
+      },
+      {},
+    );
 
     return this.appService.envelope(stats, 'success');
+  }
+
+  async recordReviewSuccess(payload: {
+    provider: string;
+    tokensUsed?: number;
+    reviewedAt?: Date;
+  }) {
+    const reviewedAt = payload.reviewedAt || new Date();
+    const tokensUsed = Number.isFinite(Number(payload.tokensUsed))
+      ? Number(payload.tokensUsed)
+      : 0;
+
+    await this.aiModelModel.updateOne(
+      { code: payload.provider },
+      {
+        $inc: {
+          totalUsage: 1,
+          totalTokens: tokensUsed,
+        },
+        $set: {
+          lastUsedAt: reviewedAt,
+        },
+      },
+    );
   }
 
   private async ensureDefaultModels() {
@@ -270,8 +339,14 @@ export class AiModelsService implements OnApplicationBootstrap {
     return {
       totalModels: models.length,
       activeModels: models.filter((item) => item.status === 'active').length,
-      totalUsage: models.reduce((sum, item) => sum + Number(item.totalUsage || 0), 0),
-      totalBalance: models.reduce((sum, item) => sum + Number(item.lastBalance || 0), 0),
+      totalUsage: models.reduce(
+        (sum, item) => sum + Number(item.totalUsage || 0),
+        0,
+      ),
+      totalBalance: models.reduce(
+        (sum, item) => sum + Number(item.lastBalance || 0),
+        0,
+      ),
     };
   }
 
@@ -302,5 +377,39 @@ export class AiModelsService implements OnApplicationBootstrap {
       accessKey: model.accessKey,
       secretKey: model.secretKey,
     };
+  }
+
+  private matchesModel(
+    submission: SubmissionDocument | Submission,
+    code: string,
+  ) {
+    const provider = String(submission.aiReviewMetadata?.provider || 'doubao');
+    const modelUsed = String(submission.aiReviewMetadata?.modelUsed || '');
+    return provider === code || modelUsed === code;
+  }
+
+  private resolveUsageTokens(submission: SubmissionDocument | Submission) {
+    const usage = submission.aiReviewMetadata?.usage as
+      | Record<string, unknown>
+      | undefined;
+    const totalTokensValue = Number(
+      usage?.total_tokens ||
+        usage?.totalTokens ||
+        submission.aiReviewMetadata?.tokenUsed ||
+        0,
+    );
+    return Number.isFinite(totalTokensValue) ? totalTokensValue : 0;
+  }
+
+  private hasCredentials(model: AiModelDocument | AiModel) {
+    if (model.apiKey || model.accessKey || model.secretKey) {
+      return true;
+    }
+
+    if (model.code === 'doubao' && process.env.DOUBAO_API_KEY) {
+      return true;
+    }
+
+    return false;
   }
 }

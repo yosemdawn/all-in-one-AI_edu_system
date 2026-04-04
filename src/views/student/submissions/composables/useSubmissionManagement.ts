@@ -1,26 +1,31 @@
-import { ref, computed, onUnmounted } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import SubmissionsApi, {
-  type MySubmissionDetail,
+  type AiReview,
   type Attachment,
+  type MySubmissionDetail,
   type SubmitAssignmentParams,
 } from "@/api/submissions";
-import { useAiReviewPolling } from "./useAiReviewPolling";
 import { checkAiSupport } from "@/config/ai-config";
+import { useAiReviewPolling } from "./useAiReviewPolling";
+
+type SubmissionLimitInfo = {
+  type: "info" | "warning";
+  title: string;
+  message: string;
+} | null;
 
 export function useSubmissionManagement() {
   const route = useRoute();
   const router = useRouter();
 
-  // 响应式数据
   const loading = ref(true);
   const submitting = ref(false);
   const saving = ref(false);
   const deleting = ref(false);
   const submissionData = ref<MySubmissionDetail | null>(null);
 
-  // AI评价轮询
   const {
     isPolling,
     pollingCount,
@@ -29,113 +34,103 @@ export function useSubmissionManagement() {
     handleVisibilityChange,
   } = useAiReviewPolling();
 
-  // 计算属性
   const assignmentId = computed(() => {
-    const id = (route.query.assignmentId ||
-      route.params.assignmentId) as string;
-    console.log("📍 当前路由信息:", {
-      query: route.query,
-      params: route.params,
-      assignmentId: id,
-    });
-    return id;
+    return (route.query.assignmentId || route.params.assignmentId) as string;
   });
 
   const classId = computed(() => {
-    const id = (route.query.classId || route.params.classId) as string;
-    console.log("📍 当前班级ID:", id);
-    return id;
+    return (route.query.classId || route.params.classId) as string;
   });
+
+  const resolveAiQueueStatus = (aiReview?: AiReview | null) =>
+    aiReview?.aiReviewMetadata?.queueStatus;
+
+  const hasCompletedAiReview = (aiReview?: AiReview | null) =>
+    !!(
+      aiReview &&
+      (aiReview.content ||
+        typeof aiReview.score === "number" ||
+        resolveAiQueueStatus(aiReview) === "completed")
+    );
+
+  const hasAiErrorState = (aiReview?: AiReview | null) =>
+    !!(
+      aiReview &&
+      (aiReview.aiReviewMetadata?.error ||
+        resolveAiQueueStatus(aiReview) === "failed")
+    );
+
+  const hasAiSkippedState = (aiReview?: AiReview | null) =>
+    resolveAiQueueStatus(aiReview) === "skipped";
 
   const isSubmitted = computed(() => {
-    // 只有当老师已经批改过时，才认为是真正的已提交状态（不可重新提交）
-    const status = submissionData.value?.submission?.status;
-    return status === "teacher_reviewed";
+    return submissionData.value?.submission?.status === "teacher_reviewed";
   });
 
-  // 是否可以保存草稿（只有草稿状态才能保存草稿）
   const canSaveDraft = computed(() => {
     const status = submissionData.value?.submission?.status;
     return !status || status === "draft";
   });
 
-  // 是否可以提交（老师批改后或提交次数超过2次时不能提交）
   const canSubmit = computed(() => {
     const submission = submissionData.value?.submission;
-    if (!submission) return true; // 没有提交记录时可以提交
-    
-    const status = submission.status;
-    const submissionCount = submission.submissionCount || 0;
-    
-    // 老师已批改，不能再提交
-    if (status === "teacher_reviewed") {
+    if (!submission) return true;
+
+    if (submission.status === "teacher_reviewed") {
       return false;
     }
-    
-    // 提交次数已达到上限（2次），不能再提交
-    if (submissionCount >= 2) {
-      return false;
-    }
-    
-    return true;
+
+    return (submission.submissionCount || 0) < 2;
   });
 
-  // 获取提交限制提示信息
-  const submissionLimitInfo = computed(() => {
+  const submissionLimitInfo = computed<SubmissionLimitInfo>(() => {
     const submission = submissionData.value?.submission;
     if (!submission) return null;
-    
-    const status = submission.status;
-    const submissionCount = submission.submissionCount || 0;
-    
-    // 老师已批改
-    if (status === "teacher_reviewed") {
+
+    if (submission.status === "teacher_reviewed") {
       return {
-        type: "info" as const,
-        title: "作业已被老师批改，无法重新提交",
-        message: ""
+        type: "info",
+        title: "作业已被教师批改，当前不可再次提交",
+        message: "",
       };
     }
-    
-    // 提交次数已达到上限
+
+    const submissionCount = submission.submissionCount || 0;
     if (submissionCount >= 2) {
       return {
-        type: "warning" as const,
+        type: "warning",
         title: "提交次数已达上限",
-        message: `您已提交${submissionCount}次，最多只能提交2次。请等待老师批改后再提交新版本。`
+        message: `你已提交 ${submissionCount} 次，最多只能提交 2 次。`,
       };
     }
-    
-    // 还可以提交，显示剩余次数
+
     if (submissionCount > 0) {
-      const remainingCount = 2 - submissionCount;
       return {
-        type: "info" as const,
+        type: "info",
         title: "提交次数提醒",
-        message: `您已提交${submissionCount}次，还可以提交${remainingCount}次。`
+        message: `你已提交 ${submissionCount} 次，还可以提交 ${
+          2 - submissionCount
+        } 次。`,
       };
     }
-    
+
     return null;
   });
 
-  // 是否显示提交表单（未被老师批改时显示）
   const showSubmissionForm = computed(() => {
-    const status = submissionData.value?.submission?.status;
-    return status !== "teacher_reviewed";
+    return submissionData.value?.submission?.status !== "teacher_reviewed";
   });
 
-  // 是否显示已提交内容（已提交且被老师批改时显示）
   const showSubmittedContent = computed(() => {
-    const status = submissionData.value?.submission?.status;
-    return status === "teacher_reviewed";
-  });
-  const isOverdue = computed(() => {
-    if (!submissionData.value?.assignment.dueDate) return false;
-    return new Date() > new Date(submissionData.value.assignment.dueDate);
+    return submissionData.value?.submission?.status === "teacher_reviewed";
   });
 
-  // 获取状态标签类型
+  const isOverdue = computed(() => {
+    const dueDate = submissionData.value?.assignment?.dueDate;
+    if (!dueDate) return false;
+    return Date.now() > new Date(dueDate).getTime();
+  });
+
   const statusTagType = computed(() => {
     const status = submissionData.value?.submission?.status;
     const statusMap: Record<
@@ -146,11 +141,12 @@ export function useSubmissionManagement() {
       submitted: "warning",
       ai_reviewed: "primary",
       teacher_reviewed: "success",
+      ai_review_failed: "danger",
     };
+
     return statusMap[status || ""] || "info";
   });
 
-  // 获取状态文本
   const statusText = computed(() => {
     const status = submissionData.value?.submission?.status;
     const statusMap: Record<string, string> = {
@@ -158,156 +154,162 @@ export function useSubmissionManagement() {
       submitted: "已提交",
       ai_reviewed: "AI已批改",
       teacher_reviewed: "教师已批改",
+      ai_review_failed: "AI批改失败",
     };
+
     return statusMap[status || ""] || "未知状态";
   });
 
-  // 获取当前状态（供轮询使用）
   const getCurrentStatus = () => {
     const aiReview = submissionData.value?.aiReview;
+
     return {
       status: submissionData.value?.submission?.status,
-      hasAiReview: !!aiReview,
-      hasAiError: !!aiReview?.aiReviewMetadata?.error, // 🔥 新增：检测AI评价错误
+      hasAiReview: hasCompletedAiReview(aiReview),
+      hasAiError: hasAiErrorState(aiReview),
+      aiReviewMetadata: aiReview?.aiReviewMetadata || undefined,
       assignment: submissionData.value?.assignment,
     };
   };
 
-  // 加载数据
   const loadData = async () => {
     if (!assignmentId.value) {
-      ElMessage.error("缺少作业ID参数");
+      ElMessage.error("缺少作业 ID");
       router.back();
       return;
     }
 
     if (!classId.value) {
-      ElMessage.error("缺少班级ID参数");
+      ElMessage.error("缺少班级 ID");
       router.back();
       return;
     }
 
     try {
       loading.value = true;
-      console.log(
-        "🔍 开始查询作业数据，assignmentId:",
-        assignmentId.value,
-        "classId:",
-        classId.value
+      submissionData.value = await SubmissionsApi.getMySubmission(
+        assignmentId.value
       );
-      const data = await SubmissionsApi.getMySubmission(assignmentId.value);
-      console.log("📥 查询到的作业数据:", data);
-      submissionData.value = data;
     } catch (error) {
-      console.error("❌ 加载作业数据失败:", error);
+      console.error("Failed to load submission detail:", error);
       ElMessage.error("加载作业数据失败");
     } finally {
       loading.value = false;
     }
   };
 
-  // 检查并启动AI评价轮询
-  const checkAndStartPolling = () => {
-    const { status, hasAiReview, hasAiError } = getCurrentStatus();
-    const assignment = submissionData.value?.assignment;
-
-    console.log("🔍 检查轮询启动条件:");
-    console.log("  - 提交状态:", status);
-    console.log("  - AI评价状态:", hasAiReview ? "已完成" : "未完成");
-    console.log("  - AI错误状态:", hasAiError ? "有错误" : "无错误"); // 🔥 新增
-    console.log("  - 作业状态:", assignment?.status);
-    console.log("  - 作业截止时间:", assignment?.dueDate);
-    console.log("  - 当前时间:", new Date().toISOString());
-
-    // 🔥 如果有AI错误，立即停止轮询并显示错误信息
-    if (hasAiError) {
-      console.log("❌ AI评价失败，停止轮询");
-      const errorMessage =
-        submissionData.value?.aiReview?.aiReviewMetadata?.error || "AI评价失败";
-      ElMessage.error(`AI评价失败: ${errorMessage}`);
-      return;
-    }
-
-    // 检查作业是否可以进行AI评价
-    const canAiReview = checkCanAiReview(assignment, status, hasAiReview);
-
-    if (canAiReview.canReview) {
-      console.log("✅ 满足轮询条件，启动AI评价轮询...");
-      startPolling(loadData, getCurrentStatus);
-    } else {
-      console.log("❌ 不满足轮询条件，原因:", canAiReview.reason);
-    }
-  };
-
-  // 检查是否可以进行AI评价
   const checkCanAiReview = (
     assignment: any,
     submissionStatus: string | undefined,
-    hasAiReview: boolean
+    hasAiReview: boolean,
+    aiQueueStatus?: string
   ) => {
-    // 如果已经有AI评价结果，不需要轮询
     if (hasAiReview) {
-      return { canReview: false, reason: "AI评价已完成" };
+      return { canReview: false, reason: "AI 批改已完成" };
     }
 
-    // 如果提交状态不是submitted，不需要轮询
-    if (submissionStatus !== "submitted") {
-      return { canReview: false, reason: `提交状态为: ${submissionStatus}` };
+    if (aiQueueStatus === "failed") {
+      return { canReview: false, reason: "AI 批改失败" };
     }
 
-    // 使用统一的AI支持检查
+    if (aiQueueStatus === "skipped") {
+      return { canReview: false, reason: "AI 批改已跳过" };
+    }
+
+    if (
+      submissionStatus !== "submitted" &&
+      submissionStatus !== "ai_review_queued"
+    ) {
+      return { canReview: false, reason: `当前状态为 ${submissionStatus}` };
+    }
+
     const aiSupport = checkAiSupport(assignment);
-
     if (!aiSupport.supported) {
       return { canReview: false, reason: aiSupport.reason };
     }
 
-    return { canReview: true, reason: "满足AI评价条件" };
+    return { canReview: true, reason: "AI 批改条件满足" };
   };
 
-  // 提交作业
+  const checkAndStartPolling = () => {
+    const { status, hasAiReview, hasAiError, aiReviewMetadata } =
+      getCurrentStatus();
+    const assignment = submissionData.value?.assignment;
+    const aiReview = submissionData.value?.aiReview;
+
+    if (hasAiError) {
+      const errorMessage = aiReview?.aiReviewMetadata?.error || "AI 批改失败";
+      ElMessage.error(`AI 批改失败：${errorMessage}`);
+      return;
+    }
+
+    if (hasAiSkippedState(aiReview)) {
+      const message =
+        aiReviewMetadata?.skippedReason === "queue_disabled"
+          ? "AI 批改队列未启用，请联系管理员检查 Redis 配置"
+          : "当前提交未进入 AI 批改队列";
+      ElMessage.warning(message);
+      return;
+    }
+
+    const canAiReview = checkCanAiReview(
+      assignment,
+      status,
+      hasAiReview,
+      aiReviewMetadata?.queueStatus
+    );
+
+    if (canAiReview.canReview) {
+      startPolling(loadData, getCurrentStatus);
+    }
+  };
+
+  const buildSubmitParams = (
+    content: string,
+    attachments: Attachment[],
+    isDraft: boolean
+  ): SubmitAssignmentParams => {
+    const params: SubmitAssignmentParams = {
+      assignmentId: assignmentId.value,
+      classId: classId.value,
+      content,
+      isDraft,
+    };
+
+    if (attachments.length > 0) {
+      params.attachments = attachments;
+    }
+
+    return params;
+  };
+
   const handleSubmit = async (content: string, attachments: Attachment[]) => {
     try {
-      // 根据当前状态显示不同的确认信息
       const isResubmit =
-        submissionData.value?.submission &&
+        !!submissionData.value?.submission &&
         submissionData.value.submission.status !== "draft";
 
-      const confirmMessage = isResubmit
-        ? "确定要重新提交作业吗？这将覆盖之前的提交内容。"
-        : "确定要提交作业吗？";
-
-      await ElMessageBox.confirm(confirmMessage, "确认提交", {
-        confirmButtonText: "确定提交",
-        cancelButtonText: "取消",
-        type: "warning",
-      });
+      await ElMessageBox.confirm(
+        isResubmit
+          ? "确认重新提交作业吗？这会覆盖之前的提交内容。"
+          : "确认提交作业吗？",
+        "确认提交",
+        {
+          confirmButtonText: "确认提交",
+          cancelButtonText: "取消",
+          type: "warning",
+        }
+      );
 
       submitting.value = true;
+      await SubmissionsApi.submit(buildSubmitParams(content, attachments, false));
+      ElMessage.success(isResubmit ? "作业重新提交成功" : "作业提交成功");
 
-      const params: SubmitAssignmentParams = {
-        assignmentId: assignmentId.value,
-        classId: classId.value,
-        content,
-        isDraft: false,
-      };
-
-      // 只有当有附件时才添加 attachments 字段
-      if (attachments && attachments.length > 0) {
-        params.attachments = attachments;
-      }
-
-      await SubmissionsApi.submit(params);
-      ElMessage.success(isResubmit ? "作业重新提交成功！" : "作业提交成功！");
-
-      // 重新加载数据
       await loadData();
-
-      // 启动AI评价轮询
       checkAndStartPolling();
     } catch (error: any) {
       if (error !== "cancel") {
-        console.error("提交作业失败:", error);
+        console.error("Failed to submit assignment:", error);
         ElMessage.error(error.message || "提交作业失败");
       }
     } finally {
@@ -315,12 +317,10 @@ export function useSubmissionManagement() {
     }
   };
 
-  // 保存草稿
   const handleSaveDraft = async (
     content: string,
     attachments: Attachment[]
   ) => {
-    // 检查是否可以保存草稿
     if (!canSaveDraft.value) {
       ElMessage.warning("作业已提交，无法保存草稿");
       return;
@@ -333,65 +333,40 @@ export function useSubmissionManagement() {
 
     try {
       saving.value = true;
-
-      const params: SubmitAssignmentParams = {
-        assignmentId: assignmentId.value,
-        classId: classId.value,
-        content,
-        isDraft: true,
-      };
-
-      // 只有当有附件时才添加 attachments 字段
-      if (attachments && attachments.length > 0) {
-        params.attachments = attachments;
-      }
-
-      console.log("💾 开始保存草稿，参数:", params);
-      const result = await SubmissionsApi.submit(params);
-      console.log("✅ 草稿保存成功，响应:", result);
-      ElMessage.success("草稿保存成功！");
-
-      // 延迟一下再查询，确保数据已同步
-      console.log("🔄 延迟500ms后重新加载数据...");
+      await SubmissionsApi.submit(buildSubmitParams(content, attachments, true));
+      ElMessage.success("草稿保存成功");
       await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("🔄 开始重新加载数据...");
       await loadData();
     } catch (error: any) {
-      console.error("❌ 保存草稿失败:", error);
+      console.error("Failed to save draft:", error);
       ElMessage.error(error.message || "保存草稿失败");
     } finally {
       saving.value = false;
     }
   };
 
-  // 删除草稿
   const handleDelete = async () => {
-    if (!submissionData.value?.submission?.id) return;
+    const submissionId = submissionData.value?.submission?.id;
+    if (!submissionId) return;
 
     try {
       await ElMessageBox.confirm(
-        "确定要删除这个草稿吗？删除后无法恢复。",
+        "确认删除这份草稿吗？删除后不可恢复。",
         "确认删除",
         {
-          confirmButtonText: "确定删除",
+          confirmButtonText: "确认删除",
           cancelButtonText: "取消",
           type: "warning",
         }
       );
 
       deleting.value = true;
-
-      await SubmissionsApi.deleteSubmission({
-        submissionId: submissionData.value.submission.id,
-      });
-
-      ElMessage.success("草稿删除成功！");
-
-      // 重新加载数据
+      await SubmissionsApi.deleteSubmission({ submissionId });
+      ElMessage.success("草稿删除成功");
       await loadData();
     } catch (error: any) {
       if (error !== "cancel") {
-        console.error("删除草稿失败:", error);
+        console.error("Failed to delete draft:", error);
         ElMessage.error(error.message || "删除草稿失败");
       }
     } finally {
@@ -399,31 +374,24 @@ export function useSubmissionManagement() {
     }
   };
 
-  // 设置页面可见性监听
   const cleanupVisibilityListener = handleVisibilityChange(
     loadData,
     getCurrentStatus
   );
 
-  // 组件卸载时清理
   onUnmounted(() => {
     stopPolling();
     cleanupVisibilityListener();
   });
 
   return {
-    // 状态
     loading,
     submitting,
     saving,
     deleting,
     submissionData,
-
-    // 轮询状态
     isPolling,
     pollingCount,
-
-    // 计算属性
     assignmentId,
     classId,
     isSubmitted,
@@ -435,8 +403,6 @@ export function useSubmissionManagement() {
     isOverdue,
     statusTagType,
     statusText,
-
-    // 方法
     loadData,
     handleSubmit,
     handleSaveDraft,

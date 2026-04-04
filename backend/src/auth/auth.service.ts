@@ -38,11 +38,14 @@ export class AuthService {
   ) {}
 
   async login(body: LoginDto) {
+    const credential = body.usernameOrEmailOrStudentId.trim();
+    const normalizedEmail = credential.toLowerCase();
+
     const user = await this.userModel.findOne({
       $or: [
-        { email: body.usernameOrEmailOrStudentId },
-        { studentId: body.usernameOrEmailOrStudentId },
-        { username: body.usernameOrEmailOrStudentId },
+        { email: normalizedEmail },
+        { studentId: credential },
+        { username: credential },
       ],
     });
 
@@ -58,6 +61,8 @@ export class AuthService {
     if (!passwordMatched) {
       throw new UnauthorizedException('Invalid username or password');
     }
+
+    this.assertUserCanAuthenticate(user);
 
     const accessToken = this.tokenService.issueAccessToken({
       sub: user.id,
@@ -115,6 +120,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    this.assertUserCanAuthenticate(user);
     this.assertTokenFreshForUser(user, matchedSession.createdAt);
 
     matchedSession.revokedAt = new Date();
@@ -168,8 +174,13 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
+    const normalizedEmail = body.email.toLowerCase().trim();
+    const normalizedUsername = body.username.trim();
+    const normalizedName = body.name?.trim() || normalizedUsername;
+    const normalizedClassId = body.classId?.trim();
+
     const existingUser = await this.userModel.findOne({
-      $or: [{ email: body.email }, { username: body.username }],
+      $or: [{ email: normalizedEmail }, { username: normalizedUsername }],
     });
 
     if (existingUser) {
@@ -180,8 +191,8 @@ export class AuthService {
     }
 
     let classItem: ClassDocument | null = null;
-    if (body.classId) {
-      classItem = await this.classModel.findById(body.classId);
+    if (normalizedClassId) {
+      classItem = await this.classModel.findById(normalizedClassId);
       if (!classItem) {
         throw new BadRequestException('Class not found');
       }
@@ -196,10 +207,10 @@ export class AuthService {
     const passwordHash = await this.passwordService.hash(body.password);
 
     const user = await this.userModel.create({
-      username: body.username,
-      email: body.email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       studentId: `${Math.floor(10000000 + Math.random() * 90000000)}`,
-      name: body.name || body.username,
+      name: normalizedName,
       role: 'student',
       status: 'active',
       passwordHash,
@@ -386,6 +397,16 @@ export class AuthService {
       Math.floor(user.passwordChangedAt.getTime() / 1000) > issuedAtSeconds
     ) {
       throw new UnauthorizedException('Login expired');
+    }
+  }
+
+  private assertUserCanAuthenticate(user: UserDocument) {
+    if (user.status === 'locked') {
+      throw new UnauthorizedException('Account is locked');
+    }
+
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('Account is inactive');
     }
   }
 

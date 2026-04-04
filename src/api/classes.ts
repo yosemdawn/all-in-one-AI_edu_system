@@ -2,6 +2,7 @@ import request from "@/utils/request";
 import type {
   Class,
   ClassListResponse,
+  PublicClassListResponse,
   ClassStudentListResponse,
   ClassQueryParams,
   ClassStudentQueryParams,
@@ -24,6 +25,16 @@ export function getClassList(
 ): Promise<ClassListResponse> {
   return request({
     url: "/classes/list",
+    method: "get",
+    params,
+  });
+}
+
+export function getPublicClassList(
+  params: ClassQueryParams
+): Promise<PublicClassListResponse> {
+  return request({
+    url: "/public/classes/list",
     method: "get",
     params,
   });

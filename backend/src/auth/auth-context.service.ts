@@ -28,6 +28,7 @@ export class AuthContextService {
       throw new UnauthorizedException('Login expired');
     }
 
+    this.assertUserCanAuthenticate(user);
     this.assertTokenFreshForUser(user, decoded.iat);
     return this.toAuthenticatedUser(user);
   }
@@ -75,6 +76,16 @@ export class AuthContextService {
       Math.floor(user.passwordChangedAt.getTime() / 1000) > issuedAtSeconds
     ) {
       throw new UnauthorizedException('Login expired');
+    }
+  }
+
+  private assertUserCanAuthenticate(user: UserDocument) {
+    if (user.status === 'locked') {
+      throw new UnauthorizedException('Account is locked');
+    }
+
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('Account is inactive');
     }
   }
 }

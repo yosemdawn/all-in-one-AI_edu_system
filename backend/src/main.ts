@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { HttpEnvelopeExceptionFilter } from './common/filters/http-exception.filter';
+import { logRuntimeDiagnostics } from './config/runtime-diagnostics';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,6 +25,6 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpEnvelopeExceptionFilter());
 
   await app.listen(port);
-  console.log(`Backend running on http://localhost:${port}`);
+  logRuntimeDiagnostics(configService);
 }
 bootstrap();

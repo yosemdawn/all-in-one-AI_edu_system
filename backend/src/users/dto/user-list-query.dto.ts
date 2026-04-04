@@ -15,6 +15,10 @@ export class UserListQueryDto {
   keyword?: string;
 
   @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
   @ToNumber()
   @IsInt()
   @Min(1)
@@ -28,10 +32,36 @@ export class UserListQueryDto {
   limit?: number;
 
   @IsOptional()
-  @IsIn(['createdAt', 'updatedAt', 'username', 'email', 'name', 'role', 'status', 'studentId'])
+  @IsIn([
+    'createdAt',
+    'updatedAt',
+    'username',
+    'email',
+    'name',
+    'role',
+    'status',
+    'studentId',
+  ])
   sortField?: string;
 
   @IsOptional()
   @IsIn(['asc', 'desc'])
   sortOrder?: string;
+
+  @IsOptional()
+  @IsIn([
+    'createdAt',
+    'updatedAt',
+    'username',
+    'email',
+    'name',
+    'role',
+    'status',
+    'studentId',
+  ])
+  sort?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: string;
 }

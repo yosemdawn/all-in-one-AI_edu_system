@@ -63,7 +63,7 @@ function isWhiteListRoute(path: string, meta?: any): boolean {
  */
 async function loadDynamicRoutes(
   to: RouteLocationNormalized,
-  next: NavigationGuardNext
+  next: NavigationGuardNext,
 ): Promise<void> {
   // 如果已经在加载路由，等待前一个加载完成
 
@@ -123,7 +123,7 @@ router.beforeEach(
   async (
     to: RouteLocationNormalized,
     from: RouteLocationNormalized,
-    next: NavigationGuardNext
+    next: NavigationGuardNext,
   ) => {
     // 开始进度条
     NProgress.start();
@@ -155,7 +155,7 @@ router.beforeEach(
       !to.meta?.skipPasswordCheck
     ) {
       next(
-        `/force-change-password?redirect=${encodeURIComponent(to.fullPath)}`
+        `/force-change-password?redirect=${encodeURIComponent(to.fullPath)}`,
       );
       NProgress.done();
       return;
@@ -188,7 +188,7 @@ router.beforeEach(
       // 动态路由已生成，直接放行
       next();
     }
-  }
+  },
 );
 
 // 预加载所有可能的组件模块
@@ -201,10 +201,10 @@ const componentModules = import.meta.glob("../views/**/*.vue");
 function loadComponent(componentPath: string) {
   return async () => {
     // 处理组件路径，去掉开头的斜杠（如果有的话）
-    const cleanComponentPath = componentPath.startsWith('/') 
-      ? componentPath.slice(1) 
+    const cleanComponentPath = componentPath.startsWith("/")
+      ? componentPath.slice(1)
       : componentPath;
-    
+
     try {
       // 构建完整的模块路径
       const modulePath = `../views/${cleanComponentPath}.vue`;
@@ -218,9 +218,8 @@ function loadComponent(componentPath: string) {
 
         // 如果组件不存在，尝试加载NotFound页面
         if (componentModules["../views/NotFound.vue"]) {
-          const notFoundModule = await componentModules[
-            "../views/NotFound.vue"
-          ]();
+          const notFoundModule =
+            await componentModules["../views/NotFound.vue"]();
           return notFoundModule;
         } else {
           // 如果连NotFound都不存在，返回一个简单的错误组件
@@ -237,7 +236,10 @@ function loadComponent(componentPath: string) {
         }
       }
     } catch (error) {
-      console.error(`组件加载失败: ${componentPath} -> ${cleanComponentPath}`, error);
+      console.error(
+        `组件加载失败: ${componentPath} -> ${cleanComponentPath}`,
+        error,
+      );
 
       // 加载失败时的备用方案
       return {
@@ -278,13 +280,14 @@ function generateMenuRoutes(menus) {
       if (!item.component || item.type === "button") {
         return;
       }
-      
+
       // 创建路由配置
       const route = {
         path: item.path, // 路由路径
         name: item.name, // 路由名称
         component: loadComponent(item.component), // 组件路径
         meta: {
+          ...(item.meta || {}),
           title: item.meta?.title || item.name, // 路由标题
           icon: item.icon || "", // 路由图标
           requiresAuth: item.meta?.requireAuth !== false, // 是否需要认证

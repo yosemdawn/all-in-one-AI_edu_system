@@ -24,6 +24,10 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
+  TEST_MONGODB_URI?: string;
+
+  @IsOptional()
+  @IsString()
   JWT_SECRET?: string;
 
   @IsOptional()
@@ -45,6 +49,10 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(['true', 'false'])
   SWAGGER_ENABLED?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  ENABLE_DEMO_SEED?: string;
 }
 
 export function validateEnvironment(config: Record<string, unknown>) {

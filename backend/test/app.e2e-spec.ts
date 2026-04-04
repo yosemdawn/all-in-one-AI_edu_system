@@ -24,7 +24,10 @@ describe('Backend e2e', () => {
     Authorization: `Bearer ${token}`,
   });
 
-  const login = async (usernameOrEmailOrStudentId: string, password = '123456') => {
+  const login = async (
+    usernameOrEmailOrStudentId: string,
+    password = '123456',
+  ) => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ usernameOrEmailOrStudentId, password });
@@ -70,6 +73,75 @@ describe('Backend e2e', () => {
     });
   });
 
+  it('exposes public active classes for registration without authentication', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/public/classes/list')
+      .query({
+        page: 1,
+        limit: 20,
+        status: 'active',
+        sort: 'name',
+        order: 'asc',
+      });
+
+    const publicClasses = unwrap(response);
+    expect(publicClasses.items.length).toBeGreaterThan(0);
+    expect(publicClasses.items.every((item: any) => item.status === 'active')).toBe(true);
+    expect(publicClasses.items.every((item: any) => item.code === undefined)).toBe(true);
+    expect(publicClasses.items.every((item: any) => item.teacherId === undefined)).toBe(true);
+
+    const names = publicClasses.items.map((item: any) => item.name);
+    const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
+    expect(names).toEqual(sortedNames);
+  });
+
+  it('registers students with normalized credentials and updates class membership stats', async () => {
+    const publicClassesResponse = await request(app.getHttpServer())
+      .get('/api/public/classes/list')
+      .query({ page: 1, limit: 20, status: 'active' });
+    const publicClasses = unwrap(publicClassesResponse);
+    const targetClass = publicClasses.items[0];
+    expect(targetClass._id).toBeTruthy();
+
+    const registerResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        username: '  LaunchStudent  ',
+        email: ' LaunchStudent@Example.com ',
+        password: '123456',
+        confirmPassword: '123456',
+        classId: targetClass._id,
+      });
+    const registered = unwrap(registerResponse);
+    expect(registered.success).toBe(true);
+    expect(registered.token).toBeTruthy();
+
+    const emailLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        usernameOrEmailOrStudentId: 'LAUNCHSTUDENT@EXAMPLE.COM',
+        password: '123456',
+      });
+    const emailLogin = unwrap(emailLoginResponse);
+    expect(emailLogin.user.email).toBe('launchstudent@example.com');
+    expect(emailLogin.user.username).toBe('LaunchStudent');
+    expect(emailLogin.user.classId).toBe(targetClass._id);
+
+    const classDetailResponse = await request(app.getHttpServer())
+      .get(`/api/classes/${targetClass._id}`)
+      .set(authHeader(emailLogin.token));
+    const classDetail = unwrap(classDetailResponse);
+    expect(classDetail.studentCount).toBeGreaterThanOrEqual(
+      (targetClass.studentCount || 0) + 1,
+    );
+
+    const myClassesResponse = await request(app.getHttpServer())
+      .get('/api/classes/list')
+      .set(authHeader(emailLogin.token));
+    const myClasses = unwrap(myClassesResponse);
+    expect(myClasses.items.some((item: any) => item._id === targetClass._id)).toBe(true);
+  });
+
   it('revokes sessions on logout and blocks old tokens', async () => {
     const adminLogin = await login('admin');
 
@@ -94,7 +166,9 @@ describe('Backend e2e', () => {
       .get('/api/v1/auth/profile')
       .set(authHeader(adminLogin.token))
       .expect(401);
-    expect(profileAfterLogout.body.message).toMatch(/Login expired|Unauthorized/);
+    expect(profileAfterLogout.body.message).toMatch(
+      /Login expired|Unauthorized/,
+    );
 
     const refreshAfterLogout = await request(app.getHttpServer())
       .post('/api/v1/auth/refresh-token')
@@ -135,13 +209,21 @@ describe('Backend e2e', () => {
       .get('/api/classes/list')
       .set(authHeader(teacherLogin.token));
     const teacherClasses = unwrap(teacherClassesResponse);
-    expect(teacherClasses.items.some((item: any) => item._id === createdClass.classId)).toBe(true);
+    expect(
+      teacherClasses.items.some(
+        (item: any) => item._id === createdClass.classId,
+      ),
+    ).toBe(true);
 
     const studentClassesResponse = await request(app.getHttpServer())
       .get('/api/classes/list')
       .set(authHeader(studentLogin.token));
     const studentClasses = unwrap(studentClassesResponse);
-    expect(studentClasses.items.some((item: any) => item._id === createdClass.classId)).toBe(true);
+    expect(
+      studentClasses.items.some(
+        (item: any) => item._id === createdClass.classId,
+      ),
+    ).toBe(true);
 
     const startDate = new Date().toISOString();
     const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -180,9 +262,18 @@ describe('Backend e2e', () => {
     const studentAssignmentsResponse = await request(app.getHttpServer())
       .get('/api/student/assignments')
       .set(authHeader(studentLogin.token))
-      .query({ classId: createdClass.classId, businessStatus: 'todo', page: 1, pageSize: 20 });
+      .query({
+        classId: createdClass.classId,
+        businessStatus: 'todo',
+        page: 1,
+        pageSize: 20,
+      });
     const studentAssignments = unwrap(studentAssignmentsResponse);
-    expect(studentAssignments.items.some((item: any) => item.id === createdAssignment.id)).toBe(true);
+    expect(
+      studentAssignments.items.some(
+        (item: any) => item.id === createdAssignment.id,
+      ),
+    ).toBe(true);
 
     const saveDraftResponse = await request(app.getHttpServer())
       .post('/api/students/submissions/submit')
@@ -220,8 +311,12 @@ describe('Backend e2e', () => {
       .set(authHeader(studentLogin.token));
     const firstSubmitDetail = unwrap(afterFirstSubmitResponse);
     expect(firstSubmitDetail.aiReview).toBeTruthy();
-    expect(firstSubmitDetail.aiReview.aiReviewMetadata.queueStatus).toBe('skipped');
-    expect(firstSubmitDetail.aiReview.aiReviewMetadata.skippedReason).toBe('queue_disabled');
+    expect(firstSubmitDetail.aiReview.aiReviewMetadata.queueStatus).toBe(
+      'skipped',
+    );
+    expect(firstSubmitDetail.aiReview.aiReviewMetadata.skippedReason).toBe(
+      'queue_disabled',
+    );
 
     const secondSubmitResponse = await request(app.getHttpServer())
       .post('/api/students/submissions/submit')
@@ -245,7 +340,9 @@ describe('Backend e2e', () => {
         isDraft: false,
       })
       .expect(400);
-    expect(thirdSubmitResponse.body.message).toMatch(/Submission limit reached/);
+    expect(thirdSubmitResponse.body.message).toMatch(
+      /Submission limit reached/,
+    );
 
     const submissionListResponse = await request(app.getHttpServer())
       .get('/api/teachers/submissions/list')
@@ -332,7 +429,9 @@ describe('Backend e2e', () => {
       .set(authHeader(teacherLogin.token))
       .query({ status: 'active' });
     const availableAiRules = unwrap(availableAiRulesResponse);
-    expect(availableAiRules.some((item: any) => item.id === createdAiRule.id)).toBe(true);
+    expect(
+      availableAiRules.some((item: any) => item.id === createdAiRule.id),
+    ).toBe(true);
 
     const activeAiModelsResponse = await request(app.getHttpServer())
       .get('/api/v1/ai-models/active')
@@ -381,6 +480,21 @@ describe('Backend e2e', () => {
       .query({ page: 1, limit: 20 });
     const listBefore = unwrap(listBeforeResponse);
     const totalBefore = listBefore.total;
+
+    const aliasUserSearchResponse = await request(app.getHttpServer())
+      .get('/api/users')
+      .set(authHeader(adminLogin.token))
+      .query({
+        page: 1,
+        limit: 20,
+        search: 'admin',
+        sort: 'username',
+        order: 'asc',
+      });
+    const aliasUserSearch = unwrap(aliasUserSearchResponse);
+    expect(
+      aliasUserSearch.items.some((item: any) => item.username === 'admin'),
+    ).toBe(true);
 
     const createdUserResponse = await request(app.getHttpServer())
       .post('/api/users')
@@ -434,6 +548,15 @@ describe('Backend e2e', () => {
     expect(updatedUser.status).toBe('inactive');
     expect(updatedUser.name).toBe('Managed Teacher 2');
 
+    const inactiveLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        usernameOrEmailOrStudentId: 'managed_teacher',
+        password: '123456',
+      })
+      .expect(401);
+    expect(inactiveLoginResponse.body.message).toMatch(/inactive|locked/i);
+
     const resetPasswordResponse = await request(app.getHttpServer())
       .post(`/api/users/${createdUser._id}/reset-password`)
       .set(authHeader(relogin.token))
@@ -463,6 +586,20 @@ describe('Backend e2e', () => {
       .set(authHeader(relogin.token));
     const health = unwrap(healthResponse);
     expect(health.db).toBe('ok');
+    expect(health.redis).toBe('disabled');
+    expect(health.ai).toBe('not_configured');
+    expect(health.details.db.databaseName).toBeTruthy();
+
+    const dashboardAiModelsResponse = await request(app.getHttpServer())
+      .get('/api/admin/dashboard/ai-models')
+      .set(authHeader(relogin.token));
+    const dashboardAiModels = unwrap(dashboardAiModelsResponse);
+    expect(dashboardAiModels.doubao).toBeTruthy();
+    expect(typeof dashboardAiModels.doubao.isOnline).toBe('boolean');
+    expect(typeof dashboardAiModels.doubao.totalUsage).toBe('number');
+    expect(typeof dashboardAiModels.doubao.totalTokens).toBe('number');
+    expect(typeof dashboardAiModels.doubao.todayUsage).toBe('number');
+    expect(dashboardAiModels.doubao.lastBalanceCheck).toBeTruthy();
 
     const resourcesResponse = await request(app.getHttpServer())
       .get('/api/permissions/user-roles/users/current/resources')
@@ -478,6 +615,15 @@ describe('Backend e2e', () => {
       .query({ page: 1, limit: 20 });
     const roles = unwrap(rolesResponse);
     expect(roles.items.length).toBeGreaterThanOrEqual(3);
+
+    const filteredRolesResponse = await request(app.getHttpServer())
+      .get('/api/permissions/roles')
+      .set(authHeader(relogin.token))
+      .query({ page: 1, limit: 20, code: 'teacher' });
+    const filteredRoles = unwrap(filteredRolesResponse);
+    expect(
+      filteredRoles.items.some((item: any) => item.code === 'teacher'),
+    ).toBe(true);
 
     const invalidRoleQueryResponse = await request(app.getHttpServer())
       .get('/api/permissions/roles')
@@ -511,7 +657,10 @@ describe('Backend e2e', () => {
     const updateMenuResponse = await request(app.getHttpServer())
       .put(`/api/permissions/menus/${createdMenu._id}`)
       .set(authHeader(relogin.token))
-      .send({ path: '/system/e2e-menu-updated', meta: { title: 'E2E Menu Updated' } });
+      .send({
+        path: '/system/e2e-menu-updated',
+        meta: { title: 'E2E Menu Updated' },
+      });
     const updatedMenu = unwrap(updateMenuResponse);
     expect(updatedMenu.path).toBe('/system/e2e-menu-updated');
 
@@ -532,7 +681,9 @@ describe('Backend e2e', () => {
       .get(`/api/permissions/roles/${createdRole._id}/with-menus`)
       .set(authHeader(relogin.token));
     const roleWithMenus = unwrap(roleWithMenusResponse);
-    expect(roleWithMenus.menus.some((item: any) => item._id === createdMenu._id)).toBe(true);
+    expect(
+      roleWithMenus.menus.some((item: any) => item._id === createdMenu._id),
+    ).toBe(true);
 
     const updateRoleResponse = await request(app.getHttpServer())
       .put(`/api/permissions/roles/${createdRole._id}`)
@@ -552,7 +703,11 @@ describe('Backend e2e', () => {
       .get(`/api/permissions/user-roles/users/${createdUser._id}/resources`)
       .set(authHeader(relogin.token));
     const createdUserResources = unwrap(createdUserResourcesResponse);
-    expect(createdUserResources.roles.some((item: any) => item._id === createdRole._id)).toBe(true);
+    expect(
+      createdUserResources.roles.some(
+        (item: any) => item._id === createdRole._id,
+      ),
+    ).toBe(true);
     expect(createdUserResources.permissions).toContain('e2e:access');
 
     const forgotPasswordResponse = await request(app.getHttpServer())
@@ -572,11 +727,50 @@ describe('Backend e2e', () => {
     const resetPasswordByTokenResult = unwrap(resetPasswordByTokenResponse);
     expect(resetPasswordByTokenResult.success).toBe(true);
 
+    const reactivateUserResponse = await request(app.getHttpServer())
+      .patch(`/api/users/${createdUser._id}`)
+      .set(authHeader(relogin.token))
+      .send({ status: 'active' });
+    const reactivatedUser = unwrap(reactivateUserResponse);
+    expect(reactivatedUser.status).toBe('active');
+
     const resetLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ usernameOrEmailOrStudentId: 'managed_teacher', password: 'reset654' });
+      .send({
+        usernameOrEmailOrStudentId: 'managed_teacher',
+        password: 'reset654',
+      });
     const resetLogin = unwrap(resetLoginResponse);
     expect(resetLogin.token).toBeTruthy();
+
+    const disableUserAfterLoginResponse = await request(app.getHttpServer())
+      .patch(`/api/users/${createdUser._id}`)
+      .set(authHeader(relogin.token))
+      .send({ status: 'inactive' });
+    const disabledUserAfterLogin = unwrap(disableUserAfterLoginResponse);
+    expect(disabledUserAfterLogin.status).toBe('inactive');
+
+    const disabledProfileResponse = await request(app.getHttpServer())
+      .get('/api/v1/auth/profile')
+      .set(authHeader(resetLogin.token))
+      .expect(401);
+    expect(disabledProfileResponse.body.message).toMatch(/inactive|locked/i);
+
+    const enableUserAgainResponse = await request(app.getHttpServer())
+      .patch(`/api/users/${createdUser._id}`)
+      .set(authHeader(relogin.token))
+      .send({ status: 'active' });
+    const enabledUserAgain = unwrap(enableUserAgainResponse);
+    expect(enabledUserAgain.status).toBe('active');
+
+    const activeTeacherLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        usernameOrEmailOrStudentId: 'managed_teacher',
+        password: 'reset654',
+      });
+    const activeTeacherLogin = unwrap(activeTeacherLoginResponse);
+    expect(activeTeacherLogin.token).toBeTruthy();
 
     const invalidImportResponse = await request(app.getHttpServer())
       .post('/api/users/batch-import')
@@ -596,7 +790,9 @@ describe('Backend e2e', () => {
       .get('/api/admin/ai-models/active')
       .set(authHeader(relogin.token));
     const activeAiModels = unwrap(activeAiModelsResponse);
-    expect(activeAiModels.some((item: any) => item.code === aiModelCode)).toBe(true);
+    expect(activeAiModels.some((item: any) => item.code === aiModelCode)).toBe(
+      true,
+    );
 
     const aiModelDetailResponse = await request(app.getHttpServer())
       .get(`/api/admin/ai-models/${aiModelCode}`)
@@ -617,6 +813,16 @@ describe('Backend e2e', () => {
       .send({ apiKey: 'e2e-api-key', status: 'active' });
     const updatedAiModel = unwrap(updateAiModelResponse);
     expect(updatedAiModel.apiKey).toBe('e2e-api-key');
+
+    const refreshedDashboardAiModelsResponse = await request(
+      app.getHttpServer(),
+    )
+      .get('/api/admin/dashboard/ai-models')
+      .set(authHeader(relogin.token));
+    const refreshedDashboardAiModels = unwrap(
+      refreshedDashboardAiModelsResponse,
+    );
+    expect(refreshedDashboardAiModels[aiModelCode].isOnline).toBe(true);
 
     const balanceResponse = await request(app.getHttpServer())
       .get(`/api/admin/ai-models/${aiModelCode}/balance`)
@@ -655,13 +861,27 @@ describe('Backend e2e', () => {
     const loginLogsResponse = await request(app.getHttpServer())
       .get('/api/logs')
       .set(authHeader(relogin.token))
-      .query({ page: 1, limit: 20, endpoint: '/api/v1/auth/login' });
+      .query({
+        page: 1,
+        limit: 20,
+        endpoint: '/api/v1/auth/login',
+        username: 'admin',
+      });
     const loginLogs = unwrap(loginLogsResponse);
-    const loginLog = loginLogs.items.find((item: any) => item.endpoint.includes('/api/v1/auth/login'));
+    const loginLog = loginLogs.items.find((item: any) =>
+      item.endpoint.includes('/api/v1/auth/login'),
+    );
     expect(loginLog).toBeTruthy();
+    expect(loginLog.username).toBe('admin');
     expect(loginLog.requestParams.body.password).toBe('[REDACTED]');
     expect(loginLog.responseData.data.token).toBe('[REDACTED]');
     expect(loginLog.responseData.data.refreshToken).toBe('[REDACTED]');
+
+    const teacherLogsForbiddenResponse = await request(app.getHttpServer())
+      .get('/api/logs')
+      .set(authHeader(activeTeacherLogin.token))
+      .expect(403);
+    expect(teacherLogsForbiddenResponse.body.message).toBeTruthy();
 
     const resetPasswordLogsResponse = await request(app.getHttpServer())
       .get('/api/logs')
@@ -688,11 +908,16 @@ describe('Backend e2e', () => {
     const aiModelLogsResponse = await request(app.getHttpServer())
       .get('/api/logs')
       .set(authHeader(relogin.token))
-      .query({ page: 1, limit: 20, endpoint: `/api/admin/ai-models/${aiModelCode}` });
+      .query({
+        page: 1,
+        limit: 20,
+        endpoint: `/api/admin/ai-models/${aiModelCode}`,
+      });
     const aiModelLogs = unwrap(aiModelLogsResponse);
     const aiModelLog = aiModelLogs.items.find(
       (item: any) =>
-        item.method === 'PUT' && item.endpoint.includes(`/api/admin/ai-models/${aiModelCode}`),
+        item.method === 'PUT' &&
+        item.endpoint.includes(`/api/admin/ai-models/${aiModelCode}`),
     );
     expect(aiModelLog).toBeTruthy();
     expect(aiModelLog.requestParams.body.apiKey).toBe('[REDACTED]');

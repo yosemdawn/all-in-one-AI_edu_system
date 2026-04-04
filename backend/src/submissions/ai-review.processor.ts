@@ -3,8 +3,15 @@ import { Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Job } from 'bullmq';
 import { Model } from 'mongoose';
-import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from '../classes/schemas/class-membership.schema';
 import { AI_REVIEW_QUEUE } from './ai-review.constants';
 import { DoubaoAiReviewService } from './doubao-ai-review.service';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
@@ -18,6 +25,8 @@ export class AiReviewProcessor extends WorkerHost {
     private readonly submissionModel: Model<SubmissionDocument>,
     @InjectModel(Assignment.name)
     private readonly assignmentModel: Model<AssignmentDocument>,
+    @InjectModel(AiModel.name)
+    private readonly aiModelModel: Model<AiModelDocument>,
     @InjectModel(ClassMembership.name)
     private readonly membershipModel: Model<ClassMembershipDocument>,
     private readonly doubaoAiReviewService: DoubaoAiReviewService,
@@ -26,18 +35,23 @@ export class AiReviewProcessor extends WorkerHost {
   }
 
   async process(job: Job<{ submissionId: string }>) {
-    const submission = await this.submissionModel.findById(job.data.submissionId);
+    const submission = await this.submissionModel.findById(
+      job.data.submissionId,
+    );
     if (!submission) {
       this.logger.warn(`Submission not found: ${job.data.submissionId}`);
       return;
     }
 
-    const assignment = await this.assignmentModel.findById(submission.assignmentId);
+    const assignment = await this.assignmentModel.findById(
+      submission.assignmentId,
+    );
     if (!assignment) {
       submission.status = 'ai_review_failed';
       submission.aiReviewMetadata = {
         provider: 'doubao',
-        error: '作业不存在',
+        queueStatus: 'failed',
+        error: 'Assignment not found',
         failedAt: new Date().toISOString(),
       };
       await submission.save();
@@ -50,12 +64,16 @@ export class AiReviewProcessor extends WorkerHost {
       modelUsed: 'doubao-seed-2-0-lite-260215',
       queueStatus: 'processing',
       jobId: String(job.id),
-      queuedAt: submission.aiReviewMetadata?.queuedAt || new Date().toISOString(),
+      queuedAt:
+        submission.aiReviewMetadata?.queuedAt || new Date().toISOString(),
       processingStartedAt: new Date().toISOString(),
     };
     await submission.save();
 
-    const result = await this.doubaoAiReviewService.review(submission, assignment);
+    const result = await this.doubaoAiReviewService.review(
+      submission,
+      assignment,
+    );
 
     if (!result.success) {
       submission.status = 'ai_review_failed';
@@ -83,11 +101,25 @@ export class AiReviewProcessor extends WorkerHost {
       modelUsed: result.model || 'doubao-seed-2-0-lite-260215',
       queueStatus: 'completed',
       usage: result.usage,
+      tokenUsed: this.resolveUsageTokens(result.usage),
       highlights: result.highlights,
       rawContent: result.rawContent,
       completedAt: new Date().toISOString(),
     };
     await submission.save();
+
+    await this.aiModelModel.updateOne(
+      { code: 'doubao' },
+      {
+        $inc: {
+          totalUsage: 1,
+          totalTokens: this.resolveUsageTokens(result.usage),
+        },
+        $set: {
+          lastUsedAt: submission.aiReviewedAt || new Date(),
+        },
+      },
+    );
 
     await this.membershipModel.findOneAndUpdate(
       { classId: submission.classId, studentId: submission.studentId },
@@ -98,5 +130,12 @@ export class AiReviewProcessor extends WorkerHost {
         },
       },
     );
+  }
+
+  private resolveUsageTokens(usage: Record<string, unknown> | undefined) {
+    const totalTokensValue = Number(
+      usage?.total_tokens || usage?.totalTokens || 0,
+    );
+    return Number.isFinite(totalTokensValue) ? totalTokensValue : 0;
   }
 }

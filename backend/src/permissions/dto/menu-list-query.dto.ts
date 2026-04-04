@@ -25,4 +25,20 @@ export class MenuListQueryDto {
   @IsOptional()
   @ToBoolean()
   tree?: boolean;
+
+  @IsOptional()
+  @IsIn(['sort', 'createdAt', 'updatedAt', 'name', 'path', 'code'])
+  sort?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsIn(['sort', 'createdAt', 'updatedAt', 'name', 'path', 'code'])
+  sortField?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 }

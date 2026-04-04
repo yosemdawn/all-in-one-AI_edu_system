@@ -38,4 +38,12 @@ export class RoleListQueryDto {
   @IsOptional()
   @IsIn(['asc', 'desc'])
   order?: string;
+
+  @IsOptional()
+  @IsIn(['createdAt', 'updatedAt', 'name', 'code', 'status'])
+  sortField?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: string;
 }

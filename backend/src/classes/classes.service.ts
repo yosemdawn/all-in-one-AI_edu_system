@@ -35,18 +35,11 @@ export class ClassesService {
     currentUser: AuthenticatedUser,
     query: ClassListQueryDto,
   ) {
-    const filter: Record<string, unknown> = {};
+    const filter = this.buildClassFilter(query);
 
-    if (query.status) {
-      filter.status = query.status;
-    }
-    if (query.search) {
-      filter.name = { $regex: query.search, $options: 'i' };
-    }
     if (currentUser.role === 'teacher') {
       filter.teacherId = currentUser.id;
-    }
-    if (currentUser.role === 'student') {
+    } else if (currentUser.role === 'student') {
       const joinedClassIds = await this.membershipModel.distinct('classId', {
         studentId: currentUser.id,
         status: 'active',
@@ -57,15 +50,42 @@ export class ClassesService {
     const page = Number(query.page || 1);
     const limit = Number(query.limit || 10);
     const skip = (page - 1) * limit;
+    const sort = this.resolveClassSort(query);
 
     const [items, total] = await Promise.all([
-      this.classModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      this.classModel.find(filter).sort(sort).skip(skip).limit(limit).lean(),
       this.classModel.countDocuments(filter),
     ]);
 
     return this.appService.envelope(
       {
         items: items.map((item) => this.toClassListItem(item)),
+        total,
+        page,
+        limit,
+      },
+      'success',
+    );
+  }
+
+  async getPublicClasses(query: ClassListQueryDto) {
+    const filter = this.buildClassFilter({
+      ...query,
+      status: query.status || 'active',
+    });
+    const page = Number(query.page || 1);
+    const limit = Number(query.limit || 100);
+    const skip = (page - 1) * limit;
+    const sort = this.resolveClassSort(query);
+
+    const [items, total] = await Promise.all([
+      this.classModel.find(filter).sort(sort).skip(skip).limit(limit).lean(),
+      this.classModel.countDocuments(filter),
+    ]);
+
+    return this.appService.envelope(
+      {
+        items: items.map((item) => this.toPublicClassListItem(item)),
         total,
         page,
         limit,
@@ -408,5 +428,42 @@ export class ClassesService {
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
+  }
+
+  private toPublicClassListItem(item: any) {
+    return {
+      _id: item._id?.toString?.() || item.id,
+      name: item.name,
+      teacherName: item.teacherName,
+      status: item.status,
+      studentCount: item.studentCount,
+      maxStudents: item.maxStudents,
+    };
+  }
+
+  private buildClassFilter(query: ClassListQueryDto) {
+    const filter: Record<string, unknown> = {};
+
+    if (query.status) {
+      filter.status = query.status;
+    }
+    if (query.search) {
+      filter.name = { $regex: query.search, $options: 'i' };
+    }
+    if (query.teacherId) {
+      filter.teacherId = query.teacherId;
+    }
+
+    return filter;
+  }
+
+  private resolveClassSort(query: ClassListQueryDto) {
+    const sortField = query.sortField || query.sort || 'createdAt';
+    const sortOrder = query.sortOrder || query.order || 'desc';
+
+    return {
+      [sortField]: sortOrder === 'asc' ? 1 : -1,
+      _id: -1,
+    } as Record<string, 1 | -1>;
   }
 }
