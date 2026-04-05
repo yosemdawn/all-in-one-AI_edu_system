@@ -19,4 +19,5 @@ export class UserRoleAssignment {
   updatedAt?: Date;
 }
 
-export const UserRoleAssignmentSchema = SchemaFactory.createForClass(UserRoleAssignment);
+export const UserRoleAssignmentSchema =
+  SchemaFactory.createForClass(UserRoleAssignment);

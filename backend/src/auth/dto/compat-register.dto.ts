@@ -1,13 +1,13 @@
-import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { TrimString } from '../../common/dto/transformers';
 
 export class CompatRegisterDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsOptional()
   @IsString()
   username?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsEmail()
   email: string;
 
@@ -19,11 +19,11 @@ export class CompatRegisterDto {
   @IsString()
   confirmPassword?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsString()
   name: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsOptional()
   @IsString()
   classId?: string;

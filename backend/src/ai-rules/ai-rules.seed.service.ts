@@ -19,7 +19,8 @@ export class AiRulesSeedService implements OnApplicationBootstrap {
           name: 'Default Review Rule',
           description: 'Seeded default AI review rule',
           modelType: 'doubao',
-          prompt: 'Provide a score and concise suggestions based on the answer.',
+          prompt:
+            'Provide a score and concise suggestions based on the answer.',
           visibility: 'system',
           status: 'active',
           tags: ['default', 'reading'],

@@ -4,21 +4,58 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
-import { Assignment, AssignmentDocument } from '../assignments/schemas/assignment.schema';
-import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AiReviewQueueService } from './ai-review-queue.service';
+import { AiReviewConfigService } from './ai-review-config.service';
 import { DeleteSubmissionDto } from './dto/delete-submission.dto';
 import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SubmitAssignmentDto } from './dto/submit-assignment.dto';
 import { TeacherReviewDto } from './dto/teacher-review.dto';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
+
+type DocumentIdentifier = string | { toString(): string };
+type SubmissionSource = Pick<
+  Submission,
+  | 'assignmentId'
+  | 'studentId'
+  | 'studentName'
+  | 'studentNumber'
+  | 'classId'
+  | 'className'
+  | 'content'
+  | 'attachments'
+  | 'status'
+  | 'isDraft'
+  | 'submittedAt'
+  | 'submissionCount'
+  | 'aiScore'
+  | 'aiReviewContent'
+  | 'aiReviewMetadata'
+  | 'teacherScore'
+  | 'teacherReviewContent'
+  | 'teacherReviewedAt'
+  | 'aiReviewedAt'
+> & {
+  _id?: DocumentIdentifier;
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
 @Injectable()
 export class SubmissionsService {
@@ -34,6 +71,7 @@ export class SubmissionsService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly appService: AppService,
+    private readonly aiReviewConfigService: AiReviewConfigService,
     @Optional()
     private readonly aiReviewQueueService?: AiReviewQueueService,
   ) {}
@@ -41,7 +79,9 @@ export class SubmissionsService {
   async submit(currentUser: AuthenticatedUser, payload: SubmitAssignmentDto) {
     this.assertRoles(currentUser, ['student']);
 
-    const assignment = await this.assignmentModel.findById(payload.assignmentId);
+    const assignment = await this.assignmentModel.findById(
+      payload.assignmentId,
+    );
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
@@ -83,9 +123,13 @@ export class SubmissionsService {
     });
 
     if (existing) {
-      const previousSubmittedCount = existing.isDraft ? 0 : existing.submissionCount || 0;
+      const previousSubmittedCount = existing.isDraft
+        ? 0
+        : existing.submissionCount || 0;
       if (!payload.isDraft && existing.status === 'teacher_reviewed') {
-        throw new BadRequestException('Reviewed submissions cannot be submitted again');
+        throw new BadRequestException(
+          'Reviewed submissions cannot be submitted again',
+        );
       }
       if (!payload.isDraft && previousSubmittedCount >= 2) {
         throw new BadRequestException('Submission limit reached');
@@ -97,7 +141,9 @@ export class SubmissionsService {
       existing.attachments = payload.attachments || [];
       existing.isDraft = !!payload.isDraft;
       existing.status = payload.isDraft ? 'draft' : 'submitted';
-      existing.submittedAt = payload.isDraft ? existing.submittedAt : new Date();
+      existing.submittedAt = payload.isDraft
+        ? existing.submittedAt
+        : new Date();
       existing.aiScore = null;
       existing.aiReviewContent = null;
       existing.aiReviewMetadata = null;
@@ -199,7 +245,9 @@ export class SubmissionsService {
               }
             : null,
         teacherReview:
-          submission && submission.teacherScore !== null && submission.teacherScore !== undefined
+          submission &&
+          submission.teacherScore !== null &&
+          submission.teacherScore !== undefined
             ? {
                 content: submission.teacherReviewContent,
                 score: submission.teacherScore,
@@ -211,7 +259,10 @@ export class SubmissionsService {
     );
   }
 
-  async deleteSubmission(currentUser: AuthenticatedUser, body: DeleteSubmissionDto) {
+  async deleteSubmission(
+    currentUser: AuthenticatedUser,
+    body: DeleteSubmissionDto,
+  ) {
     const submission = await this.submissionModel.findById(body.submissionId);
     if (!submission) {
       throw new NotFoundException('Submission not found');
@@ -241,13 +292,20 @@ export class SubmissionsService {
     );
   }
 
-  async getSubmissionList(currentUser: AuthenticatedUser, query: SubmissionQueryDto) {
+  async getSubmissionList(
+    currentUser: AuthenticatedUser,
+    query: SubmissionQueryDto,
+  ) {
     this.assertRoles(currentUser, ['teacher', 'superadmin']);
 
     const teacherAssignments = await this.assignmentModel
-      .find(currentUser.role === 'superadmin' ? {} : { teacherId: currentUser.id })
+      .find(
+        currentUser.role === 'superadmin' ? {} : { teacherId: currentUser.id },
+      )
       .lean();
-    const teacherAssignmentIds = teacherAssignments.map((item) => item._id.toString());
+    const teacherAssignmentIds = teacherAssignments.map((item) =>
+      item._id.toString(),
+    );
 
     const filter: Record<string, unknown> = {
       assignmentId: { $in: teacherAssignmentIds },
@@ -256,18 +314,23 @@ export class SubmissionsService {
     if (query.assignmentId) filter.assignmentId = query.assignmentId;
     if (query.classId) filter.classId = query.classId;
     if (query.status === 'submitted') {
-      filter.status = { $in: ['submitted', 'ai_review_queued', 'ai_review_failed'] };
+      filter.status = {
+        $in: ['submitted', 'ai_review_queued', 'ai_review_failed'],
+      };
     } else if (query.status) {
       filter.status = query.status;
     }
-    if (query.studentName) filter.studentName = { $regex: query.studentName, $options: 'i' };
+    if (query.studentName)
+      filter.studentName = { $regex: query.studentName, $options: 'i' };
     if (query.studentNumber) {
       filter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
     }
     if (query.minScore !== undefined || query.maxScore !== undefined) {
       const scoreFilter: Record<string, number> = {};
-      if (query.minScore !== undefined) scoreFilter.$gte = Number(query.minScore);
-      if (query.maxScore !== undefined) scoreFilter.$lte = Number(query.maxScore);
+      if (query.minScore !== undefined)
+        scoreFilter.$gte = Number(query.minScore);
+      if (query.maxScore !== undefined)
+        scoreFilter.$lte = Number(query.maxScore);
       filter.$or = [{ teacherScore: scoreFilter }, { aiScore: scoreFilter }];
     }
 
@@ -293,11 +356,13 @@ export class SubmissionsService {
           ...this.toSubmissionPayload(item),
           _id: item._id.toString(),
           assignmentTitle:
-            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)
-              ?.title || '',
+            teacherAssignments.find(
+              (assignment) => assignment._id.toString() === item.assignmentId,
+            )?.title || '',
           teacherName:
-            teacherAssignments.find((assignment) => assignment._id.toString() === item.assignmentId)
-              ?.teacherName || '',
+            teacherAssignments.find(
+              (assignment) => assignment._id.toString() === item.assignmentId,
+            )?.teacherName || '',
         })),
         total,
         page,
@@ -307,7 +372,10 @@ export class SubmissionsService {
     );
   }
 
-  async getSubmissionDetail(currentUser: AuthenticatedUser, submissionId: string) {
+  async getSubmissionDetail(
+    currentUser: AuthenticatedUser,
+    submissionId: string,
+  ) {
     this.assertRoles(currentUser, ['teacher', 'superadmin']);
 
     const item = await this.submissionModel.findById(submissionId).lean();
@@ -315,12 +383,19 @@ export class SubmissionsService {
       throw new NotFoundException('Submission not found');
     }
 
-    const assignment = await this.assignmentModel.findById(item.assignmentId).lean();
+    const assignment = await this.assignmentModel
+      .findById(item.assignmentId)
+      .lean();
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    if (currentUser.role !== 'superadmin' && assignment.teacherId !== currentUser.id) {
-      throw new ForbiddenException('You are not allowed to view this submission');
+    if (
+      currentUser.role !== 'superadmin' &&
+      assignment.teacherId !== currentUser.id
+    ) {
+      throw new ForbiddenException(
+        'You are not allowed to view this submission',
+      );
     }
 
     return this.appService.envelope(
@@ -343,12 +418,19 @@ export class SubmissionsService {
       throw new BadRequestException('Draft submissions cannot be reviewed');
     }
 
-    const assignment = await this.assignmentModel.findById(item.assignmentId).lean();
+    const assignment = await this.assignmentModel
+      .findById(item.assignmentId)
+      .lean();
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    if (currentUser.role !== 'superadmin' && assignment.teacherId !== currentUser.id) {
-      throw new ForbiddenException('You are not allowed to review this submission');
+    if (
+      currentUser.role !== 'superadmin' &&
+      assignment.teacherId !== currentUser.id
+    ) {
+      throw new ForbiddenException(
+        'You are not allowed to review this submission',
+      );
     }
 
     item.teacherScore = body.teacherScore;
@@ -362,6 +444,10 @@ export class SubmissionsService {
 
   private async markAiReviewQueued(item: SubmissionDocument) {
     if (!this.aiReviewQueueService) {
+      if (this.aiReviewConfigService.aiReviewRequired) {
+        throw new ServiceUnavailableException('AI review queue is unavailable');
+      }
+
       item.status = 'submitted';
       item.aiReviewMetadata = {
         provider: 'doubao',
@@ -405,7 +491,10 @@ export class SubmissionsService {
     );
   }
 
-  private async syncMembershipSubmissionStats(classId: string, studentId: string) {
+  private async syncMembershipSubmissionStats(
+    classId: string,
+    studentId: string,
+  ) {
     const latestSubmitted = await this.submissionModel
       .findOne({
         classId,
@@ -435,10 +524,14 @@ export class SubmissionsService {
     }
   }
 
-  private toSubmissionPayload(item: any) {
+  private readEntityId(item: { _id?: DocumentIdentifier; id?: string }) {
+    return item._id?.toString?.() || item.id || '';
+  }
+
+  private toSubmissionPayload(item: SubmissionSource) {
     return {
-      id: item._id?.toString?.() || item.id,
-      _id: item._id?.toString?.() || item.id,
+      id: this.readEntityId(item),
+      _id: this.readEntityId(item),
       assignmentId: item.assignmentId,
       studentId: item.studentId,
       studentName: item.studentName,

@@ -1,6 +1,9 @@
 import { DatabaseSeedService } from './database-seed.service';
 
 describe('DatabaseSeedService', () => {
+  type SeedServiceDependencies = ConstructorParameters<
+    typeof DatabaseSeedService
+  >;
   const originalEnv = process.env.NODE_ENV;
   const originalDemoSeed = process.env.ENABLE_DEMO_SEED;
 
@@ -41,11 +44,11 @@ describe('DatabaseSeedService', () => {
 
     return {
       service: new DatabaseSeedService(
-        connection as any,
-        userModel as any,
-        classModel as any,
-        membershipModel as any,
-        assignmentModel as any,
+        connection as unknown as SeedServiceDependencies[0],
+        userModel as unknown as SeedServiceDependencies[1],
+        classModel as unknown as SeedServiceDependencies[2],
+        membershipModel as unknown as SeedServiceDependencies[3],
+        assignmentModel as unknown as SeedServiceDependencies[4],
       ),
       connection,
       userModel,

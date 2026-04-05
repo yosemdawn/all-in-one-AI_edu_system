@@ -2,9 +2,15 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { AppService } from '../app.service';
-import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
+import {
+  ClassMembership,
+  ClassMembershipSchema,
+} from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
-import { Submission, SubmissionSchema } from '../submissions/schemas/submission.schema';
+import {
+  Submission,
+  SubmissionSchema,
+} from '../submissions/schemas/submission.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AssignmentsController } from './assignments.controller';
 import { AssignmentsService } from './assignments.service';

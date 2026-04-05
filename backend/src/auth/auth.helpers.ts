@@ -1,17 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import { compare as bcryptCompare, hash as bcryptHash } from 'bcrypt';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class PasswordService {
-  async hash(password: string) {
-    return bcrypt.hash(password, 10);
+  hash(password: string): Promise<string> {
+    return bcryptHash(password, 10);
   }
 
-  async compare(password: string, passwordHash: string) {
-    return bcrypt.compare(password, passwordHash);
+  compare(password: string, passwordHash: string): Promise<boolean> {
+    return bcryptCompare(password, passwordHash);
   }
 }
 
@@ -22,7 +22,11 @@ export class TokenService {
     private readonly configService: ConfigService,
   ) {}
 
-  issueAccessToken(payload: { sub: string; role: string; tokenVersion: number }) {
+  issueAccessToken(payload: {
+    sub: string;
+    role: string;
+    tokenVersion: number;
+  }) {
     const secret = this.configService.get<string>('JWT_SECRET') ?? 'dev-secret';
     return this.jwtService.sign(payload, {
       secret,

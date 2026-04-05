@@ -1,12 +1,12 @@
-import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { TrimString } from '../../common/dto/transformers';
 
 export class RegisterDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsString()
   username: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsEmail()
   email: string;
 
@@ -17,12 +17,12 @@ export class RegisterDto {
   @IsString()
   confirmPassword: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsOptional()
   @IsString()
   name?: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsOptional()
   @IsString()
   classId?: string;

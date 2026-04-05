@@ -29,7 +29,11 @@ export class User {
   @Prop({ required: true, enum: ['superadmin', 'teacher', 'student'] })
   role: 'superadmin' | 'teacher' | 'student';
 
-  @Prop({ required: true, enum: ['active', 'inactive', 'locked'], default: 'active' })
+  @Prop({
+    required: true,
+    enum: ['active', 'inactive', 'locked'],
+    default: 'active',
+  })
   status: 'active' | 'inactive' | 'locked';
 
   @Prop({ required: true })
@@ -58,6 +62,9 @@ export class User {
 
   @Prop({ type: String, default: null })
   passwordResetTokenHash?: string | null;
+
+  @Prop({ type: String, default: null, index: true, sparse: true })
+  passwordResetTokenFingerprint?: string | null;
 
   @Prop({ type: Date, default: null })
   passwordResetExpiresAt?: Date | null;

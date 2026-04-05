@@ -3,16 +3,30 @@ import { AssignmentDocument } from '../assignments/schemas/assignment.schema';
 import { AiReviewConfigService } from './ai-review-config.service';
 import { SubmissionDocument } from './schemas/submission.schema';
 
+type ReviewResult = {
+  success: boolean;
+  error?: string;
+  score?: number;
+  review?: string;
+  highlights?: string[];
+  rawContent?: string;
+  usage?: Record<string, unknown>;
+  model?: string;
+};
+
 @Injectable()
 export class DoubaoAiReviewService {
   constructor(private readonly configService: AiReviewConfigService) {}
 
-  async review(submission: SubmissionDocument, assignment: AssignmentDocument) {
+  async review(
+    submission: SubmissionDocument,
+    assignment: AssignmentDocument,
+  ): Promise<ReviewResult> {
     const apiKey = this.configService.doubaoApiKey;
     if (!apiKey) {
       return {
         success: false,
-        error: '未配置 DOUBAO_API_KEY',
+        error: 'DOUBAO_API_KEY is not configured',
       };
     }
 
@@ -31,7 +45,7 @@ export class DoubaoAiReviewService {
           {
             role: 'system',
             content:
-              '你是作业批改助手。请返回 JSON，格式为 {"score": number, "review": string, "highlights": string[]}。score 只能是 0-100。',
+              'You are an assignment grading assistant. Return JSON only in the shape {"score": number, "review": string, "highlights": string[]}. score must be between 0 and 100.',
           },
           {
             role: 'user',
@@ -46,16 +60,16 @@ export class DoubaoAiReviewService {
       const errorText = await response.text();
       return {
         success: false,
-        error: `Doubao 请求失败: ${response.status} ${errorText}`,
+        error: `Doubao request failed: ${response.status} ${errorText}`,
       };
     }
 
-    const data = (await response.json()) as any;
-    const content = data?.choices?.[0]?.message?.content;
+    const data: unknown = await response.json();
+    const content = this.extractContent(data);
     if (!content) {
       return {
         success: false,
-        error: 'Doubao 返回内容为空',
+        error: 'Doubao response content is empty',
       };
     }
 
@@ -63,19 +77,19 @@ export class DoubaoAiReviewService {
     if (!parsed) {
       return {
         success: false,
-        error: 'Doubao 返回格式无法解析',
+        error: 'Doubao response format could not be parsed',
         rawContent: content,
       };
     }
 
     return {
       success: true,
-      score: Number(parsed.score ?? 0),
-      review: String(parsed.review ?? ''),
-      highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+      score: this.readNumber(parsed, 'score') ?? 0,
+      review: this.readString(parsed, 'review') ?? '',
+      highlights: this.readStringArray(parsed, 'highlights'),
       rawContent: content,
-      usage: data?.usage,
-      model: data?.model || this.configService.doubaoModel,
+      usage: this.readRecord(data, 'usage'),
+      model: this.readString(data, 'model') || this.configService.doubaoModel,
     };
   }
 
@@ -84,27 +98,84 @@ export class DoubaoAiReviewService {
     assignment: AssignmentDocument,
   ) {
     return [
-      `作业标题：${assignment.title}`,
-      `作业描述：${assignment.description}`,
-      `评分说明：${assignment.gradingNotes || '无'}`,
-      `题目材料：${JSON.stringify(assignment.questionMaterial || {}, null, 2)}`,
-      `参考答案：${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
-      `AI 规则：${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
-      `学生答案：${submission.content}`,
+      `Assignment title: ${assignment.title}`,
+      `Assignment description: ${assignment.description || 'N/A'}`,
+      `Grading notes: ${assignment.gradingNotes || 'N/A'}`,
+      `Question material: ${JSON.stringify(assignment.questionMaterial || {}, null, 2)}`,
+      `Reference answer: ${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
+      `AI rule: ${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
+      `Student submission: ${submission.content}`,
     ].join('\n\n');
   }
 
   private extractJson(content: string) {
     try {
-      return JSON.parse(content);
+      return JSON.parse(content) as unknown;
     } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (!match) return null;
       try {
-        return JSON.parse(match[0]);
+        return JSON.parse(match[0]) as unknown;
       } catch {
         return null;
       }
     }
+  }
+
+  private extractContent(value: unknown) {
+    const [firstChoice] = this.readArray(value, 'choices');
+    const message = this.readRecord(firstChoice, 'message');
+    return this.readString(message, 'content');
+  }
+
+  private readArray(value: unknown, key: string) {
+    if (!this.isRecord(value)) {
+      return [];
+    }
+
+    const candidate = value[key];
+    return Array.isArray(candidate) ? (candidate as unknown[]) : [];
+  }
+
+  private readRecord(value: unknown, key: string) {
+    if (!this.isRecord(value)) {
+      return undefined;
+    }
+
+    const candidate = value[key];
+    return this.isRecord(candidate) ? candidate : undefined;
+  }
+
+  private readString(value: unknown, key: string) {
+    if (!this.isRecord(value)) {
+      return undefined;
+    }
+
+    const candidate = value[key];
+    return typeof candidate === 'string' ? candidate : undefined;
+  }
+
+  private readNumber(value: unknown, key: string) {
+    if (!this.isRecord(value)) {
+      return undefined;
+    }
+
+    const candidate = value[key];
+    return typeof candidate === 'number' ? candidate : undefined;
+  }
+
+  private readStringArray(value: unknown, key: string) {
+    if (!this.isRecord(value)) {
+      return [];
+    }
+
+    const candidate = value[key];
+    return Array.isArray(candidate)
+      ? candidate.filter((item): item is string => typeof item === 'string')
+      : [];
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 }

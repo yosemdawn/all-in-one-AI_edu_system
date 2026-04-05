@@ -1,4 +1,13 @@
-import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ToBoolean, ToNumber } from '../../common/dto/transformers';
 
 export class CreateMenuDto {

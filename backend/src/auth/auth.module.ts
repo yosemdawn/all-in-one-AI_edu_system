@@ -4,7 +4,10 @@ import { JwtModule } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppService } from '../app.service';
-import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
+import {
+  ClassMembership,
+  ClassMembershipSchema,
+} from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AuthContextService } from './auth-context.service';

@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import * as bcrypt from 'bcrypt';
+import { hash as bcryptHash } from 'bcrypt';
 import { Connection, Model } from 'mongoose';
 import {
   Assignment,
@@ -54,9 +54,9 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       return;
     }
 
-    const passwordHash = await bcrypt.hash('123456', 10);
+    const passwordHash = await bcryptHash('123456', 10);
 
-    const [admin, teacher, student] = await this.userModel.create([
+    const createdUsers: UserDocument[] = await this.userModel.create([
       {
         username: 'admin',
         email: 'admin@nengdou.local',
@@ -83,8 +83,9 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
         passwordHash,
       },
     ]);
+    const [admin, teacher, student] = createdUsers;
 
-    const classItem = await this.classModel.create({
+    const classItem: ClassDocument = await this.classModel.create({
       name: 'Demo Class 1',
       code: 'A1001',
       teacherId: teacher.id,

@@ -5,8 +5,27 @@ import { ConfigService } from '@nestjs/config';
 export class AiReviewConfigService {
   constructor(private readonly configService: ConfigService) {}
 
+  get isProduction() {
+    return this.configService.get<string>('NODE_ENV') === 'production';
+  }
+
+  get aiReviewRequired() {
+    const configuredValue =
+      this.configService.get<string>('AI_REVIEW_REQUIRED');
+    if (configuredValue === 'true') {
+      return true;
+    }
+    if (configuredValue === 'false') {
+      return false;
+    }
+
+    return this.isProduction;
+  }
+
   get redisUrl() {
-    return this.configService.get<string>('REDIS_URL') || 'redis://127.0.0.1:6379';
+    return (
+      this.configService.get<string>('REDIS_URL') || 'redis://127.0.0.1:6379'
+    );
   }
 
   get doubaoApiKey() {

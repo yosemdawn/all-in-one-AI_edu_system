@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
@@ -17,7 +25,10 @@ export class AiRulesController {
   constructor(private readonly aiRulesService: AiRulesService) {}
 
   @Get()
-  getAiRuleList(@CurrentUser() currentUser: AuthenticatedUser, @Query() query: AiRuleListQueryDto) {
+  getAiRuleList(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: AiRuleListQueryDto,
+  ) {
     return this.aiRulesService.getAiRuleList(currentUser, query);
   }
 
@@ -26,16 +37,25 @@ export class AiRulesController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query('status') status?: string,
   ) {
-    return this.aiRulesService.getAvailableAiRules(currentUser, status || 'active');
+    return this.aiRulesService.getAvailableAiRules(
+      currentUser,
+      status || 'active',
+    );
   }
 
   @Get(':id')
-  getAiRule(@CurrentUser() currentUser: AuthenticatedUser, @Param('id') id: string) {
+  getAiRule(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.aiRulesService.getAiRule(currentUser, id);
   }
 
   @Post()
-  createAiRule(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateAiRuleDto) {
+  createAiRule(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: CreateAiRuleDto,
+  ) {
     return this.aiRulesService.createAiRule(currentUser, body);
   }
 
@@ -49,7 +69,10 @@ export class AiRulesController {
   }
 
   @Post(':id/delete')
-  deleteAiRule(@CurrentUser() currentUser: AuthenticatedUser, @Param('id') id: string) {
+  deleteAiRule(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.aiRulesService.deleteAiRule(currentUser, id);
   }
 

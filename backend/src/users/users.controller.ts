@@ -39,13 +39,19 @@ export class UsersController {
   @Roles('superadmin')
   @Get()
   async getUsers(@Query() query: UserListQueryDto) {
-    return this.appService.envelope(await this.usersService.getUsers(query), 'users fetched');
+    return this.appService.envelope(
+      await this.usersService.getUsers(query),
+      'users fetched',
+    );
   }
 
   @Roles('superadmin')
   @Post()
   async createUser(@Body() body: CreateUserDto) {
-    return this.appService.envelope(await this.usersService.createUser(body), 'user created');
+    return this.appService.envelope(
+      await this.usersService.createUser(body),
+      'user created',
+    );
   }
 
   @Get('profile')
@@ -81,18 +87,27 @@ export class UsersController {
   @Roles('superadmin')
   @Get(':id')
   async getUser(@Param('id') id: string) {
-    return this.appService.envelope(await this.usersService.getUser(id), 'user fetched');
+    return this.appService.envelope(
+      await this.usersService.getUser(id),
+      'user fetched',
+    );
   }
 
   @Roles('superadmin')
   @Patch(':id')
   async patchUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return this.appService.envelope(await this.usersService.updateUser(id, body), 'user updated');
+    return this.appService.envelope(
+      await this.usersService.updateUser(id, body),
+      'user updated',
+    );
   }
 
   @Roles('superadmin')
   @Patch(':id/password')
-  async patchUserPassword(@Param('id') id: string, @Body() body: AdminUpdateUserPasswordDto) {
+  async patchUserPassword(
+    @Param('id') id: string,
+    @Body() body: AdminUpdateUserPasswordDto,
+  ) {
     return this.appService.envelope(
       await this.usersService.updateUserPassword(id, body),
       'password updated',
@@ -101,7 +116,10 @@ export class UsersController {
 
   @Roles('superadmin')
   @Post(':id/reset-password')
-  async resetUserPassword(@Param('id') id: string, @Body() body: ResetUserPasswordDto) {
+  async resetUserPassword(
+    @Param('id') id: string,
+    @Body() body: ResetUserPasswordDto,
+  ) {
     return this.appService.envelope(
       await this.usersService.resetUserPassword(id, body),
       'password reset',
@@ -111,20 +129,30 @@ export class UsersController {
   @Roles('superadmin')
   @Delete(':id')
   async deleteUser(@Param('id') id: string) {
-    return this.appService.envelope(await this.usersService.deleteUser(id), 'user deleted');
+    return this.appService.envelope(
+      await this.usersService.deleteUser(id),
+      'user deleted',
+    );
   }
 
   @Roles('superadmin')
   @Post('batch-import')
   async importUsers(
-    @Body(new ParseArrayPipe({ items: ImportUserRowDto })) body: ImportUserRowDto[],
+    @Body(new ParseArrayPipe({ items: ImportUserRowDto }))
+    body: ImportUserRowDto[],
   ) {
-    return this.appService.envelope(await this.usersService.importUsers(body), 'users imported');
+    return this.appService.envelope(
+      await this.usersService.importUsers(body),
+      'users imported',
+    );
   }
 
   @Roles('superadmin')
   @Post('batch-delete')
   async deleteUsers(@Body() body: DeleteUsersDto) {
-    return this.appService.envelope(await this.usersService.deleteUsers(body), 'users deleted');
+    return this.appService.envelope(
+      await this.usersService.deleteUsers(body),
+      'users deleted',
+    );
   }
 }

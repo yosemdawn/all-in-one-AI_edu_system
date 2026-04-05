@@ -1,8 +1,8 @@
-import { Transform } from 'class-transformer';
 import { IsEmail } from 'class-validator';
+import { TrimString } from '../../common/dto/transformers';
 
 export class ForgotPasswordDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsEmail()
   email: string;
 }

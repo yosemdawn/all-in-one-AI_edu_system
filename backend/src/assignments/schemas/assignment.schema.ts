@@ -40,7 +40,10 @@ export class Assignment {
   @Prop({ default: '' })
   gradingNotes?: string;
 
-  @Prop({ enum: ['answer_sheet', 'answers_only', 'mixed'], default: 'answers_only' })
+  @Prop({
+    enum: ['answer_sheet', 'answers_only', 'mixed'],
+    default: 'answers_only',
+  })
   submissionFormat?: 'answer_sheet' | 'answers_only' | 'mixed';
 
   @Prop({ required: true })
@@ -52,7 +55,11 @@ export class Assignment {
   @Prop({ default: false })
   allowAttachments?: boolean;
 
-  @Prop({ required: true, enum: ['draft', 'published', 'terminated'], default: 'draft' })
+  @Prop({
+    required: true,
+    enum: ['draft', 'published', 'terminated'],
+    default: 'draft',
+  })
   status: 'draft' | 'published' | 'terminated';
 
   @Prop()

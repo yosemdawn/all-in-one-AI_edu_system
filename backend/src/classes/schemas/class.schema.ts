@@ -17,7 +17,11 @@ export class ClassEntity {
   @Prop({ required: true, trim: true })
   teacherName: string;
 
-  @Prop({ required: true, enum: ['active', 'inactive', 'disbanded'], default: 'active' })
+  @Prop({
+    required: true,
+    enum: ['active', 'inactive', 'disbanded'],
+    default: 'active',
+  })
   status: 'active' | 'inactive' | 'disbanded';
 
   @Prop({ default: 0 })

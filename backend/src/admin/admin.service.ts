@@ -15,6 +15,11 @@ import {
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AiModelsService } from './ai-models.service';
 
+type CountAggregateItem = {
+  _id: string;
+  count: number;
+};
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -43,13 +48,13 @@ export class AdminService {
       await Promise.all([
         this.userModel.aggregate([
           { $group: { _id: '$role', count: { $sum: 1 } } },
-        ]),
+        ]) as Promise<CountAggregateItem[]>,
         this.classModel.aggregate([
           { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]),
+        ]) as Promise<CountAggregateItem[]>,
         this.submissionModel.aggregate([
           { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]),
+        ]) as Promise<CountAggregateItem[]>,
         this.aiModelsService.getSummary(),
       ]);
 
@@ -126,10 +131,7 @@ export class AdminService {
     return this.aiModelsService.getDashboardStats();
   }
 
-  private toRoleDistribution(
-    items: Array<{ _id: string; count: number }>,
-    total: number,
-  ) {
+  private toRoleDistribution(items: CountAggregateItem[], total: number) {
     const order = ['superadmin', 'teacher', 'student'];
     return order.map((role) => {
       const found = items.find((item) => item._id === role);
@@ -142,10 +144,7 @@ export class AdminService {
     });
   }
 
-  private toStatusDistribution(
-    items: Array<{ _id: string; count: number }>,
-    total: number,
-  ) {
+  private toStatusDistribution(items: CountAggregateItem[], total: number) {
     return items.map((item) => ({
       status: item._id,
       count: item.count,
@@ -160,7 +159,7 @@ export class AdminService {
   }
 
   private async checkDatabase() {
-    const dbReadyState = this.userModel.db.readyState;
+    const dbReadyState = Number(this.userModel.db.readyState);
     const detail = {
       status: dbReadyState === 1 ? 'ok' : 'error',
       readyState: dbReadyState,
@@ -205,9 +204,10 @@ export class AdminService {
           setTimeout(() => reject(new Error('redis ping timeout')), 2000),
         ),
       ]);
+      const isConnected = pingResponse === 'PONG';
 
       return {
-        status: pingResponse === 'PONG' ? 'ok' : 'error',
+        status: isConnected ? 'ok' : 'error',
         configured: true,
       };
     } catch (error: unknown) {

@@ -68,7 +68,11 @@ export class PermissionsController {
     @Param('userId') userId: string,
     @Body() body: AssignUserRolesDto,
   ) {
-    return this.permissionsService.assignRolesToUser(userId, body?.roleIds || [], currentUser);
+    return this.permissionsService.assignRolesToUser(
+      userId,
+      body?.roleIds || [],
+      currentUser,
+    );
   }
 
   @Roles('superadmin')
@@ -91,7 +95,10 @@ export class PermissionsController {
 
   @Roles('superadmin')
   @Post('roles')
-  createRole(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateRoleDto) {
+  createRole(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: CreateRoleDto,
+  ) {
     return this.permissionsService.createRole(body, currentUser);
   }
 
@@ -127,7 +134,10 @@ export class PermissionsController {
 
   @Roles('superadmin')
   @Post('menus')
-  createMenu(@CurrentUser() currentUser: AuthenticatedUser, @Body() body: CreateMenuDto) {
+  createMenu(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: CreateMenuDto,
+  ) {
     return this.permissionsService.createMenu(body, currentUser);
   }
 

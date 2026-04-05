@@ -9,8 +9,12 @@ import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { CreateMenuDto } from './dto/create-menu.dto';
+import { CreateRoleDto } from './dto/create-role.dto';
 import { MenuListQueryDto } from './dto/menu-list-query.dto';
 import { RoleListQueryDto } from './dto/role-list-query.dto';
+import { UpdateMenuDto } from './dto/update-menu.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 import { Menu, MenuDocument } from './schemas/menu.schema';
 import { Role, RoleDocument } from './schemas/role.schema';
 import {
@@ -26,6 +30,30 @@ const ALLOWED_ROLE_SORT_FIELDS = new Set([
   'code',
   'status',
 ]);
+
+type MenuPayload = {
+  _id: string;
+  name: string;
+  code: string;
+  path: string;
+  component?: string;
+  redirect?: string;
+  type: string;
+  parentId: string | null;
+  icon?: string;
+  sort?: number;
+  hidden: boolean;
+  status: string;
+  meta: Record<string, unknown>;
+  createdBy?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  isSystem: boolean;
+};
+
+type MenuTreeNode = MenuPayload & {
+  children?: MenuTreeNode[];
+};
 
 @Injectable()
 export class PermissionsService {
@@ -202,7 +230,7 @@ export class PermissionsService {
     );
   }
 
-  async createRole(body: any, currentUser: AuthenticatedUser) {
+  async createRole(body: CreateRoleDto, currentUser: AuthenticatedUser) {
     if (!body?.name || !body?.code) {
       throw new BadRequestException('Role name and code are required');
     }
@@ -231,7 +259,7 @@ export class PermissionsService {
     return this.appService.envelope(this.toRolePayload(created), 'success');
   }
 
-  async updateRole(id: string, body: any) {
+  async updateRole(id: string, body: UpdateRoleDto) {
     const role = await this.roleModel.findById(id);
     if (!role) {
       throw new NotFoundException('Role not found');
@@ -336,7 +364,7 @@ export class PermissionsService {
     return this.appService.envelope(this.toMenuPayload(menu), 'success');
   }
 
-  async createMenu(body: any, currentUser: AuthenticatedUser) {
+  async createMenu(body: CreateMenuDto, currentUser: AuthenticatedUser) {
     if (!body?.name || !body?.code || !body?.path) {
       throw new BadRequestException('Menu name, code, and path are required');
     }
@@ -376,7 +404,7 @@ export class PermissionsService {
     return this.appService.envelope(this.toMenuPayload(created), 'success');
   }
 
-  async updateMenu(id: string, body: any) {
+  async updateMenu(id: string, body: UpdateMenuDto) {
     const menu = await this.menuModel.findById(id);
     if (!menu) {
       throw new NotFoundException('Menu not found');
@@ -535,7 +563,9 @@ export class PermissionsService {
     };
   }
 
-  private toMenuPayload(menu: MenuDocument | (Menu & { _id: string })) {
+  private toMenuPayload(
+    menu: MenuDocument | (Menu & { _id: string }),
+  ): MenuPayload {
     return {
       _id: menu._id,
       name: menu.name,
@@ -557,9 +587,9 @@ export class PermissionsService {
     };
   }
 
-  private buildMenuTree(items: Array<Record<string, any>>) {
-    const nodeMap = new Map<string, Record<string, any>>();
-    const roots: Array<Record<string, any>> = [];
+  private buildMenuTree(items: MenuPayload[]) {
+    const nodeMap = new Map<string, MenuTreeNode>();
+    const roots: MenuTreeNode[] = [];
 
     items.forEach((item) => {
       nodeMap.set(item._id, { ...item, children: [] });
@@ -567,13 +597,16 @@ export class PermissionsService {
 
     nodeMap.forEach((node) => {
       if (node.parentId && nodeMap.has(node.parentId)) {
-        nodeMap.get(node.parentId)!.children.push(node);
+        const parentNode = nodeMap.get(node.parentId);
+        if (parentNode?.children) {
+          parentNode.children.push(node);
+        }
       } else {
         roots.push(node);
       }
     });
 
-    const sortNodes = (nodes: Array<Record<string, any>>) => {
+    const sortNodes = (nodes: MenuTreeNode[]) => {
       nodes.sort((left, right) => (left.sort ?? 0) - (right.sort ?? 0));
       nodes.forEach((node) => {
         if (!node.children?.length) {

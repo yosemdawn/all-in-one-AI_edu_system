@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Assignment, AssignmentSchema } from '../assignments/schemas/assignment.schema';
-import { ClassMembership, ClassMembershipSchema } from '../classes/schemas/class-membership.schema';
+import {
+  Assignment,
+  AssignmentSchema,
+} from '../assignments/schemas/assignment.schema';
+import {
+  ClassMembership,
+  ClassMembershipSchema,
+} from '../classes/schemas/class-membership.schema';
 import { ClassEntity, ClassSchema } from '../classes/schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { DatabaseSeedService } from './database-seed.service';
@@ -13,7 +19,7 @@ import { MemoryDatabaseService } from './memory-database.service';
     ConfigModule,
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         if (configService.get<string>('NODE_ENV') === 'test') {
           const testUri = configService.get<string>('TEST_MONGODB_URI');
           return {

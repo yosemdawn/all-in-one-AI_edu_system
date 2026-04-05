@@ -11,6 +11,9 @@ export class AuthSession {
   @Prop({ required: true, index: true })
   refreshTokenHash: string;
 
+  @Prop({ index: true, sparse: true })
+  refreshTokenFingerprint?: string;
+
   @Prop()
   userAgent?: string;
 

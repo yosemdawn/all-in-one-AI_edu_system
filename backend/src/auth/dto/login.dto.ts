@@ -1,8 +1,8 @@
-import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { TrimString } from '../../common/dto/transformers';
 
 export class LoginDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @TrimString()
   @IsString()
   usernameOrEmailOrStudentId: string;
 

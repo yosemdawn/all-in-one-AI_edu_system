@@ -9,6 +9,9 @@ import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { AiRuleListQueryDto } from './dto/ai-rule-list-query.dto';
+import { CopyAiRuleDto } from './dto/copy-ai-rule.dto';
+import { CreateAiRuleDto } from './dto/create-ai-rule.dto';
+import { UpdateAiRuleDto } from './dto/update-ai-rule.dto';
 import { AiRule, AiRuleDocument } from './schemas/ai-rule.schema';
 
 const ALLOWED_AI_RULE_SORT_FIELDS = new Set([
@@ -28,7 +31,10 @@ export class AiRulesService {
     private readonly appService: AppService,
   ) {}
 
-  async getAiRuleList(currentUser: AuthenticatedUser, query: AiRuleListQueryDto) {
+  async getAiRuleList(
+    currentUser: AuthenticatedUser,
+    query: AiRuleListQueryDto,
+  ) {
     const filter: Record<string, unknown> = {};
     if (query?.status) filter.status = query.status;
     if (query?.visibility) filter.visibility = query.visibility;
@@ -58,9 +64,11 @@ export class AiRulesService {
 
     const page = Number(query?.page || 1);
     const pageSize = Number(query?.pageSize || 10);
-    const sortField = ALLOWED_AI_RULE_SORT_FIELDS.has(query?.sort || '')
-      ? query!.sort!
-      : 'createdAt';
+    const requestedSortField = query?.sort;
+    const sortField =
+      requestedSortField && ALLOWED_AI_RULE_SORT_FIELDS.has(requestedSortField)
+        ? requestedSortField
+        : 'createdAt';
     const sortOrder = query?.order === 'asc' ? 1 : -1;
     const skip = (page - 1) * pageSize;
 
@@ -99,8 +107,14 @@ export class AiRulesService {
             ],
           };
 
-    const items = await this.aiRuleModel.find(filter).sort({ createdAt: -1 }).lean();
-    return this.appService.envelope(items.map((item) => this.toPayload(item)), 'success');
+    const items = await this.aiRuleModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+    return this.appService.envelope(
+      items.map((item) => this.toPayload(item)),
+      'success',
+    );
   }
 
   async getAiRule(currentUser: AuthenticatedUser, id: string) {
@@ -113,7 +127,7 @@ export class AiRulesService {
     return this.appService.envelope(this.toPayload(item), 'success');
   }
 
-  async createAiRule(currentUser: AuthenticatedUser, body: any) {
+  async createAiRule(currentUser: AuthenticatedUser, body: CreateAiRuleDto) {
     if (!body?.name || !body?.prompt) {
       throw new BadRequestException('Rule name and prompt are required');
     }
@@ -134,10 +148,17 @@ export class AiRulesService {
       createdByName: currentUser.name,
     });
 
-    return this.appService.envelope({ id: created._id, success: true }, 'success');
+    return this.appService.envelope(
+      { id: created._id, success: true },
+      'success',
+    );
   }
 
-  async updateAiRule(currentUser: AuthenticatedUser, id: string, body: any) {
+  async updateAiRule(
+    currentUser: AuthenticatedUser,
+    id: string,
+    body: UpdateAiRuleDto,
+  ) {
     const item = await this.aiRuleModel.findById(id);
     if (!item) {
       throw new NotFoundException('AI rule not found');
@@ -155,7 +176,8 @@ export class AiRulesService {
           : body.visibility;
     }
     if (body.status !== undefined) item.status = body.status;
-    if (body.tags !== undefined) item.tags = Array.isArray(body.tags) ? body.tags : [];
+    if (body.tags !== undefined)
+      item.tags = Array.isArray(body.tags) ? body.tags : [];
 
     await item.save();
     return this.appService.envelope({ id, success: true }, 'success');
@@ -172,7 +194,11 @@ export class AiRulesService {
     return this.appService.envelope({ id, success: true }, 'success');
   }
 
-  async copyAiRule(currentUser: AuthenticatedUser, id: string, body: any) {
+  async copyAiRule(
+    currentUser: AuthenticatedUser,
+    id: string,
+    body: CopyAiRuleDto,
+  ) {
     const item = await this.aiRuleModel.findById(id).lean();
     if (!item) {
       throw new NotFoundException('AI rule not found');
