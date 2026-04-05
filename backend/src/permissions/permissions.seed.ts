@@ -8,7 +8,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Setting',
     sort: 10,
-    meta: { title: 'System Dashboard' },
+    meta: { title: '系统概览' },
     isSystem: true,
   },
   {
@@ -20,7 +20,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'User',
     sort: 20,
-    meta: { title: 'Users' },
+    meta: { title: '用户管理' },
     isSystem: true,
   },
   {
@@ -33,7 +33,7 @@ export const SYSTEM_MENUS = [
     icon: 'User',
     sort: 21,
     hidden: true,
-    meta: { title: 'User Detail', hidden: true, activeMenu: '/system/users' },
+    meta: { title: '用户详情', hidden: true, activeMenu: '/system/users' },
     isSystem: true,
   },
   {
@@ -45,7 +45,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Menu',
     sort: 30,
-    meta: { title: 'Menus' },
+    meta: { title: '菜单管理' },
     isSystem: true,
   },
   {
@@ -57,7 +57,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Avatar',
     sort: 40,
-    meta: { title: 'Roles' },
+    meta: { title: '角色管理' },
     isSystem: true,
   },
   {
@@ -69,7 +69,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Cpu',
     sort: 50,
-    meta: { title: 'AI Models' },
+    meta: { title: 'AI 模型' },
     isSystem: true,
   },
   {
@@ -81,7 +81,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'House',
     sort: 10,
-    meta: { title: 'Teaching Center' },
+    meta: { title: '教学中心' },
     isSystem: true,
   },
   {
@@ -93,7 +93,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Reading',
     sort: 20,
-    meta: { title: 'Class Management' },
+    meta: { title: '班级管理' },
     isSystem: true,
   },
   {
@@ -106,7 +106,7 @@ export const SYSTEM_MENUS = [
     icon: 'Reading',
     sort: 21,
     hidden: true,
-    meta: { title: 'Class Detail', hidden: true },
+    meta: { title: '班级详情', hidden: true },
     isSystem: true,
   },
   {
@@ -118,7 +118,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'EditPen',
     sort: 30,
-    meta: { title: 'Assignments' },
+    meta: { title: '作业管理' },
     isSystem: true,
   },
   {
@@ -131,7 +131,7 @@ export const SYSTEM_MENUS = [
     icon: 'EditPen',
     sort: 31,
     hidden: true,
-    meta: { title: 'Create Assignment', hidden: true },
+    meta: { title: '创建作业', hidden: true },
     isSystem: true,
   },
   {
@@ -144,7 +144,7 @@ export const SYSTEM_MENUS = [
     icon: 'EditPen',
     sort: 32,
     hidden: true,
-    meta: { title: 'Assignment Detail', hidden: true },
+    meta: { title: '作业详情', hidden: true },
     isSystem: true,
   },
   {
@@ -156,7 +156,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Setting',
     sort: 40,
-    meta: { title: 'AI Rules' },
+    meta: { title: 'AI 规则' },
     isSystem: true,
   },
   {
@@ -168,7 +168,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'DocumentChecked',
     sort: 50,
-    meta: { title: 'Reviews' },
+    meta: { title: '批改中心' },
     isSystem: true,
   },
   {
@@ -180,7 +180,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'House',
     sort: 10,
-    meta: { title: 'Study Center' },
+    meta: { title: '学习中心' },
     isSystem: true,
   },
   {
@@ -192,7 +192,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'Reading',
     sort: 20,
-    meta: { title: 'My Classes' },
+    meta: { title: '我的班级' },
     isSystem: true,
   },
   {
@@ -204,7 +204,7 @@ export const SYSTEM_MENUS = [
     type: 'menu',
     icon: 'EditPen',
     sort: 30,
-    meta: { title: 'My Assignments' },
+    meta: { title: '我的作业' },
     isSystem: true,
   },
   {
@@ -217,7 +217,7 @@ export const SYSTEM_MENUS = [
     icon: 'EditPen',
     sort: 31,
     hidden: true,
-    meta: { title: 'Assignment Detail', hidden: true },
+    meta: { title: '作业详情', hidden: true },
     isSystem: true,
   },
   {
@@ -230,7 +230,7 @@ export const SYSTEM_MENUS = [
     icon: 'EditPen',
     sort: 32,
     hidden: true,
-    meta: { title: 'Submission Detail', hidden: true },
+    meta: { title: '提交详情', hidden: true },
     isSystem: true,
   },
 ];

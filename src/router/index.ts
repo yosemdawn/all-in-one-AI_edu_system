@@ -7,6 +7,12 @@ import LayoutIndex from "@/layouts/index.vue";
 // 静态路由 - 不需要权限控制的路由
 export const constantRoutes: Array<RouteRecordRaw> = [
   {
+    path: "/home",
+    name: "Home",
+    component: () => import("../views/Home.vue"),
+    meta: { requiresAuth: false },
+  },
+  {
     path: "/login",
     name: "Login",
     component: () => import("../views/Login.vue"),
@@ -133,6 +139,7 @@ export function resetRouter() {
     if (
       route.name &&
       [
+        "Home",
         "Login",
         "ForceChangePassword",
         "NotFound",

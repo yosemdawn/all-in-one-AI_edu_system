@@ -10,14 +10,13 @@
             v-html="assignment.description"
           ></div>
 
-          <!-- 展开/收起按钮 - 放在内容底部 -->
           <div v-if="shouldShowToggle" class="flex justify-center mt-3">
             <el-button
               link
               type="primary"
               :icon="isExpanded ? ArrowUp : ArrowDown"
-              @click="toggleExpanded"
               class="!text-sm"
+              @click="toggleExpanded"
             >
               {{ isExpanded ? "收起" : "展开全部" }}
             </el-button>
@@ -27,11 +26,6 @@
         <div v-if="assignment.questionMaterial?.content" class="info-card">
           <h4>作业原题</h4>
           <div v-html="assignment.questionMaterial.content"></div>
-        </div>
-
-        <div v-if="assignment.referenceAnswer?.content" class="info-card info-card--answer">
-          <h4>标准答案</h4>
-          <div v-html="assignment.referenceAnswer.content"></div>
         </div>
 
         <div v-if="assignment.gradingNotes" class="info-card info-card--notes">
@@ -48,14 +42,11 @@
             <el-icon><Clock /></el-icon>
             <span>截止时间：{{ formatDate(assignment.dueDate || assignment.endDate) }}</span>
           </div>
-          <div class="flex items-center gap-2" v-if="assignment.submissionFormat">
+          <div v-if="assignment.submissionFormat" class="flex items-center gap-2">
             <el-icon><Star /></el-icon>
             <span>提交形式：{{ getSubmissionFormatText(assignment.submissionFormat) }}</span>
           </div>
-          <div
-            v-if="isOverdue"
-            class="flex items-center gap-2 text-red-600 font-medium"
-          >
+          <div v-if="isOverdue" class="flex items-center gap-2 text-red-600 font-medium">
             <el-icon><Warning /></el-icon>
             <span>已过期</span>
           </div>
@@ -66,20 +57,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 import {
+  ArrowDown,
+  ArrowUp,
   Clock,
   Star,
-  Warning,
   User,
-  ArrowUp,
-  ArrowDown,
+  Warning,
 } from "@element-plus/icons-vue";
 import type { Submission } from "../../../../api/submissions";
-import type {
-  AssignmentMaterial,
-  SubmissionFormat,
-} from "@/types/assignments";
+import type { AssignmentMaterial, SubmissionFormat } from "@/types/assignments";
 import { useSubmissionUtils } from "../composables";
 
 type SubmissionAssignment = {
@@ -89,7 +77,6 @@ type SubmissionAssignment = {
   endDate?: string;
   maxScore?: number;
   questionMaterial?: AssignmentMaterial;
-  referenceAnswer?: AssignmentMaterial;
   gradingNotes?: string;
   submissionFormat?: SubmissionFormat;
 };
@@ -106,7 +93,7 @@ const props = defineProps<Props>();
 
 const { formatDate } = useSubmissionUtils();
 
-const getSubmissionFormatText = (format?: string) => {
+const getSubmissionFormatText = (format?: SubmissionFormat) => {
   switch (format) {
     case "answer_sheet":
       return "答题卡 / 图片 / PDF";
@@ -119,18 +106,15 @@ const getSubmissionFormatText = (format?: string) => {
   }
 };
 
-// 折叠状态
 const isExpanded = ref(false);
-const descriptionRef = ref();
+const descriptionRef = ref<HTMLElement>();
 const shouldShowToggle = ref(false);
 
-// 检测内容是否超过3行
 const checkContentHeight = async () => {
   await nextTick();
   if (!descriptionRef.value) return;
 
-  // 创建一个临时元素来测量内容高度
-  const tempElement = descriptionRef.value.cloneNode(true);
+  const tempElement = descriptionRef.value.cloneNode(true) as HTMLElement;
   tempElement.style.position = "absolute";
   tempElement.style.visibility = "hidden";
   tempElement.style.height = "auto";
@@ -140,32 +124,27 @@ const checkContentHeight = async () => {
 
   document.body.appendChild(tempElement);
 
-  // 计算3行的高度（假设行高为1.5em，字体大小为14px）
-  const lineHeight = 24; // 约1.5 * 16px
+  const lineHeight = 24;
   const maxHeight = lineHeight * 3;
-
-  const actualHeight = tempElement.scrollHeight;
-  shouldShowToggle.value = actualHeight > maxHeight;
+  shouldShowToggle.value = tempElement.scrollHeight > maxHeight;
 
   document.body.removeChild(tempElement);
 };
 
-// 切换展开/收起
 const toggleExpanded = () => {
   isExpanded.value = !isExpanded.value;
 };
 
-// 监听assignment内容变化
 watch(
   () => props.assignment.description,
   () => {
-    checkContentHeight();
+    void checkContentHeight();
   },
   { immediate: true }
 );
 
 onMounted(() => {
-  checkContentHeight();
+  void checkContentHeight();
 });
 
 defineOptions({
@@ -179,11 +158,6 @@ defineOptions({
   border-radius: 10px;
   border: 1px solid #dbeafe;
   background: #f8fbff;
-}
-
-.info-card--answer {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
 }
 
 .info-card--notes {
@@ -204,47 +178,19 @@ defineOptions({
   color: #374151;
 }
 
-/* 表单分区样式 */
 .form-section {
   border-bottom: 1px solid #f0f2f5;
   padding: 20px;
 }
 
-.section-header {
-  padding: 20px 24px 16px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0;
-  display: flex;
-  align-items: center;
-}
-
-.section-title::before {
-  content: "";
-  width: 4px;
-  height: 16px;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  margin-right: 12px;
-  border-radius: 2px;
-}
-
 .section-content {
-  /* padding: 24px; */
+  max-width: none;
 }
-</style>
 
-<style scoped>
 .prose {
   max-width: none;
 }
 
-/* 行数限制样式 */
 .line-clamp-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
