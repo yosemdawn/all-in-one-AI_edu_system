@@ -227,7 +227,6 @@ export class SubmissionsService {
           teacherName: assignment.teacherName,
           aiRule: assignment.aiRule,
           questionMaterial: assignment.questionMaterial,
-          referenceAnswer: assignment.referenceAnswer,
           gradingNotes: assignment.gradingNotes,
           submissionFormat: assignment.submissionFormat,
           status: assignment.status,

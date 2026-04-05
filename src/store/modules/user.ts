@@ -214,7 +214,7 @@ const actions = {
   /**
    * 用户登出
    */
-  async logout({ commit, dispatch }) {
+  async logout({ commit, dispatch }, redirectTo = "/login") {
     try {
       await logout();
     } catch (error) {
@@ -229,7 +229,7 @@ const actions = {
       await dispatch("auth/clearPermissions", null, { root: true });
 
       // 重定向到登录页
-      router.push("/login");
+      router.push(redirectTo);
 
       ElMessage.success("登出成功");
     }

@@ -22,7 +22,7 @@
         </div>
       </div>
 
-      <div class="p-6" v-if="assignment">
+      <div v-if="assignment" class="p-6">
         <div class="prose max-w-none">
           <h3 class="text-lg font-medium text-gray-900 mb-3">作业要求</h3>
           <div class="text-gray-700" v-html="assignment.description"></div>
@@ -31,14 +31,6 @@
         <div v-if="assignment.questionMaterial?.content" class="mt-6 detail-card">
           <h3 class="text-lg font-medium text-gray-900 mb-3">题目内容</h3>
           <div class="text-gray-700" v-html="assignment.questionMaterial.content"></div>
-        </div>
-
-        <div
-          v-if="assignment.referenceAnswer?.content"
-          class="mt-6 detail-card detail-card--answer"
-        >
-          <h3 class="text-lg font-medium text-gray-900 mb-3">参考答案</h3>
-          <div class="text-gray-700" v-html="assignment.referenceAnswer.content"></div>
         </div>
 
         <div v-if="assignment.gradingNotes" class="mt-6 detail-card detail-card--notes">
@@ -57,10 +49,7 @@
             </div>
             <div v-if="assignment.hasSubmitted">
               <span class="text-gray-500">批改状态：</span>
-              <el-tag
-                :type="getReviewStatusType(assignment.submissionStatus)"
-                size="small"
-              >
+              <el-tag :type="getReviewStatusType(assignment.submissionStatus)" size="small">
                 {{ getReviewStatusText(assignment.submissionStatus) }}
               </el-tag>
             </div>
@@ -103,15 +92,33 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { useRoute, useRouter } from "vue-router";
 import { getStudentAssignment } from "../../../api/assignments";
+
+type AssignmentDetail = {
+  title?: string;
+  teacherName?: string;
+  endDate?: string;
+  className?: string;
+  description?: string;
+  questionMaterial?: { content?: string };
+  gradingNotes?: string;
+  hasSubmitted?: boolean;
+  hasDraft?: boolean;
+  canSubmit?: boolean;
+  isExpired?: boolean;
+  status?: string;
+  submissionStatus?: string;
+  terminatedReason?: string;
+  classId?: string;
+};
 
 const route = useRoute();
 const router = useRouter();
 
 const loading = ref(false);
-const assignment = ref<any>(null);
+const assignment = ref<AssignmentDetail | null>(null);
 
 const assignmentId = computed(
   () => (route.query.assignmentId || route.params.id) as string
@@ -120,8 +127,8 @@ const classId = computed(() => route.query.classId as string | undefined);
 
 const loadAssignment = async () => {
   if (!assignmentId.value) {
-    ElMessage.error("缺少作业ID");
-    router.replace("/student/assignments");
+    ElMessage.error("缺少作业 ID");
+    await router.replace("/student/assignments");
     return;
   }
 
@@ -141,7 +148,7 @@ const formatDate = (date?: string) => {
   return new Date(date).toLocaleString("zh-CN");
 };
 
-const getAssignmentStatusType = (item?: any) => {
+const getAssignmentStatusType = (item?: AssignmentDetail | null) => {
   if (!item) return "info";
   if (item.status === "terminated") return "warning";
   if (item.isExpired) return "danger";
@@ -150,7 +157,7 @@ const getAssignmentStatusType = (item?: any) => {
   return "primary";
 };
 
-const getAssignmentStatusText = (item?: any) => {
+const getAssignmentStatusText = (item?: AssignmentDetail | null) => {
   if (!item) return "未知";
   if (item.status === "terminated") return "已终止";
   if (item.isExpired) return "已过期";
@@ -159,7 +166,7 @@ const getAssignmentStatusText = (item?: any) => {
   return "待处理";
 };
 
-const getSubmissionStatusType = (item?: any) => {
+const getSubmissionStatusType = (item?: AssignmentDetail | null) => {
   if (!item) return "info";
   if (item.hasDraft && !item.hasSubmitted) return "warning";
   if (item.hasSubmitted) return "success";
@@ -167,7 +174,7 @@ const getSubmissionStatusType = (item?: any) => {
   return "info";
 };
 
-const getSubmissionStatusText = (item?: any) => {
+const getSubmissionStatusText = (item?: AssignmentDetail | null) => {
   if (!item) return "未知";
   if (item.hasDraft && !item.hasSubmitted) return "草稿";
   if (item.hasSubmitted) return "已提交";
@@ -193,7 +200,7 @@ const getReviewStatusText = (status?: string) => {
     case "teacher_reviewed":
       return "已批改";
     case "ai_reviewed":
-      return "AI已评";
+      return "AI 已评";
     case "submitted":
       return "待批改";
     default:
@@ -202,11 +209,11 @@ const getReviewStatusText = (status?: string) => {
 };
 
 const goBack = () => {
-  router.push("/student/assignments");
+  void router.push("/student/assignments");
 };
 
 const goToSubmission = () => {
-  router.push({
+  void router.push({
     path: "/student/submissions",
     query: {
       assignmentId: assignmentId.value,
@@ -216,7 +223,7 @@ const goToSubmission = () => {
 };
 
 onMounted(() => {
-  loadAssignment();
+  void loadAssignment();
 });
 </script>
 
@@ -232,11 +239,6 @@ onMounted(() => {
   border-radius: 12px;
   border: 1px solid #dbeafe;
   background: #f8fbff;
-}
-
-.detail-card--answer {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
 }
 
 .detail-card--notes {

@@ -1,5 +1,6 @@
 import { getUserResources } from "../../api/user-role";
 import store from "../../store";
+import { localizeUserMenus } from "../../utils/menuLocalization";
 
 /**
  * Auth模块 - 负责菜单、路由和权限管理
@@ -50,8 +51,9 @@ export const auth = {
 
     // 设置菜单树
     SET_MENUS(state, menus) {
-      state.menus = menus;
-      localStorage.setItem("menus", JSON.stringify(menus));
+      const localizedMenus = localizeUserMenus(menus || []);
+      state.menus = localizedMenus;
+      localStorage.setItem("menus", JSON.stringify(localizedMenus));
     },
 
     // 设置角色列表

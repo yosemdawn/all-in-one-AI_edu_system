@@ -668,7 +668,6 @@ export class AssignmentsService {
         className: matchedClass?.name || currentUser.className,
         aiRule: assignment.aiRule,
         questionMaterial: assignment.questionMaterial,
-        referenceAnswer: assignment.referenceAnswer,
         gradingNotes: assignment.gradingNotes,
         submissionFormat: assignment.submissionFormat,
       },
