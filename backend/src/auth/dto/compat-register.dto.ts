@@ -22,9 +22,4 @@ export class CompatRegisterDto {
   @TrimString()
   @IsString()
   name: string;
-
-  @TrimString()
-  @IsOptional()
-  @IsString()
-  classId?: string;
 }

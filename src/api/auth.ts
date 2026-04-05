@@ -115,6 +115,7 @@ export interface RegisterParams {
 
 export interface RegisterResult {
   token: string;
+  refreshToken: string;
   success: boolean;
   message: string;
   userId?: string;

@@ -1,11 +1,23 @@
 <template>
   <el-dialog
     v-model="dialogVisible"
-    title="加入班级"
+    :title="dialogTitle"
     width="400px"
     :close-on-click-modal="false"
+    :close-on-press-escape="!mandatory"
+    :show-close="!mandatory"
     destroy-on-close
   >
+    <el-alert
+      v-if="mandatory"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="mb-4"
+      title="请输入班级邀请码"
+      description="当前账号还没有加入任何班级。加入班级前，学生端功能将被限制使用。"
+    />
+
     <el-form
       ref="formRef"
       :model="formData"
@@ -26,9 +38,9 @@
 
     <template #footer>
       <div class="flex justify-end space-x-3">
-        <el-button @click="handleCancel"> 取消 </el-button>
+        <el-button v-if="!mandatory" @click="handleCancel"> 取消 </el-button>
         <el-button type="primary" :loading="loading" @click="handleSubmit">
-          加入班级
+          {{ mandatory ? "立即加入班级" : "加入班级" }}
         </el-button>
       </div>
     </template>
@@ -48,6 +60,10 @@ export default defineComponent({
       type: Boolean,
       required: true,
     },
+    mandatory: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["update:modelValue", "success"],
   setup(props, { emit }) {
@@ -62,6 +78,10 @@ export default defineComponent({
       get: () => props.modelValue,
       set: (value) => emit("update:modelValue", value),
     });
+
+    const dialogTitle = computed(() =>
+      props.mandatory ? "班级邀请码必填" : "加入班级"
+    );
 
     // 表单数据
     const formData = reactive<JoinClassParams>({
@@ -96,6 +116,7 @@ export default defineComponent({
 
     // 处理取消
     const handleCancel = () => {
+      if (props.mandatory) return;
       dialogVisible.value = false;
     };
 
@@ -123,8 +144,10 @@ export default defineComponent({
       formRef,
       loading,
       dialogVisible,
+      dialogTitle,
       formData,
       formRules,
+      mandatory: props.mandatory,
       resetForm,
       handleCancel,
       handleSubmit,

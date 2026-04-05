@@ -52,3 +52,20 @@ export const ToStringArray = () =>
 
 export const TrimString = () =>
   Transform(({ value }: TransformFnParams): unknown => trimStringValue(value));
+
+export const ToOptionalString = (sentinels: string[] = []) =>
+  Transform(({ value }: TransformFnParams): unknown => {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const normalized = value.trim();
+    if (!normalized || sentinels.includes(normalized)) {
+      return undefined;
+    }
+
+    return normalized;
+  });

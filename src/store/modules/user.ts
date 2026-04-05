@@ -62,7 +62,7 @@ const actions = {
   /**
    * 用户登录
    */
-  async login({ commit }, { usernameOrEmailOrStudentId, password, rememberMe = false }) {
+  async login({ commit, dispatch }, { usernameOrEmailOrStudentId, password, rememberMe = false }) {
     try {
       const response = await login({ usernameOrEmailOrStudentId, password, rememberMe });
 
@@ -78,6 +78,8 @@ const actions = {
         isFirstLogin: response.isFirstLogin,
         ...(response.user && response.user),
       });
+
+      await dispatch("auth/resetAuthResources", null, { root: true });
 
       return response;
     } catch (error) {
@@ -127,12 +129,13 @@ const actions = {
       // 设置用户基本信息
       commit("SET_USER_INFO", {
         token: response.token,
+        refreshToken: response.refreshToken,
         tokenExpiresAt: Date.now() + response.expiresIn * 1000,
       });
 
       // 获取用户信息和菜单
+      await dispatch("auth/resetAuthResources", null, { root: true });
       await dispatch("getUserInfo");
-      await dispatch("auth/initMenuRole", null, { root: true });
 
       router.push("/dashboard");
 
