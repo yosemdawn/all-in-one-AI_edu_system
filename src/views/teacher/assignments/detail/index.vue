@@ -85,6 +85,19 @@ import type {
   AssignmentDetail,
 } from "@/api/assignments";
 
+const VALID_SUBMISSION_STATUSES = new Set([
+  "submitted",
+  "draft",
+  "not_submitted",
+]);
+const VALID_GRADING_STATUSES = new Set([
+  "pending",
+  "draft",
+  "submitted",
+  "ai_reviewed",
+  "teacher_reviewed",
+]);
+
 // 路由
 const route = useRoute();
 const router = useRouter();
@@ -114,6 +127,37 @@ const pagination = reactive({
 // 组件引用
 const searchFormRef = ref<InstanceType<typeof StudentSearchForm> | null>(null);
 
+const sanitizeSearchParams = (
+  rawParams?: Partial<AssignmentSubmissionsQueryParams> | Record<string, unknown>
+): AssignmentSubmissionsQueryParams => {
+  const params = rawParams || {};
+  const cleanString = (value: unknown) => {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "-1") return undefined;
+    return trimmed;
+  };
+
+  const submissionStatus = cleanString(params.submissionStatus);
+  const gradingStatus = cleanString(params.gradingStatus);
+
+  return {
+    page: pagination.page,
+    limit: pagination.limit,
+    classId: cleanString(params.classId),
+    studentName: cleanString(params.studentName),
+    studentNumber: cleanString(params.studentNumber),
+    submissionStatus:
+      submissionStatus && VALID_SUBMISSION_STATUSES.has(submissionStatus)
+        ? (submissionStatus as AssignmentSubmissionsQueryParams["submissionStatus"])
+        : undefined,
+    gradingStatus:
+      gradingStatus && VALID_GRADING_STATUSES.has(gradingStatus)
+        ? (gradingStatus as AssignmentSubmissionsQueryParams["gradingStatus"])
+        : undefined,
+  };
+};
+
 // 返回上一页
 const goBack = () => {
   router.back();
@@ -134,11 +178,7 @@ const loadSubmissionData = async (searchParams?: any) => {
   loading.value = true;
   try {
     // 构建查询参数
-    const params: AssignmentSubmissionsQueryParams = {
-      page: pagination.page,
-      limit: pagination.limit,
-      ...searchParams,
-    };
+    const params = sanitizeSearchParams(searchParams);
 
     const response = await getAssignmentStudents(assignmentId.value, params);
 

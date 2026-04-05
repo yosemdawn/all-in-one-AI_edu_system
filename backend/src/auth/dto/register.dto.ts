@@ -21,9 +21,4 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   name?: string;
-
-  @TrimString()
-  @IsOptional()
-  @IsString()
-  classId?: string;
 }

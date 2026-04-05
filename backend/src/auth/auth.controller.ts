@@ -147,7 +147,6 @@ export class AuthController {
       password: body.password,
       confirmPassword: body.confirmPassword || body.password,
       name: body.name,
-      classId: body.classId,
     });
   }
 }

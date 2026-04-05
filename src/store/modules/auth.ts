@@ -71,6 +71,15 @@ export const auth = {
       localStorage.removeItem("userInfo");
       localStorage.removeItem("token");
     },
+
+    RESET_AUTH_RESOURCES(state) {
+      state.permissions = [];
+      state.menus = [];
+      state.roles = [];
+      localStorage.removeItem("permissions");
+      localStorage.removeItem("menus");
+      localStorage.removeItem("roles");
+    },
   },
 
   actions: {
@@ -117,6 +126,10 @@ export const auth = {
     clearPermissions({ commit }) {
       console.log("clearPermissions");
       commit("CLEAR_AUTH_STATE");
+    },
+
+    resetAuthResources({ commit }) {
+      commit("RESET_AUTH_RESOURCES");
     },
   },
 };

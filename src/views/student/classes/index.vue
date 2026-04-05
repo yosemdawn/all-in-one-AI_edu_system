@@ -7,21 +7,32 @@
     <AssignmentList />
 
     <!-- 加入班级对话框 -->
-    <JoinClassDialog v-model="showJoinDialog" @success="handleJoinSuccess" />
+    <JoinClassDialog
+      v-model="showJoinDialog"
+      :mandatory="requiresInviteCode"
+      @success="handleJoinSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, provide } from "vue";
+import { computed, ref, provide, watch } from "vue";
+import { useStore } from "vuex";
 import ClassList from "./components/ClassList.vue";
 import AssignmentList from "./components/AssignmentList.vue";
 import JoinClassDialog from "../../../components/JoinClassDialog.vue";
+
+const store = useStore();
 
 // 共享状态
 const selectedClass = ref(null);
 const selectedClassId = ref<string | null>(null);
 const showJoinDialog = ref(false);
 const classListRef = ref(null);
+const userInfo = computed(() => store.getters["user/getUserInfo"]);
+const requiresInviteCode = computed(
+  () => userInfo.value?.role === "student" && !userInfo.value?.classId
+);
 
 // 设置选中的班级
 const setSelectedClass = (classItem: any) => {
@@ -37,12 +48,22 @@ const refreshClassList = () => {
 };
 
 // 加入班级成功处理
-const handleJoinSuccess = () => {
+const handleJoinSuccess = async () => {
   // 刷新班级列表
+  await store.dispatch("user/getUserInfo");
   refreshClassList();
+  showJoinDialog.value = false;
 };
 
 // 提供数据给子组件
+watch(
+  requiresInviteCode,
+  (value) => {
+    showJoinDialog.value = value;
+  },
+  { immediate: true }
+);
+
 provide("selectedClass", selectedClass);
 provide("selectedClassId", selectedClassId);
 provide("setSelectedClass", setSelectedClass);

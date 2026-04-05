@@ -107,8 +107,13 @@ export interface AssignmentSubmissionsQueryParams {
   classId?: string;
   studentName?: string;
   studentNumber?: string;
-  submissionStatus?: "draft" | "submitted" | "ai_reviewed" | "teacher_reviewed";
-  gradingStatus?: "pending" | "ai_reviewed" | "teacher_reviewed";
+  submissionStatus?: "draft" | "submitted" | "not_submitted";
+  gradingStatus?:
+    | "pending"
+    | "draft"
+    | "submitted"
+    | "ai_reviewed"
+    | "teacher_reviewed";
   page?: number;
   limit?: number;
 }

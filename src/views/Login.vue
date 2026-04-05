@@ -36,6 +36,15 @@
             <p class="form-subtitle">
               {{ isRegister ? "创建您的账户" : "欢迎回来" }}
             </p>
+            <el-alert
+              v-if="isRegister"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="mt-4 text-left"
+              title="仅支持学生自助注册"
+              description="注册成功后需要输入班级邀请码，加入班级前将无法使用学生端功能。"
+            />
           </div>
 
           <el-form
@@ -86,31 +95,6 @@
             </el-form-item>
 
             <!-- 注册表单显示班级选择字段 -->
-            <el-form-item v-if="isRegister" label="选择班级" prop="classId">
-              <el-select
-                v-model="form.classId"
-                placeholder="请选择班级"
-                class="w-full"
-                filterable
-                clearable
-                :loading="classLoading"
-              >
-                <el-option
-                  v-for="classItem in availableClasses"
-                  :key="classItem._id"
-                  :label="classItem.name"
-                  :value="classItem._id"
-                >
-                  <div class="flex items-center justify-between gap-3">
-                    <span>{{ classItem.name }}</span>
-                    <span class="text-xs text-gray-400">
-                      {{ classItem.teacherName || "未分配教师" }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-
             <!-- 密码字段 -->
             <el-form-item label="密码" prop="password">
               <el-input
@@ -198,13 +182,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from "vue";
+import { ref, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
 import { ElMessage } from "element-plus";
 import { QuestionFilled } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
-import { getPublicClassList } from "@/api/classes";
 
 // 路由实例
 const router = useRouter();
@@ -220,15 +203,12 @@ const formRef = ref<FormInstance>();
 const isRegister = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
-const classLoading = ref(false);
-const availableClasses = ref<Array<{ _id: string; name: string; teacherName?: string }>>([]);
 
 // 表单数据
 const form = reactive({
   username: "",
   email: "",
   studentId: "",
-  classId: "",
   password: "",
   confirmPassword: "",
   rememberMe: true, // 默认勾选记住密码
@@ -251,7 +231,6 @@ const rules = reactive<FormRules>({
     { required: true, message: "请输入邮箱", trigger: "blur" },
     { type: "email", message: "请输入正确的邮箱格式", trigger: "blur" },
   ],
-  classId: [{ required: true, message: "请选择班级", trigger: "change" }],
   studentId: [
     { required: true, message: "请输入学号", trigger: "blur" },
     { min: 6, max: 20, message: "学号长度应在6-20个字符之间", trigger: "blur" },
@@ -287,30 +266,6 @@ const handleForgotPassword = () => {
   });
 };
 
-const loadAvailableClasses = async () => {
-  if (classLoading.value || availableClasses.value.length > 0) return;
-
-  classLoading.value = true;
-  try {
-    const response = await getPublicClassList({
-      page: 1,
-      limit: 100,
-      status: "active",
-    });
-    availableClasses.value = response.items || [];
-  } catch (err) {
-    availableClasses.value = [];
-  } finally {
-    classLoading.value = false;
-  }
-};
-
-watch(isRegister, (value) => {
-  if (value) {
-    loadAvailableClasses();
-  }
-});
-
 // 提交表单
 const submitForm = async () => {
   if (!formRef.value) return;
@@ -328,7 +283,6 @@ const submitForm = async () => {
             email: form.email,
             password: form.password,
             confirmPassword: form.confirmPassword,
-            classId: form.classId,
           });
 
           ElMessage.success("注册成功");

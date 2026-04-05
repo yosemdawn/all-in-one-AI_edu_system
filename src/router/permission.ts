@@ -36,6 +36,14 @@ function getRoleDashboardPath(roles: string[]): string {
   return "/404";
 }
 
+function shouldForceStudentJoinClass(userInfo: any, path: string): boolean {
+  if (!userInfo || userInfo.role !== "student") {
+    return false;
+  }
+
+  return !userInfo.classId && path !== "/student/classes";
+}
+
 /**
  * 设置页面标题
  * @param to 目标路由
@@ -172,6 +180,12 @@ router.beforeEach(
         NProgress.done();
       }
     } else {
+      const userInfo = store.getters["user/getUserInfo"];
+      if (shouldForceStudentJoinClass(userInfo, to.path)) {
+        next("/student/classes");
+        return;
+      }
+
       // 如果访问的是 /dashboard，根据角色重定向到对应的控制台
       if (to.path === "/dashboard") {
         const userRoles = store.getters["auth/userRoles"];

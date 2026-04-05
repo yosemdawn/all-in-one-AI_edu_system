@@ -7,11 +7,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { createHash, randomBytes } from 'crypto';
 import { AppService } from '../app.service';
-import {
-  ClassMembership,
-  ClassMembershipDocument,
-} from '../classes/schemas/class-membership.schema';
-import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AuthContextService } from './auth-context.service';
 import type { AuthenticatedUser } from './authenticated-user.interface';
@@ -33,10 +28,6 @@ export class AuthService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(AuthSession.name)
     private readonly authSessionModel: Model<AuthSessionDocument>,
-    @InjectModel(ClassEntity.name)
-    private readonly classModel: Model<ClassDocument>,
-    @InjectModel(ClassMembership.name)
-    private readonly membershipModel: Model<ClassMembershipDocument>,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly authContextService: AuthContextService,
@@ -158,7 +149,6 @@ export class AuthService {
     const normalizedEmail = body.email.toLowerCase().trim();
     const normalizedUsername = body.username.trim();
     const normalizedName = body.name?.trim() || normalizedUsername;
-    const normalizedClassId = body.classId?.trim();
 
     const existingUser = await this.userModel.findOne({
       $or: [{ email: normalizedEmail }, { username: normalizedUsername }],
@@ -171,20 +161,6 @@ export class AuthService {
       throw new BadRequestException('Username already exists');
     }
 
-    let classItem: ClassDocument | null = null;
-    if (normalizedClassId) {
-      classItem = await this.classModel.findById(normalizedClassId);
-      if (!classItem) {
-        throw new BadRequestException('Class not found');
-      }
-      if (classItem.status !== 'active') {
-        throw new BadRequestException('Class is not available');
-      }
-      if ((classItem.studentCount || 0) >= (classItem.maxStudents || 60)) {
-        throw new BadRequestException('Class is full');
-      }
-    }
-
     const passwordHash = await this.hashPassword(body.password);
 
     const user = await this.userModel.create({
@@ -195,26 +171,7 @@ export class AuthService {
       role: 'student',
       status: 'active',
       passwordHash,
-      classId: classItem?.id,
-      className: classItem?.name,
     });
-
-    if (classItem) {
-      await this.membershipModel.create({
-        classId: classItem.id,
-        studentId: user.id,
-        studentName: user.name,
-        studentNumber: user.studentId,
-        status: 'active',
-        joinMethod: 'register',
-        joinedAt: new Date(),
-        totalSubmissions: 0,
-        lastSubmissionTime: null,
-      });
-
-      classItem.studentCount += 1;
-      await classItem.save();
-    }
 
     const token = this.tokenService.issueAccessToken({
       sub: user.id,
