@@ -14,6 +14,7 @@ import {
   Submission,
   SubmissionDocument,
 } from '../submissions/schemas/submission.schema';
+import { UpdateAiModelDto } from './dto/update-ai-model.dto';
 import { AiModel, AiModelDocument } from './schemas/ai-model.schema';
 
 @Injectable()
@@ -63,7 +64,7 @@ export class AiModelsService implements OnApplicationBootstrap {
     return this.appService.envelope(this.toAdminPayload(model), 'success');
   }
 
-  async updateModel(code: string, body: any) {
+  async updateModel(code: string, body: UpdateAiModelDto) {
     const model = await this.aiModelModel.findOne({ code });
     if (!model) {
       throw new NotFoundException('AI model not found');
@@ -132,15 +133,25 @@ export class AiModelsService implements OnApplicationBootstrap {
       throw new NotFoundException('AI model not found');
     }
 
-    const configured = this.hasCredentials(model);
+    if (!this.hasCredentials(model)) {
+      return this.appService.envelope(
+        {
+          success: false,
+          responseTime: 0,
+          message: `${code} credentials are missing`,
+        },
+        'success',
+      );
+    }
+
+    const startedAt = Date.now();
+    const result = await this.probeModelConnection(model);
 
     return this.appService.envelope(
       {
-        success: configured,
-        responseTime: configured ? 120 : 0,
-        message: configured
-          ? `${code} connection ok`
-          : `${code} credentials are missing`,
+        success: result.success,
+        responseTime: Date.now() - startedAt,
+        message: result.message,
       },
       'success',
     );
@@ -383,8 +394,11 @@ export class AiModelsService implements OnApplicationBootstrap {
     submission: SubmissionDocument | Submission,
     code: string,
   ) {
-    const provider = String(submission.aiReviewMetadata?.provider || 'doubao');
-    const modelUsed = String(submission.aiReviewMetadata?.modelUsed || '');
+    const provider =
+      this.readMetadataString(submission.aiReviewMetadata, 'provider') ||
+      'doubao';
+    const modelUsed =
+      this.readMetadataString(submission.aiReviewMetadata, 'modelUsed') || '';
     return provider === code || modelUsed === code;
   }
 
@@ -401,15 +415,85 @@ export class AiModelsService implements OnApplicationBootstrap {
     return Number.isFinite(totalTokensValue) ? totalTokensValue : 0;
   }
 
-  private hasCredentials(model: AiModelDocument | AiModel) {
-    if (model.apiKey || model.accessKey || model.secretKey) {
-      return true;
+  private readMetadataString(
+    metadata: Submission['aiReviewMetadata'] | undefined,
+    key: string,
+  ) {
+    const value = metadata?.[key];
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private async probeModelConnection(model: AiModelDocument | AiModel) {
+    const apiKey = this.resolveApiKey(model);
+    if (!apiKey) {
+      return {
+        success: false,
+        message: `${model.code} credentials are missing`,
+      };
     }
 
-    if (model.code === 'doubao' && process.env.DOUBAO_API_KEY) {
+    const baseUrl = model.baseUrl.replace(/\/$/, '');
+
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model.modelName,
+          messages: [
+            {
+              role: 'user',
+              content: 'Reply with OK.',
+            },
+          ],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          message: `${model.code} connection failed: ${response.status} ${errorText}`,
+        };
+      }
+
+      return {
+        success: true,
+        message: `${model.code} connection ok`,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown connection error';
+      return {
+        success: false,
+        message: `${model.code} connection failed: ${message}`,
+      };
+    }
+  }
+
+  private hasCredentials(model: AiModelDocument | AiModel) {
+    if (this.resolveApiKey(model) || model.accessKey || model.secretKey) {
       return true;
     }
 
     return false;
+  }
+
+  private resolveApiKey(model: AiModelDocument | AiModel) {
+    if (model.apiKey) {
+      return model.apiKey;
+    }
+
+    if (model.code === 'doubao' && process.env.DOUBAO_API_KEY) {
+      return process.env.DOUBAO_API_KEY;
+    }
+
+    return '';
   }
 }

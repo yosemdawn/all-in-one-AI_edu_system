@@ -1,17 +1,22 @@
 import { AdminService } from './admin.service';
 
 describe('AdminService', () => {
-  const createCountModel = (count: number) =>
-    ({
-      countDocuments: jest.fn().mockResolvedValue(count),
-      aggregate: jest.fn(),
-      find: jest.fn(),
-      db: {
-        readyState: 1,
-        name: 'nengdou_ai_test',
-        db: { admin: () => ({ ping: jest.fn() }) },
-      },
-    }) as any;
+  type AdminServiceDependencies = ConstructorParameters<typeof AdminService>;
+  type CountAggregateItem = {
+    _id: string;
+    count: number;
+  };
+
+  const createCountModel = (count: number) => ({
+    countDocuments: jest.fn().mockResolvedValue(count),
+    aggregate: jest.fn<Promise<CountAggregateItem[]>, [unknown?]>(),
+    find: jest.fn(),
+    db: {
+      readyState: 1,
+      name: 'nengdou_ai_test',
+      db: { admin: () => ({ ping: jest.fn() }) },
+    },
+  });
 
   it('builds overview aggregates and percentages', async () => {
     const userModel = createCountModel(10);
@@ -34,16 +39,20 @@ describe('AdminService', () => {
       getSummary: jest.fn().mockResolvedValue({ totalModels: 2 }),
     };
     const appService = {
-      envelope: jest.fn((data, message) => ({ code: 200, message, data })),
+      envelope: jest.fn((data: unknown, message: string) => ({
+        code: 200,
+        message,
+        data,
+      })),
     };
 
     const service = new AdminService(
-      userModel,
-      classModel,
-      assignmentModel,
-      submissionModel,
-      aiModelsService as any,
-      appService as any,
+      userModel as unknown as AdminServiceDependencies[0],
+      classModel as unknown as AdminServiceDependencies[1],
+      assignmentModel as unknown as AdminServiceDependencies[2],
+      submissionModel as unknown as AdminServiceDependencies[3],
+      aiModelsService as unknown as AdminServiceDependencies[4],
+      appService as unknown as AdminServiceDependencies[5],
     );
 
     const result = await service.getOverview();

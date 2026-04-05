@@ -7,6 +7,20 @@ export class AppService {
   }
 
   getHello() {
-    return this.envelope({ name: 'nengdou-backend', ok: true }, 'backend ready');
+    return this.envelope(
+      { name: 'nengdou-backend', ok: true },
+      'backend ready',
+    );
+  }
+
+  getHealth() {
+    return this.envelope(
+      {
+        ok: true,
+        service: 'nengdou-backend',
+        timestamp: new Date().toISOString(),
+      },
+      'healthy',
+    );
   }
 }

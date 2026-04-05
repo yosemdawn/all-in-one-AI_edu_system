@@ -1,4 +1,11 @@
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { ToBoolean, ToNumber } from '../../common/dto/transformers';
 
 export class UpdateAiModelDto {

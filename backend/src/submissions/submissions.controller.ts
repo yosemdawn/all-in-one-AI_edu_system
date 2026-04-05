@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
@@ -57,7 +65,10 @@ export class SubmissionsController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Param('submissionId') submissionId: string,
   ) {
-    return this.submissionsService.getSubmissionDetail(currentUser, submissionId);
+    return this.submissionsService.getSubmissionDetail(
+      currentUser,
+      submissionId,
+    );
   }
 
   @Roles('teacher', 'superadmin')

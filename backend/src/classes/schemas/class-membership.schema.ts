@@ -33,5 +33,6 @@ export class ClassMembership {
   lastSubmissionTime?: Date | null;
 }
 
-export const ClassMembershipSchema = SchemaFactory.createForClass(ClassMembership);
+export const ClassMembershipSchema =
+  SchemaFactory.createForClass(ClassMembership);
 ClassMembershipSchema.index({ classId: 1, studentId: 1 }, { unique: true });

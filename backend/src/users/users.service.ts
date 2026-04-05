@@ -17,7 +17,13 @@ import {
   Submission,
   SubmissionDocument,
 } from '../submissions/schemas/submission.schema';
+import { AdminUpdateUserPasswordDto } from './dto/admin-update-user-password.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 import { ImportUserRowDto } from './dto/import-user-row.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
+import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserListQueryDto } from './dto/user-list-query.dto';
 import { User, UserDocument } from './schemas/user.schema';
 
@@ -32,6 +38,25 @@ const ALLOWED_USER_SORT_FIELDS = new Set([
   'status',
   'studentId',
 ]);
+
+type UserPayloadSource = {
+  _id?: { toString(): string };
+  id?: string;
+  username?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  status?: string;
+  studentId?: string;
+  phone?: string;
+  avatar?: string;
+  meta?: Record<string, unknown>;
+  classId?: string;
+  className?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastLoginAt?: Date;
+};
 
 @Injectable()
 export class UsersService {
@@ -110,7 +135,10 @@ export class UsersService {
     return this.toUserPayload(user, true);
   }
 
-  async updateCurrentUserProfile(currentUser: AuthenticatedUser, body: any) {
+  async updateCurrentUserProfile(
+    currentUser: AuthenticatedUser,
+    body: UpdateUserProfileDto,
+  ) {
     const user = await this.getCurrentUserDocument(currentUser);
 
     if (body.email) {
@@ -133,16 +161,18 @@ export class UsersService {
     return this.toUserPayload(user, true);
   }
 
-  async updateCurrentUserPassword(currentUser: AuthenticatedUser, body: any) {
+  async updateCurrentUserPassword(
+    currentUser: AuthenticatedUser,
+    body: UpdateUserPasswordDto,
+  ) {
     const user = await this.getCurrentUserDocument(currentUser);
-    const currentPassword = body?.currentPassword;
-    const newPassword = body?.newPassword;
+    const { currentPassword, newPassword } = body;
 
     if (!currentPassword) {
       throw new BadRequestException('Current password is required');
     }
 
-    const passwordMatched = await this.passwordService.compare(
+    const passwordMatched = await this.comparePassword(
       currentPassword,
       user.passwordHash,
     );
@@ -157,7 +187,7 @@ export class UsersService {
       );
     }
 
-    user.passwordHash = await this.passwordService.hash(newPassword);
+    user.passwordHash = await this.hashPassword(newPassword);
     user.passwordChangedAt = new Date();
     user.mustChangePassword = false;
     user.lastLogoutAt = new Date();
@@ -167,7 +197,7 @@ export class UsersService {
     return { success: true };
   }
 
-  async createUser(body: any) {
+  async createUser(body: CreateUserDto) {
     if (!body.username || !body.email || !body.password || !body.name) {
       throw new BadRequestException(
         'username, email, name, and password are required',
@@ -181,7 +211,7 @@ export class UsersService {
       studentId: normalizedRole === 'student' ? body.studentId : undefined,
     });
 
-    const passwordHash = await this.passwordService.hash(body.password);
+    const passwordHash = await this.hashPassword(body.password);
     const user = await this.userModel.create({
       username: body.username,
       email: body.email,
@@ -203,7 +233,7 @@ export class UsersService {
     return this.getUser(user.id);
   }
 
-  async updateUser(id: string, body: any) {
+  async updateUser(id: string, body: UpdateUserDto) {
     const user = await this.userModel.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -237,20 +267,20 @@ export class UsersService {
     return this.getUser(id);
   }
 
-  async updateUserPassword(id: string, body: any) {
+  async updateUserPassword(id: string, body: AdminUpdateUserPasswordDto) {
     const user = await this.userModel.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const newPassword = body?.newPassword;
+    const { newPassword } = body;
     if (!newPassword || String(newPassword).length < 6) {
       throw new BadRequestException(
         'New password must be at least 6 characters',
       );
     }
 
-    user.passwordHash = await this.passwordService.hash(newPassword);
+    user.passwordHash = await this.hashPassword(newPassword);
     user.passwordChangedAt = new Date();
     user.mustChangePassword = false;
     user.lastLogoutAt = new Date();
@@ -260,7 +290,7 @@ export class UsersService {
     return { success: true, message: 'password updated' };
   }
 
-  async resetUserPassword(id: string, body?: any) {
+  async resetUserPassword(id: string, body?: ResetUserPasswordDto) {
     const user = await this.userModel.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -273,7 +303,7 @@ export class UsersService {
       );
     }
 
-    user.passwordHash = await this.passwordService.hash(newPassword);
+    user.passwordHash = await this.hashPassword(newPassword);
     user.passwordChangedAt = new Date();
     user.mustChangePassword = true;
     user.lastLogoutAt = new Date();
@@ -330,15 +360,18 @@ export class UsersService {
           username,
           email,
           password: item.password || '123456',
-          name: item.name,
+          name: item.name || username,
           role: item.role || 'student',
           studentId: item.studentId,
           phone: item.phone,
           status: item.status || 'active',
         });
         successCount += 1;
-      } catch (error: any) {
-        failures.push({ index, reason: error?.message || 'import failed' });
+      } catch (error: unknown) {
+        failures.push({
+          index,
+          reason: this.getErrorMessage(error, 'import failed'),
+        });
       }
     }
 
@@ -351,7 +384,7 @@ export class UsersService {
     };
   }
 
-  async deleteUsers(body: any) {
+  async deleteUsers(body: { userIds?: string[] }) {
     const userIds = Array.isArray(body?.userIds) ? body.userIds : [];
     const failures: Array<{ userId: string; reason: string }> = [];
     let successCount = 0;
@@ -360,8 +393,11 @@ export class UsersService {
       try {
         await this.deleteUser(userId);
         successCount += 1;
-      } catch (error: any) {
-        failures.push({ userId, reason: error?.message || 'delete failed' });
+      } catch (error: unknown) {
+        failures.push({
+          userId,
+          reason: this.getErrorMessage(error, 'delete failed'),
+        });
       }
     }
 
@@ -376,6 +412,22 @@ export class UsersService {
 
   private async getCurrentUserDocument(currentUser: AuthenticatedUser) {
     return this.authContextService.requireUser(currentUser.id);
+  }
+
+  private async hashPassword(password: string): Promise<string> {
+    const hashedPassword = await this.passwordService.hash(password);
+    return hashedPassword;
+  }
+
+  private async comparePassword(
+    password: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    const isMatched = await this.passwordService.compare(
+      password,
+      passwordHash,
+    );
+    return isMatched;
   }
 
   private async assertUniqueUserFields(
@@ -413,7 +465,11 @@ export class UsersService {
     }
   }
 
-  private toUserPayload(user: any, includeAuthDates = false) {
+  private getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  private toUserPayload(user: UserPayloadSource, includeAuthDates = false) {
     return {
       _id: user._id?.toString?.() || user.id,
       username: user.username,

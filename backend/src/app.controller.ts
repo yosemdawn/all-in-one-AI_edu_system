@@ -10,8 +10,21 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('healthz')
+  healthz() {
+    return this.appService.getHealth();
+  }
+
+  @Get('readyz')
+  readyz() {
+    return this.appService.getHealth();
+  }
+
   @Get('v1/templates/:type')
   getTemplate(@Param('type') type: string) {
-    return this.appService.envelope({ type, url: `/templates/${type}.xlsx` }, 'success');
+    return this.appService.envelope(
+      { type, url: `/templates/${type}.xlsx` },
+      'success',
+    );
   }
 }

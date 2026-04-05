@@ -1,5 +1,6 @@
-import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+import { ToBoolean } from '../../common/dto/transformers';
 
 export class AssignmentQueryDto {
   @IsOptional()
@@ -43,18 +44,7 @@ export class AssignmentQueryDto {
   endDate?: string;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') {
-      return undefined;
-    }
-    if (value === true || value === 'true') {
-      return true;
-    }
-    if (value === false || value === 'false') {
-      return false;
-    }
-    return value;
-  })
+  @ToBoolean()
   isExpired?: boolean;
 
   @IsOptional()

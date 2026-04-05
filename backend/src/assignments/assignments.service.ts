@@ -8,10 +8,17 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
-import { ClassMembership, ClassMembershipDocument } from '../classes/schemas/class-membership.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from '../classes/schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from '../classes/schemas/class.schema';
-import { Submission, SubmissionDocument } from '../submissions/schemas/submission.schema';
+import {
+  Submission,
+  SubmissionDocument,
+} from '../submissions/schemas/submission.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { AssignmentStudentsQueryDto } from './dto/assignment-students-query.dto';
 import { AssignmentQueryDto } from './dto/assignment-query.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentStatusDto } from './dto/update-assignment-status.dto';
@@ -33,6 +40,77 @@ const ALLOWED_ASSIGNMENT_SORT_FIELDS = new Set([
   'status',
   'teacherName',
 ]);
+type DocumentIdentifier = string | { toString(): string };
+type AssignmentSource = Pick<
+  Assignment,
+  | 'title'
+  | 'description'
+  | 'teacherId'
+  | 'teacherName'
+  | 'classes'
+  | 'aiRule'
+  | 'questionMaterial'
+  | 'referenceAnswer'
+  | 'gradingNotes'
+  | 'submissionFormat'
+  | 'startDate'
+  | 'endDate'
+  | 'allowAttachments'
+  | 'status'
+  | 'terminatedReason'
+> & {
+  _id?: DocumentIdentifier;
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+type AssignmentStats = {
+  total: number;
+  submitted: number;
+  graded: number;
+  pending: number;
+  totalStudents: number;
+  totalSubmissions: number;
+  reviewedSubmissions: number;
+  pendingSubmissions: number;
+  draftSubmissions: number;
+};
+type AssignmentStudentStatus = NormalizedSubmissionStatus | 'not_submitted';
+type AssignmentStudentRow = {
+  _id: string;
+  studentId: string;
+  studentName: string;
+  studentNumber: string;
+  classId: string;
+  className: string;
+  status: AssignmentStudentStatus;
+  submittedAt: Date | null | undefined;
+  content: string;
+  contentPreview: string;
+  wordCount: number;
+  aiScore: number | null;
+  teacherScore: number | null;
+  teacherReviewedAt: Date | null | undefined;
+  teacherName: string;
+};
+type StudentAssignmentListItem = {
+  id: string;
+  title: string;
+  teacherName: string;
+  startDate: Date;
+  endDate: Date;
+  status: Assignment['status'];
+  terminatedReason?: string;
+  isExpired: boolean;
+  hasSubmitted: boolean;
+  hasDraft: boolean;
+  submissionStatus?: NormalizedSubmissionStatus;
+  submissionId?: string;
+  allowAttachments: boolean;
+  createdAt?: Date;
+  classId: string;
+  className: string;
+};
 
 @Injectable()
 export class AssignmentsService {
@@ -50,7 +128,10 @@ export class AssignmentsService {
     private readonly appService: AppService,
   ) {}
 
-  async listAssignments(currentUser: AuthenticatedUser, query: AssignmentQueryDto) {
+  async listAssignments(
+    currentUser: AuthenticatedUser,
+    query: AssignmentQueryDto,
+  ) {
     this.assertTeacherPrivileges(currentUser);
 
     const filter = this.buildTeacherAssignmentFilter(currentUser, query);
@@ -103,13 +184,16 @@ export class AssignmentsService {
     this.assertCanManageAssignment(currentUser, item.teacherId);
     const stats = await this.getAssignmentStats(item);
 
-    return this.appService.envelope(this.toAssignmentDetail(item, stats), 'success');
+    return this.appService.envelope(
+      this.toAssignmentDetail(item, stats),
+      'success',
+    );
   }
 
   async getAssignmentStudents(
     currentUser: AuthenticatedUser,
     id: string,
-    query?: Record<string, any>,
+    query?: AssignmentStudentsQueryDto,
   ) {
     this.assertTeacherPrivileges(currentUser);
 
@@ -132,13 +216,21 @@ export class AssignmentsService {
     };
 
     if (query?.studentName) {
-      membershipFilter.studentName = { $regex: query.studentName, $options: 'i' };
+      membershipFilter.studentName = {
+        $regex: query.studentName,
+        $options: 'i',
+      };
     }
     if (query?.studentNumber) {
-      membershipFilter.studentNumber = { $regex: query.studentNumber, $options: 'i' };
+      membershipFilter.studentNumber = {
+        $regex: query.studentNumber,
+        $options: 'i',
+      };
     }
 
-    const memberships = await this.membershipModel.find(membershipFilter).lean();
+    const memberships = await this.membershipModel
+      .find(membershipFilter)
+      .lean();
     const studentIds = memberships.map((item) => item.studentId);
     const submissions = studentIds.length
       ? await this.submissionModel
@@ -150,8 +242,10 @@ export class AssignmentsService {
           .lean()
       : [];
 
-    const submissionMap = new Map(submissions.map((item) => [item.studentId, item]));
-    let rows = memberships.map((member) => {
+    const submissionMap = new Map(
+      submissions.map((item) => [item.studentId, item]),
+    );
+    let rows: AssignmentStudentRow[] = memberships.map((member) => {
       const submission = submissionMap.get(member.studentId);
       const normalizedStatus = submission
         ? this.normalizeSubmissionStatus(submission.status)
@@ -164,12 +258,17 @@ export class AssignmentsService {
         studentNumber: member.studentNumber || '',
         classId: member.classId,
         className:
-          assignment.classes.find((item) => item.id === member.classId)?.name || '',
+          assignment.classes.find((item) => item.id === member.classId)?.name ||
+          '',
         status: normalizedStatus,
         submittedAt: submission?.submittedAt || null,
         content: submission?.content || '',
-        contentPreview: submission?.content ? this.getContentPreview(submission.content) : '',
-        wordCount: submission?.content ? this.getWordCount(submission.content) : 0,
+        contentPreview: submission?.content
+          ? this.getContentPreview(submission.content)
+          : '',
+        wordCount: submission?.content
+          ? this.getWordCount(submission.content)
+          : 0,
         aiScore: submission?.aiScore ?? null,
         teacherScore: submission?.teacherScore ?? null,
         teacherReviewedAt: submission?.teacherReviewedAt || null,
@@ -181,7 +280,10 @@ export class AssignmentsService {
       const hasSubmission = row.status !== 'not_submitted';
       const isDraft = row.status === 'draft';
 
-      if (query?.submissionStatus === 'submitted' && (!hasSubmission || isDraft)) {
+      if (
+        query?.submissionStatus === 'submitted' &&
+        (!hasSubmission || isDraft)
+      ) {
         return false;
       }
       if (query?.submissionStatus === 'draft' && !isDraft) {
@@ -213,10 +315,16 @@ export class AssignmentsService {
     );
   }
 
-  async createAssignment(currentUser: AuthenticatedUser, payload: CreateAssignmentDto) {
+  async createAssignment(
+    currentUser: AuthenticatedUser,
+    payload: CreateAssignmentDto,
+  ) {
     this.assertTeacherPrivileges(currentUser);
 
-    const classes = await this.resolveAssignmentClasses(currentUser, payload.classes);
+    const classes = await this.resolveAssignmentClasses(
+      currentUser,
+      payload.classes,
+    );
     const item = await this.assignmentModel.create({
       title: payload.title,
       description: payload.description,
@@ -235,7 +343,10 @@ export class AssignmentsService {
     });
 
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
+    return this.appService.envelope(
+      this.toAssignmentDetail(item.toObject(), stats),
+      'success',
+    );
   }
 
   async updateAssignment(
@@ -253,23 +364,36 @@ export class AssignmentsService {
     this.assertCanManageAssignment(currentUser, item.teacherId);
 
     if (payload.classes) {
-      item.classes = await this.resolveAssignmentClasses(currentUser, payload.classes);
+      item.classes = await this.resolveAssignmentClasses(
+        currentUser,
+        payload.classes,
+      );
     }
 
     if (payload.title !== undefined) item.title = payload.title;
-    if (payload.description !== undefined) item.description = payload.description;
+    if (payload.description !== undefined)
+      item.description = payload.description;
     if (payload.aiRule !== undefined) item.aiRule = payload.aiRule;
-    if (payload.questionMaterial !== undefined) item.questionMaterial = payload.questionMaterial;
-    if (payload.referenceAnswer !== undefined) item.referenceAnswer = payload.referenceAnswer;
-    if (payload.gradingNotes !== undefined) item.gradingNotes = payload.gradingNotes;
-    if (payload.submissionFormat !== undefined) item.submissionFormat = payload.submissionFormat;
-    if (payload.startDate !== undefined) item.startDate = new Date(payload.startDate);
+    if (payload.questionMaterial !== undefined)
+      item.questionMaterial = payload.questionMaterial;
+    if (payload.referenceAnswer !== undefined)
+      item.referenceAnswer = payload.referenceAnswer;
+    if (payload.gradingNotes !== undefined)
+      item.gradingNotes = payload.gradingNotes;
+    if (payload.submissionFormat !== undefined)
+      item.submissionFormat = payload.submissionFormat;
+    if (payload.startDate !== undefined)
+      item.startDate = new Date(payload.startDate);
     if (payload.endDate !== undefined) item.endDate = new Date(payload.endDate);
-    if (payload.allowAttachments !== undefined) item.allowAttachments = payload.allowAttachments;
+    if (payload.allowAttachments !== undefined)
+      item.allowAttachments = payload.allowAttachments;
 
     await item.save();
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
+    return this.appService.envelope(
+      this.toAssignmentDetail(item.toObject(), stats),
+      'success',
+    );
   }
 
   async updateAssignmentStatus(
@@ -291,7 +415,10 @@ export class AssignmentsService {
     await item.save();
 
     const stats = await this.getAssignmentStats(item.toObject());
-    return this.appService.envelope(this.toAssignmentDetail(item.toObject(), stats), 'success');
+    return this.appService.envelope(
+      this.toAssignmentDetail(item.toObject(), stats),
+      'success',
+    );
   }
 
   async deleteAssignment(currentUser: AuthenticatedUser, id: string) {
@@ -317,7 +444,9 @@ export class AssignmentsService {
     query?: AssignmentQueryDto,
   ) {
     if (currentUser.role !== 'student') {
-      throw new ForbiddenException('Only students can access student assignments');
+      throw new ForbiddenException(
+        'Only students can access student assignments',
+      );
     }
 
     const memberships = await this.membershipModel
@@ -353,10 +482,14 @@ export class AssignmentsService {
         studentId: currentUser.id,
       })
       .lean();
-    const submissionMap = new Map(submissions.map((item) => [item.assignmentId, item]));
+    const submissionMap = new Map(
+      submissions.map((item) => [item.assignmentId, item]),
+    );
 
-    let items = assignments.map((item) => {
-      const availableClasses = item.classes.filter((cls) => classIds.includes(cls.id));
+    let items: StudentAssignmentListItem[] = assignments.map((item) => {
+      const availableClasses = item.classes.filter((cls) =>
+        classIds.includes(cls.id),
+      );
       const matchedClass = availableClasses[0];
       const submission = submissionMap.get(item._id.toString());
       const normalizedStatus = submission
@@ -387,7 +520,9 @@ export class AssignmentsService {
 
     items = items.filter((item) => {
       if (query?.businessStatus === 'todo') {
-        return item.status === 'published' && !item.isExpired && !item.hasSubmitted;
+        return (
+          item.status === 'published' && !item.isExpired && !item.hasSubmitted
+        );
       }
       if (query?.businessStatus === 'completed') {
         return item.hasSubmitted;
@@ -428,14 +563,18 @@ export class AssignmentsService {
     return this.appService.envelope(
       {
         totalAssignments: items.length,
-        submittedCount: items.filter((item: any) => item.hasSubmitted).length,
+        submittedCount: items.filter((item) => item.hasSubmitted).length,
         todoCount: items.filter(
-          (item: any) => item.status === 'published' && !item.isExpired && !item.hasSubmitted,
+          (item) =>
+            item.status === 'published' &&
+            !item.isExpired &&
+            !item.hasSubmitted,
         ).length,
-        draftCount: items.filter((item: any) => item.hasDraft).length,
-        expiredCount: items.filter((item: any) => item.isExpired).length,
-        reviewedCount: items.filter((item: any) => item.submissionStatus === 'teacher_reviewed')
-          .length,
+        draftCount: items.filter((item) => item.hasDraft).length,
+        expiredCount: items.filter((item) => item.isExpired).length,
+        reviewedCount: items.filter(
+          (item) => item.submissionStatus === 'teacher_reviewed',
+        ).length,
       },
       'success',
     );
@@ -447,7 +586,9 @@ export class AssignmentsService {
     classId?: string,
   ) {
     if (currentUser.role !== 'student') {
-      throw new ForbiddenException('Only students can access student assignments');
+      throw new ForbiddenException(
+        'Only students can access student assignments',
+      );
     }
 
     const assignment = await this.assignmentModel.findById(assignmentId).lean();
@@ -455,7 +596,9 @@ export class AssignmentsService {
       throw new NotFoundException('Assignment not found');
     }
     if (assignment.status === 'draft') {
-      throw new ForbiddenException('Draft assignments are not visible to students');
+      throw new ForbiddenException(
+        'Draft assignments are not visible to students',
+      );
     }
 
     const memberships = await this.membershipModel
@@ -467,7 +610,9 @@ export class AssignmentsService {
       .lean();
 
     if (!memberships.length) {
-      throw new ForbiddenException('Student is not in any class for this assignment');
+      throw new ForbiddenException(
+        'Student is not in any class for this assignment',
+      );
     }
 
     const availableClassIds = memberships.map((item) => item.classId);
@@ -475,8 +620,12 @@ export class AssignmentsService {
       throw new ForbiddenException('Student is not in the requested class');
     }
     const resolvedClassId =
-      classId && availableClassIds.includes(classId) ? classId : availableClassIds[0];
-    const matchedClass = assignment.classes.find((item) => item.id === resolvedClassId);
+      classId && availableClassIds.includes(classId)
+        ? classId
+        : availableClassIds[0];
+    const matchedClass = assignment.classes.find(
+      (item) => item.id === resolvedClassId,
+    );
 
     const submission = await this.submissionModel
       .findOne({ assignmentId, studentId: currentUser.id })
@@ -492,7 +641,8 @@ export class AssignmentsService {
       !isExpired &&
       (!submission ||
         submission.isDraft ||
-        (submission.status !== 'teacher_reviewed' && (submission.submissionCount || 0) < 2));
+        (submission.status !== 'teacher_reviewed' &&
+          (submission.submissionCount || 0) < 2));
 
     return this.appService.envelope(
       {
@@ -526,7 +676,10 @@ export class AssignmentsService {
     );
   }
 
-  private buildTeacherAssignmentFilter(user: AuthenticatedUser, query: AssignmentQueryDto) {
+  private buildTeacherAssignmentFilter(
+    user: AuthenticatedUser,
+    query: AssignmentQueryDto,
+  ) {
     const filter: Record<string, unknown> = {};
     const keyword = query.search || query.title;
 
@@ -561,15 +714,24 @@ export class AssignmentsService {
       };
     }
     if (query.isExpired === true) {
-      filter.endDate = { ...(filter.endDate as Record<string, Date>), $lt: new Date() };
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $lt: new Date(),
+      };
     } else if (query.isExpired === false) {
-      filter.endDate = { ...(filter.endDate as Record<string, Date>), $gte: new Date() };
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $gte: new Date(),
+      };
     }
 
     return filter;
   }
 
-  private buildStudentAssignmentFilter(classIds: string[], query?: AssignmentQueryDto) {
+  private buildStudentAssignmentFilter(
+    classIds: string[],
+    query?: AssignmentQueryDto,
+  ) {
     const keyword = query?.search || query?.title;
     const filter: Record<string, unknown> = {
       'classes.id': { $in: classIds },
@@ -601,21 +763,32 @@ export class AssignmentsService {
       };
     }
     if (query?.isExpired === true) {
-      filter.endDate = { ...(filter.endDate as Record<string, Date>), $lt: new Date() };
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $lt: new Date(),
+      };
     } else if (query?.isExpired === false) {
-      filter.endDate = { ...(filter.endDate as Record<string, Date>), $gte: new Date() };
+      filter.endDate = {
+        ...(filter.endDate as Record<string, Date>),
+        $gte: new Date(),
+      };
     }
 
     return filter;
   }
 
-  private async resolveAssignmentClasses(user: AuthenticatedUser, classIds: string[]) {
+  private async resolveAssignmentClasses(
+    user: AuthenticatedUser,
+    classIds: string[],
+  ) {
     const uniqueClassIds = [...new Set(classIds || [])];
     if (!uniqueClassIds.length) {
       throw new BadRequestException('At least one class is required');
     }
 
-    const classes = await this.classModel.find({ _id: { $in: uniqueClassIds } }).lean();
+    const classes = await this.classModel
+      .find({ _id: { $in: uniqueClassIds } })
+      .lean();
     if (classes.length !== uniqueClassIds.length) {
       throw new BadRequestException('One or more classes are invalid');
     }
@@ -623,14 +796,25 @@ export class AssignmentsService {
     if (user.role !== 'superadmin') {
       const invalidClass = classes.find((item) => item.teacherId !== user.id);
       if (invalidClass) {
-        throw new ForbiddenException('Teachers can only assign to their own classes');
+        throw new ForbiddenException(
+          'Teachers can only assign to their own classes',
+        );
       }
     }
 
-    return classes.map((item) => ({ id: item._id.toString(), name: item.name }));
+    return classes.map((item) => ({
+      id: item._id.toString(),
+      name: item.name,
+    }));
   }
 
-  private async getAssignmentStats(item: any) {
+  private readEntityId(item: { _id?: DocumentIdentifier; id?: string }) {
+    return item._id?.toString?.() || item.id || '';
+  }
+
+  private async getAssignmentStats(
+    item: AssignmentSource,
+  ): Promise<AssignmentStats> {
     const classIds = (item.classes || []).map((cls: { id: string }) => cls.id);
     if (!classIds.length) {
       return {
@@ -651,10 +835,14 @@ export class AssignmentsService {
         classId: { $in: classIds },
         status: 'active',
       }),
-      this.submissionModel.find({ assignmentId: item._id?.toString?.() || item.id }).lean(),
+      this.submissionModel
+        .find({ assignmentId: this.readEntityId(item) })
+        .lean(),
     ]);
 
-    const nonDraftSubmissions = submissions.filter((submission) => !submission.isDraft);
+    const nonDraftSubmissions = submissions.filter(
+      (submission) => !submission.isDraft,
+    );
     const teacherReviewedSubmissions = nonDraftSubmissions.filter(
       (submission) => submission.status === 'teacher_reviewed',
     );
@@ -665,9 +853,12 @@ export class AssignmentsService {
         submission.aiScore !== null,
     );
     const pendingTeacherReviewSubmissions = nonDraftSubmissions.filter(
-      (submission) => this.normalizeSubmissionStatus(submission.status) === 'submitted',
+      (submission) =>
+        this.normalizeSubmissionStatus(submission.status) === 'submitted',
     );
-    const draftSubmissions = submissions.filter((submission) => submission.isDraft).length;
+    const draftSubmissions = submissions.filter(
+      (submission) => submission.isDraft,
+    ).length;
 
     return {
       total: studentIds.length,
@@ -688,14 +879,19 @@ export class AssignmentsService {
     }
   }
 
-  private assertCanManageAssignment(user: AuthenticatedUser, teacherId: string) {
+  private assertCanManageAssignment(
+    user: AuthenticatedUser,
+    teacherId: string,
+  ) {
     this.assertTeacherPrivileges(user);
     if (user.role !== 'superadmin' && user.id !== teacherId) {
       throw new ForbiddenException('You can only manage your own assignments');
     }
   }
 
-  private normalizeSubmissionStatus(status: string): NormalizedSubmissionStatus {
+  private normalizeSubmissionStatus(
+    status: string,
+  ): NormalizedSubmissionStatus {
     if (status === 'ai_review_queued' || status === 'ai_review_failed') {
       return 'submitted';
     }
@@ -714,9 +910,9 @@ export class AssignmentsService {
     return content.length > 50 ? `${content.slice(0, 50)}...` : content;
   }
 
-  private toAssignmentListItem(item: any, stats: any) {
+  private toAssignmentListItem(item: AssignmentSource, stats: AssignmentStats) {
     return {
-      id: item._id?.toString?.() || item.id,
+      id: this.readEntityId(item),
       title: item.title,
       description: item.description,
       teacherId: item.teacherId,
@@ -752,7 +948,7 @@ export class AssignmentsService {
     };
   }
 
-  private toAssignmentDetail(item: any, stats: any) {
+  private toAssignmentDetail(item: AssignmentSource, stats: AssignmentStats) {
     return {
       ...this.toAssignmentListItem(item, stats),
       totalStudents: stats.totalStudents,

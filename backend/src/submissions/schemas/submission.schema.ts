@@ -31,7 +31,14 @@ export class Submission {
 
   @Prop({
     required: true,
-    enum: ['draft', 'submitted', 'ai_review_queued', 'ai_reviewed', 'teacher_reviewed', 'ai_review_failed'],
+    enum: [
+      'draft',
+      'submitted',
+      'ai_review_queued',
+      'ai_reviewed',
+      'teacher_reviewed',
+      'ai_review_failed',
+    ],
     default: 'draft',
   })
   status:

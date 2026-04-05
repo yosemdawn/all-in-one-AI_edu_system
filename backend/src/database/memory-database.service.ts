@@ -8,12 +8,10 @@ type MemoryServerInstance = {
 class MemoryDatabaseManager {
   private memoryServers = new Map<string, Promise<MemoryServerInstance>>();
 
-  private async createMemoryServer(dbName: string): Promise<MemoryServerInstance> {
-    const { MongoMemoryServer } = require('mongodb-memory-server') as {
-      MongoMemoryServer: {
-        create(options?: Record<string, unknown>): Promise<MemoryServerInstance>;
-      };
-    };
+  private async createMemoryServer(
+    dbName: string,
+  ): Promise<MemoryServerInstance> {
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
 
     return MongoMemoryServer.create({
       instance: {

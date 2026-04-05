@@ -1,4 +1,11 @@
-import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateAiRuleDto {
   @IsString()

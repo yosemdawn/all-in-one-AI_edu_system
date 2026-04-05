@@ -1,7 +1,11 @@
 import { Transform } from 'class-transformer';
+import type { TransformFnParams } from 'class-transformer';
+
+const trimStringValue = (value: unknown): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 export const ToBoolean = () =>
-  Transform(({ value }) => {
+  Transform(({ value }: TransformFnParams): unknown => {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }
@@ -21,7 +25,7 @@ export const ToBoolean = () =>
   });
 
 export const ToNumber = () =>
-  Transform(({ value }) => {
+  Transform(({ value }: TransformFnParams): unknown => {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }
@@ -30,7 +34,7 @@ export const ToNumber = () =>
   });
 
 export const ToStringArray = () =>
-  Transform(({ value }) => {
+  Transform(({ value }: TransformFnParams): unknown => {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }
@@ -45,3 +49,6 @@ export const ToStringArray = () =>
     }
     return value;
   });
+
+export const TrimString = () =>
+  Transform(({ value }: TransformFnParams): unknown => trimStringValue(value));

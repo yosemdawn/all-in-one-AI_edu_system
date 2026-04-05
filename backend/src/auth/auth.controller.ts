@@ -7,6 +7,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthenticatedUser } from './authenticated-user.interface';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -24,17 +25,31 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({
+    auth: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
   @Post('v1/auth/login')
   login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
 
+  @Throttle({
+    auth: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
   @Post('auth/login')
   loginCompat(@Body() body: CompatLoginDto) {
     const usernameOrEmailOrStudentId =
       body.usernameOrEmailOrStudentId || body.email || body.username;
     if (!usernameOrEmailOrStudentId) {
-      throw new BadRequestException('usernameOrEmailOrStudentId, email, or username is required');
+      throw new BadRequestException(
+        'usernameOrEmailOrStudentId, email, or username is required',
+      );
     }
 
     return this.authService.login({
@@ -50,6 +65,12 @@ export class AuthController {
     return this.authService.logout(currentUser);
   }
 
+  @Throttle({
+    auth: {
+      limit: 10,
+      ttl: 60_000,
+    },
+  })
   @Post('v1/auth/refresh-token')
   refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refresh(body);
@@ -79,21 +100,45 @@ export class AuthController {
     return this.authService.firstChangePassword(currentUser, body);
   }
 
+  @Throttle({
+    auth: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
   @Post('v1/auth/forgot-password')
   forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.authService.forgotPassword(body);
   }
 
+  @Throttle({
+    auth: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
   @Post('v1/auth/reset-password')
   resetPassword(@Body() body: ResetPasswordDto) {
     return this.authService.resetPassword(body);
   }
 
+  @Throttle({
+    auth: {
+      limit: 3,
+      ttl: 60_000,
+    },
+  })
   @Post('v1/auth/register')
   register(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }
 
+  @Throttle({
+    auth: {
+      limit: 3,
+      ttl: 60_000,
+    },
+  })
   @Post('auth/register')
   registerCompat(@Body() body: CompatRegisterDto) {
     return this.authService.register({

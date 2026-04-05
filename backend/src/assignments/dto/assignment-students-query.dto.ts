@@ -15,6 +15,10 @@ export class AssignmentStudentsQueryDto {
   studentNumber?: string;
 
   @IsOptional()
+  @IsIn(['submitted', 'draft', 'not_submitted'])
+  submissionStatus?: 'submitted' | 'draft' | 'not_submitted';
+
+  @IsOptional()
   @IsIn(['pending', 'draft', 'submitted', 'ai_reviewed', 'teacher_reviewed'])
   gradingStatus?: string;
 

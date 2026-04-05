@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
@@ -41,7 +49,11 @@ export class AssignmentsController {
     @Param('id') id: string,
     @Query() query: AssignmentStudentsQueryDto,
   ) {
-    return this.assignmentsService.getAssignmentStudents(currentUser, id, query);
+    return this.assignmentsService.getAssignmentStudents(
+      currentUser,
+      id,
+      query,
+    );
   }
 
   @Roles('teacher', 'superadmin')
@@ -70,7 +82,11 @@ export class AssignmentsController {
     @Param('id') id: string,
     @Body() body: UpdateAssignmentStatusDto,
   ) {
-    return this.assignmentsService.updateAssignmentStatus(currentUser, id, body);
+    return this.assignmentsService.updateAssignmentStatus(
+      currentUser,
+      id,
+      body,
+    );
   }
 
   @Roles('teacher', 'superadmin')
@@ -93,7 +109,9 @@ export class AssignmentsController {
 
   @Roles('student')
   @Get('student/assignments/statistics')
-  getStudentAssignmentStatistics(@CurrentUser() currentUser: AuthenticatedUser) {
+  getStudentAssignmentStatistics(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
     return this.assignmentsService.getStudentAssignmentStatistics(currentUser);
   }
 
@@ -104,6 +122,10 @@ export class AssignmentsController {
     @Param('assignmentId') assignmentId: string,
     @Query('classId') classId?: string,
   ) {
-    return this.assignmentsService.getStudentAssignment(currentUser, assignmentId, classId);
+    return this.assignmentsService.getStudentAssignment(
+      currentUser,
+      assignmentId,
+      classId,
+    );
   }
 }

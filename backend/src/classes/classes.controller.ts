@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
@@ -52,19 +60,28 @@ export class ClassesController {
 
   @Roles('teacher', 'superadmin')
   @Post(':id/close')
-  closeClass(@CurrentUser() currentUser: AuthenticatedUser, @Param('id') id: string) {
+  closeClass(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.classesService.closeClass(currentUser, id);
   }
 
   @Roles('teacher', 'superadmin')
   @Post(':id/regenerate-code')
-  regenerateCode(@CurrentUser() currentUser: AuthenticatedUser, @Param('id') id: string) {
+  regenerateCode(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.classesService.regenerateCode(currentUser, id);
   }
 
   @Roles('teacher', 'superadmin')
   @Get(':id/students')
-  getClassStudents(@Param('id') id: string, @Query() query: ClassStudentsQueryDto) {
+  getClassStudents(
+    @Param('id') id: string,
+    @Query() query: ClassStudentsQueryDto,
+  ) {
     return this.classesService.getClassStudents(id, query);
   }
 
@@ -99,7 +116,10 @@ export class ClassesController {
 
   @Roles('student')
   @Post(':id/leave')
-  leaveClass(@CurrentUser() currentUser: AuthenticatedUser, @Param('id') id: string) {
+  leaveClass(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
     return this.classesService.leaveClass(currentUser, id);
   }
 }

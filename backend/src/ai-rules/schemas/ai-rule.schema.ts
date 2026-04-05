@@ -20,7 +20,11 @@ export class AiRule {
   @Prop({ required: true })
   prompt: string;
 
-  @Prop({ required: true, enum: ['private', 'public', 'system'], default: 'private' })
+  @Prop({
+    required: true,
+    enum: ['private', 'public', 'system'],
+    default: 'private',
+  })
   visibility: 'private' | 'public' | 'system';
 
   @Prop({ required: true, enum: ['active', 'inactive'], default: 'active' })

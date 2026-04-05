@@ -16,8 +16,29 @@ import { CreateClassDto } from './dto/create-class.dto';
 import { JoinClassDto } from './dto/join-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { UpdateStudentStatusDto } from './dto/update-student-status.dto';
-import { ClassMembership, ClassMembershipDocument } from './schemas/class-membership.schema';
+import {
+  ClassMembership,
+  ClassMembershipDocument,
+} from './schemas/class-membership.schema';
 import { ClassDocument, ClassEntity } from './schemas/class.schema';
+
+type DocumentIdentifier = string | { toString(): string };
+type ClassSource = Pick<
+  ClassEntity,
+  | 'name'
+  | 'code'
+  | 'teacherId'
+  | 'teacherName'
+  | 'status'
+  | 'studentCount'
+  | 'maxStudents'
+  | 'description'
+> & {
+  _id?: DocumentIdentifier;
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
 @Injectable()
 export class ClassesService {
@@ -31,10 +52,7 @@ export class ClassesService {
     private readonly appService: AppService,
   ) {}
 
-  async getClasses(
-    currentUser: AuthenticatedUser,
-    query: ClassListQueryDto,
-  ) {
+  async getClasses(currentUser: AuthenticatedUser, query: ClassListQueryDto) {
     const filter = this.buildClassFilter(query);
 
     if (currentUser.role === 'teacher') {
@@ -141,14 +159,20 @@ export class ClassesService {
     this.assertCanManageClass(currentUser, classItem.teacherId);
 
     if (payload.name !== undefined) classItem.name = payload.name;
-    if (payload.description !== undefined) classItem.description = payload.description;
+    if (payload.description !== undefined)
+      classItem.description = payload.description;
     if (payload.maxStudents !== undefined) {
       if (payload.maxStudents < classItem.studentCount) {
-        throw new BadRequestException('maxStudents cannot be lower than current student count');
+        throw new BadRequestException(
+          'maxStudents cannot be lower than current student count',
+        );
       }
       classItem.maxStudents = payload.maxStudents;
     }
-    if (payload.status && ['active', 'inactive', 'disbanded'].includes(payload.status)) {
+    if (
+      payload.status &&
+      ['active', 'inactive', 'disbanded'].includes(payload.status)
+    ) {
       classItem.status = payload.status as 'active' | 'inactive' | 'disbanded';
     }
 
@@ -203,7 +227,12 @@ export class ClassesService {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.membershipModel.find(filter).sort({ joinedAt: -1 }).skip(skip).limit(limit).lean(),
+      this.membershipModel
+        .find(filter)
+        .sort({ joinedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       this.membershipModel.countDocuments(filter),
     ]);
 
@@ -255,7 +284,10 @@ export class ClassesService {
         continue;
       }
 
-      const exists = await this.membershipModel.exists({ classId: id, studentId: student.id });
+      const exists = await this.membershipModel.exists({
+        classId: id,
+        studentId: student.id,
+      });
       if (exists) {
         failed.push({ id: studentId, reason: 'Student already joined' });
         continue;
@@ -307,7 +339,10 @@ export class ClassesService {
       studentId: user.id,
     });
     if (exists) {
-      return this.appService.envelope({ success: true, message: 'joined' }, 'success');
+      return this.appService.envelope(
+        { success: true, message: 'joined' },
+        'success',
+      );
     }
 
     if (classItem.status !== 'active') {
@@ -336,7 +371,10 @@ export class ClassesService {
     user.className = classItem.name;
     await user.save();
 
-    return this.appService.envelope({ success: true, message: 'joined' }, 'success');
+    return this.appService.envelope(
+      { success: true, message: 'joined' },
+      'success',
+    );
   }
 
   async updateStudentStatus(
@@ -379,7 +417,9 @@ export class ClassesService {
     });
 
     if (deleted) {
-      await this.classModel.findByIdAndUpdate(id, { $inc: { studentCount: -1 } });
+      await this.classModel.findByIdAndUpdate(id, {
+        $inc: { studentCount: -1 },
+      });
 
       const remainingMembership = await this.membershipModel
         .findOne({ studentId: user.id, status: 'active' })
@@ -387,7 +427,9 @@ export class ClassesService {
         .lean();
 
       if (remainingMembership) {
-        const remainingClass = await this.classModel.findById(remainingMembership.classId).lean();
+        const remainingClass = await this.classModel
+          .findById(remainingMembership.classId)
+          .lean();
         user.classId = remainingMembership.classId;
         user.className = remainingClass?.name;
       } else {
@@ -398,7 +440,10 @@ export class ClassesService {
       await user.save();
     }
 
-    return this.appService.envelope({ success: true, message: 'left' }, 'success');
+    return this.appService.envelope(
+      { success: true, message: 'left' },
+      'success',
+    );
   }
 
   private assertTeacherPrivileges(user: AuthenticatedUser) {
@@ -414,9 +459,13 @@ export class ClassesService {
     }
   }
 
-  private toClassListItem(item: any) {
+  private readEntityId(item: { _id?: DocumentIdentifier; id?: string }) {
+    return item._id?.toString?.() || item.id || '';
+  }
+
+  private toClassListItem(item: ClassSource) {
     return {
-      _id: item._id?.toString?.() || item.id,
+      _id: this.readEntityId(item),
       name: item.name,
       code: item.code,
       teacherId: item.teacherId,
@@ -430,9 +479,9 @@ export class ClassesService {
     };
   }
 
-  private toPublicClassListItem(item: any) {
+  private toPublicClassListItem(item: ClassSource) {
     return {
-      _id: item._id?.toString?.() || item.id,
+      _id: this.readEntityId(item),
       name: item.name,
       teacherName: item.teacherName,
       status: item.status,
