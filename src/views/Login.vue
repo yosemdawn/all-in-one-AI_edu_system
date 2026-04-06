@@ -36,15 +36,6 @@
             <p class="form-subtitle">
               {{ isRegister ? "创建您的账户" : "欢迎回来" }}
             </p>
-            <el-alert
-              v-if="isRegister"
-              type="warning"
-              :closable="false"
-              show-icon
-              class="mt-4 text-left"
-              title="仅支持学生自助注册"
-              description="注册成功后需要输入班级邀请码，加入班级前将无法使用学生端功能。"
-            />
           </div>
 
           <el-form
@@ -94,7 +85,6 @@
               ></el-input>
             </el-form-item>
 
-            <!-- 注册表单显示班级选择字段 -->
             <!-- 密码字段 -->
             <el-form-item label="密码" prop="password">
               <el-input
@@ -462,7 +452,7 @@ const submitForm = async () => {
   border-color: #667eea;
 }
 
-.el-input :deep(.el-input__wrapper.is-focus) {
+.el-input :deep(.el-input__wrapper.is_focus) {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
