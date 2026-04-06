@@ -452,7 +452,7 @@ const submitForm = async () => {
   border-color: #667eea;
 }
 
-.el-input :deep(.el-input__wrapper.is_focus) {
+.el-input :deep(.el-input__wrapper.is-focus) {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
