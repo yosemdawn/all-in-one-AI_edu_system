@@ -110,7 +110,6 @@ export interface RegisterParams {
   confirmPassword: string;
   email: string;
   name?: string;
-  classId?: string;
 }
 
 export interface RegisterResult {
