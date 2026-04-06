@@ -1,167 +1,112 @@
 <template>
-  <div class="w-[320px] bg-white border-r border-gray-200 flex flex-col">
-    <!-- 标题区域 -->
-    <div class="p-4 border-b border-gray-100">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-lg font-semibold text-gray-900 mb-1">我的班级</h1>
-          <p class="text-xs text-gray-500">查看已加入班级与对应作业，邀请码加入作为补充入口</p>
-        </div>
-        <!-- 加入班级图标按钮 -->
-        <el-tooltip content="补充加入班级" placement="bottom">
-          <el-button
-            type="primary"
-            :icon="Plus"
-            @click="handleJoinClass"
-            circle
-            size="default"
-          />
-        </el-tooltip>
+  <section :class="['class-list', { 'class-list--mobile': mobile }]">
+    <div class="class-list__header">
+      <div>
+        <h1 class="class-list__title">我的班级</h1>
+        <p class="class-list__subtitle">选择班级后查看对应作业，也可以通过邀请码继续加入新班级。</p>
       </div>
+      <el-button type="primary" :icon="Plus" circle @click="handleJoinClass" />
     </div>
 
-    <!-- 搜索框 -->
-    <div class="p-4 border-b border-gray-100">
-      <div class="flex items-center space-x-2">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索班级..."
-          clearable
-          size="default"
-          @keyup.enter="handleSearch"
-          @clear="handleClearSearch"
-          class="flex-1"
-        />
-        <el-button
-          :icon="Search"
-          @click="handleSearch"
-          size="default"
-          :loading="searchLoading"
-        />
-      </div>
+    <div class="class-list__search">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="搜索班级"
+        clearable
+        @keyup.enter="handleSearch"
+        @clear="handleClearSearch"
+      />
+      <el-button :icon="Search" :loading="searchLoading" @click="handleSearch" />
     </div>
 
-    <!-- 班级列表区域 -->
-    <div class="flex-1 overflow-y-auto">
-      <!-- 加载状态 -->
-      <div v-if="classLoading" class="p-4">
-        <el-skeleton v-for="i in 4" :key="i" animated class="mb-4">
-          <template #template>
-            <div class="h-20 bg-gray-100 rounded-lg"></div>
-          </template>
-        </el-skeleton>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-else-if="classes.length === 0" class="p-4">
-        <el-empty description="暂无班级" :image-size="80">
-          <el-button type="primary" @click="handleJoinClass">
-            加入班级
-          </el-button>
-        </el-empty>
-      </div>
-
-      <!-- 班级卡片列表 -->
-      <div v-else class="p-4">
-        <div class="space-y-3">
-          <el-card
-            v-for="classItem in classes"
-            :key="classItem._id"
-            :class="[
-              'cursor-pointer transition-all duration-200',
-              selectedClassId === classItem._id
-                ? 'border-blue-400 shadow-md'
-                : 'hover:border-blue-300 hover:shadow-sm',
-            ]"
-            :body-style="{ padding: '16px' }"
-            @click="handleSelectClass(classItem)"
-          >
-            <!-- 班级名称和状态 -->
-            <div class="flex items-center justify-between mb-2">
-              <h3
-                class="font-medium text-gray-900 text-sm truncate flex-1 mr-2"
-              >
-                {{ classItem.name }}
-              </h3>
-              <el-tag
-                :type="getClassStatusType(classItem.status)"
-                size="small"
-                effect="light"
-              >
-                {{ getClassStatusText(classItem.status) }}
-              </el-tag>
-            </div>
-
-            <!-- 班级信息 -->
-            <div class="text-xs text-gray-500 space-y-1">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center">
-                  <el-icon class="mr-1"><User /></el-icon>
-                  <span>{{ classItem.teacherName || "未知教师" }}</span>
-                </div>
-                <div class="flex items-center">
-                  <el-icon class="mr-1"><UserFilled /></el-icon>
-                  <span>{{ classItem.studentCount || 0 }}人</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 选中指示器 -->
-            <div
-              v-if="selectedClassId === classItem._id"
-              class="absolute left-0 top-0 w-1 h-full bg-blue-500 rounded-r"
-            ></div>
-          </el-card>
-        </div>
-
-        <!-- 底部操作区 -->
-        <div class="pt-4 mt-4 border-t border-gray-100">
-          <!-- 加载更多 -->
-          <div
-            v-if="!pageState.isAllLoaded && classes.length > 0"
-            class="text-center"
-          >
-            <el-button
-              type="primary"
-              text
-              size="small"
-              @click="loadMore"
-              :loading="loadingMore"
-            >
-              {{ loadingMore ? "加载中..." : "加载更多" }}
-            </el-button>
-          </div>
-
-          <!-- 加载完成提示 -->
-          <div
-            v-else-if="pageState.isAllLoaded && classes.length > 0"
-            class="text-center"
-          >
-            <span class="text-gray-400 text-xs">已显示全部班级</span>
-          </div>
-        </div>
-      </div>
+    <div v-if="classLoading" class="class-list__loading">
+      <el-skeleton v-for="i in mobile ? 2 : 4" :key="i" animated class="mb-3">
+        <template #template>
+          <div class="class-list__skeleton"></div>
+        </template>
+      </el-skeleton>
     </div>
-  </div>
+
+    <div v-else-if="classes.length === 0" class="class-list__empty">
+      <el-empty description="暂无班级" :image-size="80">
+        <el-button type="primary" @click="handleJoinClass">加入班级</el-button>
+      </el-empty>
+    </div>
+
+    <div v-else :class="['class-list__content', { 'class-list__content--mobile': mobile }]">
+      <el-card
+        v-for="classItem in classes"
+        :key="classItem._id"
+        :class="[
+          'class-card',
+          { 'class-card--active': selectedClassId === classItem._id },
+        ]"
+        :body-style="{ padding: mobile ? '14px' : '16px' }"
+        @click="handleSelectClass(classItem)"
+      >
+        <div class="class-card__header">
+          <h3 class="class-card__title">{{ classItem.name }}</h3>
+          <el-tag :type="getClassStatusType(classItem.status)" size="small" effect="light">
+            {{ getClassStatusText(classItem.status) }}
+          </el-tag>
+        </div>
+
+        <div class="class-card__meta">
+          <span class="class-card__meta-item">
+            <el-icon><User /></el-icon>
+            {{ classItem.teacherName || "未设置教师" }}
+          </span>
+          <span class="class-card__meta-item">
+            <el-icon><UserFilled /></el-icon>
+            {{ classItem.studentCount || 0 }} 人
+          </span>
+        </div>
+
+        <div class="class-card__footer">
+          <span class="class-card__code">邀请码：{{ classItem.code || "暂无" }}</span>
+          <span v-if="selectedClassId === classItem._id" class="class-card__active-text">
+            当前查看
+          </span>
+        </div>
+      </el-card>
+    </div>
+
+    <div v-if="classes.length > 0" class="class-list__bottom">
+      <el-button
+        v-if="!pageState.isAllLoaded"
+        text
+        type="primary"
+        :loading="loadingMore"
+        @click="loadMore"
+      >
+        {{ loadingMore ? "加载中..." : "加载更多" }}
+      </el-button>
+      <span v-else class="class-list__bottom-tip">已显示全部班级</span>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, inject, onMounted, nextTick, type Ref } from "vue";
+import { inject, nextTick, onMounted, reactive, ref, type Ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Plus, Search, User, UserFilled } from "@element-plus/icons-vue";
 import { getClassList } from "../../../../api/classes";
 import { useClassManagement } from "../composables/useClassManagement";
 
-// 通过 inject 获取共享状态
+interface Props {
+  mobile?: boolean;
+}
+
+defineProps<Props>();
+
 const selectedClassId = inject<Ref<string | null>>("selectedClassId")!;
 const setSelectedClass = inject<(classItem: any) => void>("setSelectedClass")!;
 const showJoinDialog = inject<Ref<boolean>>("showJoinDialog")!;
 
-// 组件内部状态
 const classLoading = ref(true);
 const loadingMore = ref(false);
 const searchLoading = ref(false);
-const classes = ref([]);
+const classes = ref<any[]>([]);
 const searchKeyword = ref("");
 const pageState = reactive({
   page: 1,
@@ -170,12 +115,19 @@ const pageState = reactive({
   isAllLoaded: false,
 });
 
-// 使用组合函数
-const { getClassStatusType, getClassStatusText } = useClassManagement();
+const { getClassStatusType } = useClassManagement();
 
-// 加载班级列表
-const loadClasses = async (type: string = "initData", search?: string) => {
-  if (type === "initData") {
+const getClassStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    active: "正常",
+    inactive: "暂停",
+    disbanded: "已解散",
+  };
+  return map[status] || "未知";
+};
+
+const loadClasses = async (type: "init" | "more" = "init", search?: string) => {
+  if (type === "init") {
     classLoading.value = true;
     pageState.page = 1;
     pageState.isAllLoaded = false;
@@ -184,128 +136,250 @@ const loadClasses = async (type: string = "initData", search?: string) => {
   }
 
   try {
-    const params: any = {
+    const response = await getClassList({
       page: pageState.page,
       limit: pageState.limit,
-    };
+      ...(search ? { search } : {}),
+    });
 
-    if (search) {
-      params.search = search;
-    }
+    const items = response.items || [];
+    pageState.total = response.total || 0;
+    classes.value = type === "more" ? classes.value.concat(items) : items;
 
-    const response = await getClassList(params);
-    const { items, total } = response;
-    pageState.total = total;
-
-    if (type !== "loadMore") {
-      classes.value = items || [];
-    } else {
-      classes.value = classes.value.concat(items) || [];
-    }
-
-    if (classes.value.length >= total) {
+    if (classes.value.length >= pageState.total) {
       pageState.isAllLoaded = true;
     } else {
-      pageState.page++;
+      pageState.page += 1;
     }
 
-    // 如果有班级且没有选中的班级，默认选中第一个
     if (classes.value.length > 0 && !selectedClassId.value) {
       handleSelectClass(classes.value[0]);
     }
   } catch (error) {
+    console.error("加载班级列表失败:", error);
     ElMessage.error("加载班级列表失败");
   } finally {
     classLoading.value = false;
     loadingMore.value = false;
     searchLoading.value = false;
 
-    if (type !== "loadMore") return;
-
-    nextTick(() => {
-      const scrollContainer = document.querySelector(
-        ".w-\\[320px\\] .flex-1.overflow-y-auto"
-      );
-      if (scrollContainer) {
-        scrollContainer.scrollTo({
-          top: scrollContainer.scrollHeight,
-          behavior: "smooth",
-        });
-      }
-    });
+    if (type === "more") {
+      await nextTick();
+    }
   }
 };
 
-// 搜索处理
 const handleSearch = async () => {
   if (searchLoading.value) return;
-
   searchLoading.value = true;
-  try {
-    await loadClasses("initData", searchKeyword.value.trim());
-  } catch (error) {
-    ElMessage.error("搜索失败");
-  }
+  await loadClasses("init", searchKeyword.value.trim());
 };
 
-// 清空搜索
 const handleClearSearch = async () => {
   searchKeyword.value = "";
-  await loadClasses("initData");
+  await loadClasses("init");
 };
 
-// 加载更多
 const loadMore = () => {
-  loadClasses("loadMore", searchKeyword.value.trim());
+  void loadClasses("more", searchKeyword.value.trim());
 };
 
-// 选择班级
-const handleSelectClass = (classItem) => {
+const handleSelectClass = (classItem: any) => {
   setSelectedClass(classItem);
 };
 
-// 加入班级
 const handleJoinClass = () => {
   showJoinDialog.value = true;
 };
 
-// 刷新班级列表（暴露给父组件）
 const refresh = () => {
-  loadClasses("initData", searchKeyword.value.trim());
+  void loadClasses("init", searchKeyword.value.trim());
 };
 
-// 暴露方法给父组件
 defineExpose({
   refresh,
 });
 
-// 初始化
 onMounted(() => {
-  loadClasses();
+  void loadClasses();
 });
 </script>
 
 <style scoped>
-.overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
+.class-list {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
 }
 
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: #f8fafc;
-  border-radius: 3px;
+.class-list--mobile {
+  width: 100%;
+  border-right: none;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
 }
 
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-  transition: background 0.2s ease;
+.class-list__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+.class-list__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
 }
 
-:deep(.el-card) {
-  position: relative;
+.class-list__subtitle {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+.class-list__search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.class-list__loading,
+.class-list__empty {
+  padding: 16px;
+}
+
+.class-list__skeleton {
+  height: 88px;
+  border-radius: 14px;
+  background: #f3f4f6;
+}
+
+.class-list__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.class-list__content--mobile {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 76vw);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+}
+
+.class-card {
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.class-card:hover {
+  transform: translateY(-1px);
+  border-color: #93c5fd;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.1);
+}
+
+.class-card--active {
+  border-color: #3b82f6;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.16);
+}
+
+.class-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.class-card__title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #111827;
+}
+
+.class-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.class-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.class-card__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e5e7eb;
+  font-size: 12px;
+}
+
+.class-card__code {
+  color: #6b7280;
+}
+
+.class-card__active-text {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.class-list__bottom {
+  padding: 12px 16px 16px;
+  text-align: center;
+  border-top: 1px solid #f8fafc;
+}
+
+.class-list__bottom-tip {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+@media (max-width: 768px) {
+  .class-list__header {
+    padding: 14px;
+  }
+
+  .class-list__title {
+    font-size: 16px;
+  }
+
+  .class-list__search {
+    padding: 12px 14px;
+  }
+
+  .class-list__content {
+    padding: 14px;
+  }
 }
 </style>

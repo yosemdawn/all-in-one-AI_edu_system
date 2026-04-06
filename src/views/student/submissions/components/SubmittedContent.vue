@@ -65,4 +65,16 @@ defineOptions({
 .prose {
   max-width: none;
 }
+
+@media (max-width: 768px) {
+  :deep(.el-card__header) > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  :deep(.el-tag) {
+    max-width: 100%;
+  }
+}
 </style>
