@@ -1,7 +1,11 @@
 <template>
   <div class="review-results">
     <el-card v-if="showReviewTabs" class="review-card">
-      <el-tabs v-model="activeTab" tab-position="left" class="review-tabs">
+      <el-tabs
+        v-model="activeTab"
+        :tab-position="tabPosition"
+        class="review-tabs"
+      >
         <el-tab-pane name="ai" :disabled="!showAiPane">
           <template #label>
             <div class="tab-label">
@@ -176,6 +180,7 @@ import {
   Monitor,
   User,
 } from "@element-plus/icons-vue";
+import { useStore } from "vuex";
 import type { AiReview, TeacherReview } from "../../../../api/submissions";
 import { checkAiSupport } from "../../../../config/ai-config";
 import { useSubmissionUtils } from "../composables";
@@ -190,8 +195,11 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const store = useStore();
 const { formatDate } = useSubmissionUtils();
 const activeTab = ref("ai");
+const isMobile = computed(() => store.getters["app/isMobile"]);
+const tabPosition = computed(() => (isMobile.value ? "top" : "left"));
 
 const aiQueueStatus = computed(() => props.aiReview?.aiReviewMetadata?.queueStatus);
 const aiModelUsed = computed(() => props.aiReview?.aiReviewMetadata?.modelUsed);
@@ -406,12 +414,6 @@ defineOptions({
 }
 
 @media (max-width: 768px) {
-  .review-tabs :deep(.el-tabs__header) {
-    width: 148px;
-  }
-}
-
-@media (max-width: 480px) {
   .review-tabs {
     display: block;
   }
@@ -420,6 +422,30 @@ defineOptions({
     width: 100%;
     border-right: none;
     border-bottom: 1px solid #e5e7eb;
+  }
+
+  .review-tabs :deep(.el-tabs__nav-wrap) {
+    padding: 0 12px;
+  }
+
+  .review-tabs :deep(.el-tabs__item) {
+    padding: 0 14px;
+  }
+
+  .review-pane {
+    padding: 18px 16px;
+  }
+
+  .tab-label {
+    min-width: auto;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-pane {
+    min-height: 280px;
+    padding: 24px 16px;
   }
 }
 </style>

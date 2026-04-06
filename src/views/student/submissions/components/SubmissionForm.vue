@@ -68,7 +68,8 @@
           ref="formRef"
           :model="form"
           :rules="rules"
-          label-width="100px"
+          :label-width="isMobile ? 'auto' : '100px'"
+          :label-position="labelPosition"
           size="large"
           scroll-to-error
         >
@@ -78,7 +79,7 @@
               <wang-editor
                 ref="editorRef"
                 v-model="form.content"
-                :height="'350px'"
+                :height="editorHeight"
                 :placeholder="getContentPlaceholder()"
                 :max-length="5000"
               />
@@ -101,6 +102,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from "vue";
+import { useStore } from "vuex";
 import type { Submission } from "../../../../api/submissions";
 import { useSubmissionUtils } from "../composables";
 
@@ -111,8 +113,12 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const store = useStore();
 
 const { formatDate } = useSubmissionUtils();
+const isMobile = computed(() => store.getters["app/isMobile"]);
+const editorHeight = computed(() => (isMobile.value ? "260px" : "350px"));
+const labelPosition = computed(() => (isMobile.value ? "top" : "right"));
 
 const formRef = ref();
 const editorRef = ref();
@@ -270,5 +276,21 @@ defineOptions({
 
 .section-content {
   /* padding: 24px; */
+}
+
+@media (max-width: 768px) {
+  .submission-guidance {
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  .submission-guidance__header h4 {
+    font-size: 14px;
+  }
+
+  .submission-guidance__header p,
+  .submission-guidance__list {
+    font-size: 12px;
+  }
 }
 </style>

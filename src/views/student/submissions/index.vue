@@ -961,8 +961,25 @@ onUnmounted(() => {
     align-items: flex-start;
   }
 
+  .header-content > :first-child,
+  .header-content > :last-child {
+    width: 100%;
+  }
+
+  .header-content > :last-child {
+    flex-wrap: wrap;
+  }
+
   .tab-navigation {
     padding: 0 1rem;
+  }
+
+  .submission-tabs :deep(.el-tabs__nav-wrap) {
+    overflow-x: auto;
+  }
+
+  .submission-tabs :deep(.el-tabs__nav) {
+    flex-wrap: nowrap;
   }
 
   .tab-actions-bar {
@@ -1015,6 +1032,17 @@ onUnmounted(() => {
 
   .processing-icon {
     font-size: 40px;
+  }
+
+  .ai-loading-main {
+    width: 200px;
+    height: 200px;
+    padding: 12px;
+  }
+
+  .ai-loading-gif-large {
+    width: 176px;
+    height: 176px;
   }
 }
 
