@@ -55,7 +55,6 @@ declare module '@vue/runtime-core' {
     ElSegmented: typeof import('element-plus/es')['ElSegmented']
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
-    ElSkeletonItem: typeof import('element-plus/es')['ElSkeletonItem']
     ElSpace: typeof import('element-plus/es')['ElSpace']
     ElStatistic: typeof import('element-plus/es')['ElStatistic']
     ElStep: typeof import('element-plus/es')['ElStep']
