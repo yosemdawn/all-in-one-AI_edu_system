@@ -75,6 +75,7 @@ export default defineComponent({
       "/teacher/classes",
       "/teacher/assignments",
       "/teacher/ai-rules",
+      "/teacher/tools",
       "/student/dashboard",
       "/student/classes",
       "/student/assignments",
