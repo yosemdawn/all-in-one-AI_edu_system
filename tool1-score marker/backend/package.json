@@ -1,0 +1,35 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "bin": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc && node scripts/copy-frontend.js",
+    "package-win": "npm run build && pkg . --targets node18-win-x64 --output release/score-marker.exe",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.14.0",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.12.12",
+    "pkg": "^5.8.1",
+    "typescript": "^5.4.5"
+  },
+  "pkg": {
+    "assets": [
+      "dist/frontend/**/*",
+      "node_modules/axios/dist/node/axios.cjs"
+    ]
+  }
+}

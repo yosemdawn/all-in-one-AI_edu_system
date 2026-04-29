@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牛逼格拉斯 - AI作文批阅系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container">
+            <span class="navbar-brand">🎓 牛逼格拉斯 - AI作文批阅系统</span>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <div class="container mt-4">
+        <!-- 步骤指示器 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="progress-steps">
+                    <div class="step active" data-step="1">上传要求</div>
+                    <div class="step" data-step="2">上传作文</div>
+                    <div class="step" data-step="3">开始处理</div>
+                    <div class="step" data-step="4">查看结果</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤1: 上传作文要求 -->
+        <div id="step-1" class="step-content active">
+            <div class="row">
+                <div class="col-lg-8 offset-lg-2">
+                    <h3 class="mb-4">步骤1: 上传作文要求图片</h3>
+                    <div class="upload-zone" id="promptUploadZone">
+                        <div class="upload-area">
+                            <div class="upload-icon">📁</div>
+                            <h4>拖拽或点击选择作文要求图片</h4>
+                            <p>支持 JPG、PNG、BMP 格式，最大 10MB</p>
+                            <button class="btn btn-primary" id="selectPromptFileBtn">选择文件</button>
+                            <input type="file" id="promptFileInput" accept="image/*" style="display: none;">
+                        </div>
+                        <div class="preview-area" style="display: none;">
+                            <img class="preview-image img-fluid mb-3" alt="预览">
+                            <div class="file-info mb-3">
+                                <span class="file-name"></span>
+                                <span class="file-size text-muted"></span>
+                            </div>
+                            <button class="btn btn-danger btn-sm" id="removePromptFileBtn">重新选择</button>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button class="btn btn-success" id="nextToStep2Btn" disabled>下一步: 上传学生作文</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤2: 批量上传学生作文 -->
+        <div id="step-2" class="step-content" style="display: none;">
+            <div class="row">
+                <div class="col-12">
+                    <h3 class="mb-4">步骤2: 批量上传学生作文</h3>
+                    <div class="batch-upload-zone">
+                        <div class="upload-header mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5>选择学生作文图片 (最多50个文件)</h5>
+                                <button class="btn btn-primary" id="selectEssayFilesBtn">选择多个文件</button>
+                                <input type="file" id="essayFilesInput" multiple accept="image/*" style="display: none;">
+                            </div>
+                        </div>
+                        
+                        <div class="file-list" id="fileList" style="display: none;">
+                            <div class="file-list-header">
+                                <span>文件名</span>
+                                <span>大小</span>
+                                <span>状态</span>
+                                <span>操作</span>
+                            </div>
+                            <div id="fileListContent">
+                                <!-- 动态生成的文件项 -->
+                            </div>
+                        </div>
+                        
+                        <div class="upload-summary mt-3" style="display: none;">
+                            <div class="d-flex justify-content-between">
+                                <span>已选择 <strong id="fileCount">0</strong> 个文件</span>
+                                <span>总大小: <strong id="totalSize">0 MB</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button class="btn btn-secondary me-2" id="backToStep1Btn">上一步</button>
+                        <button class="btn btn-success" id="nextToStep3Btn" disabled>下一步: 开始处理</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤3: 开始处理 -->
+        <div id="step-3" class="step-content" style="display: none;">
+            <div class="row">
+                <div class="col-12">
+                    <h3 class="mb-4">步骤3: 批阅处理</h3>
+                    <div class="processing-panel">
+                        <div class="overall-progress mb-4">
+                            <h5>批阅进度</h5>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+                            </div>
+                            <div class="progress-info row">
+                                <div class="col-md-6">
+                                    <span>当前状态: <strong id="currentStatus">准备中...</strong></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span>已完成: <strong id="completedCount">0</strong> / <strong id="totalCount">0</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="processing-log">
+                            <h6>处理日志</h6>
+                            <div class="log-content" id="logContent">
+                                <!-- 实时更新的处理日志 -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button class="btn btn-secondary me-2" id="backToStep2Btn">上一步</button>
+                        <button class="btn btn-success" id="startProcessingBtn">开始批阅</button>
+                        <button class="btn btn-success" id="viewResultsBtn" style="display: none;">查看结果</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤4: 查看结果 -->
+        <div id="step-4" class="step-content" style="display: none;">
+            <div class="row">
+                <div class="col-12">
+                    <h3 class="mb-4">步骤4: 批阅结果</h3>
+                    <div class="results-panel">
+                        <div class="results-summary mb-4">
+                            <div class="summary-cards">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h6>总计处理</h6>
+                                        <div class="stat-number" id="totalProcessed">0</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h6>成功批阅</h6>
+                                        <div class="stat-number text-success" id="successCount">0</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h6>处理失败</h6>
+                                        <div class="stat-number text-danger" id="failedCount">0</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h6>平均分</h6>
+                                        <div class="stat-number text-info" id="averageScore">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="results-table">
+                            <h6>详细结果</h6>
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>学生姓名</th>
+                                            <th>批阅分数</th>
+                                            <th>邮件状态</th>
+                                            <th>错误信息</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="resultsTableBody">
+                                        <!-- 动态生成结果行 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary me-2" id="downloadReportBtn">下载完整报告</button>
+                        <button class="btn btn-secondary" id="startNewBtn">重新开始</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div id="notification" class="alert" style="display: none;"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- 自定义JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
