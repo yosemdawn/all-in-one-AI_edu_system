@@ -1,0 +1,27 @@
+{
+  "api_token": "your-api-token-here",
+  "base_url": "https://your-api-base-url.com",
+  "installation_preferences": {
+    "use_npm_mirror": false,
+    "force_reinstall": false,
+    "skip_steps": [],
+    "install_path": "",
+    "max_output_tokens": "32000",
+    "disable_nonessential_traffic": true,
+    "custom_nodejs_version": "",
+    "use_system_nodejs": true
+  },
+  "user_preferences": {
+    "language": "zh-CN",
+    "theme": "light",
+    "show_advanced": false,
+    "auto_save_config": true,
+    "confirm_actions": true,
+    "show_tips": true,
+    "window_width": 1200,
+    "window_height": 900,
+    "remember_position": true
+  },
+  "version": "1.0.0"
+}
+

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+backend/release/
+release/
+desktop/bin/
+desktop/obj/
+desktop/release/
+desktop/setup/bin/
+desktop/setup/obj/
+desktop/setup/package/
+desktop/installer/staging/

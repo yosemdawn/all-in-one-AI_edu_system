@@ -1,0 +1,150 @@
+/* 全局样式 */
+body {
+    background-color: #f4f7f6;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+/* 步骤指示器样式 */
+.progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+}
+
+.step {
+    flex: 1;
+    text-align: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    margin: 0 0.25rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: not-allowed;
+}
+
+.step.active {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.step.completed {
+    background: #198754;
+    color: white;
+    border-color: #198754;
+    cursor: pointer;
+}
+
+/* 文件上传区域样式 */
+.upload-zone {
+    border: 2px dashed #ced4da;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.upload-zone.dragover {
+    border-color: #0d6efd;
+    background-color: #e9ecef;
+}
+
+.upload-icon {
+    font-size: 3rem;
+    color: #6c757d;
+}
+
+.preview-image {
+    max-height: 200px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+/* 文件列表样式 */
+.file-list {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-top: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.file-list-header, .file-item {
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr 1fr;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #dee2e6;
+    align-items: center;
+}
+
+.file-list-header {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+/* 处理进度样式 */
+.processing-log {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+/* 结果统计卡片 */
+.summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+/* 提示消息 */
+#notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    color: white;
+    z-index: 1050;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+#notification.alert-success { background-color: #198754; }
+#notification.alert-danger { background-color: #dc3545; }
+#notification.alert-info { background-color: #0dcaf0; }
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .progress-steps {
+        flex-direction: column;
+    }
+    
+    .step {
+        margin: 0.25rem 0;
+    }
+    
+    .file-list-header, .file-item {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+}

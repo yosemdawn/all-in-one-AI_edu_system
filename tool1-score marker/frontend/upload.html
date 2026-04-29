@@ -1,0 +1,15 @@
+<section id="upload-section">
+    <h2>答题卡处理</h2>
+    <div class="file-upload-area" id="fileUploadArea">
+        <p>拖放答题卡图片到此处，或点击选择文件</p>
+        <input type="file" id="fileInput" multiple accept=".jpg,.png" style="display: none;">
+    </div>
+    <ul id="fileList" class="file-list"></ul>
+    <div id="batchSummary" class="batch-summary" style="display:none;"></div>
+    <div class="form-group">
+        <button id="processFiles">开始批阅</button>
+    </div>
+    <p class="smart-config-note">提示：看到“任务已创建”后再刷新或切换页面更安全；任务创建前请先不要离开当前页面。</p>
+    <div id="uploadMessage" class="message" style="display:none;"></div>
+    <div id="uploadProgress" class="task-progress" style="display:none;"></div>
+</section>

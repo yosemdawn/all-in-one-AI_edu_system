@@ -60,6 +60,12 @@ Desktop.ini
 # Optional eslint cache
 .eslintcache
 
+# Local agent/editor settings
+**/.claude/settings.local.json
+
+# Nested tool generated packages
+tool1-score marker/desktop/installer/package-temp/
+
 # Optional stylelint cache
 .stylelintcache
 
