@@ -23,6 +23,7 @@ import { DatabaseModule } from './database/database.module';
 import { LogsModule } from './logs/logs.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { TeacherToolsModule } from './teacher-tools/teacher-tools.module';
 import { User, UserSchema } from './users/schemas/user.schema';
 import { UsersModule } from './users/users.module';
 
@@ -102,6 +103,7 @@ const queueImports = redisUrl
     PermissionsModule,
     AdminModule,
     LogsModule,
+    TeacherToolsModule,
   ],
   controllers: [AppController],
   providers: [
