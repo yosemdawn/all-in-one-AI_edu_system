@@ -29,6 +29,12 @@ export class ToolTask {
   @Prop({ type: String, default: null })
   className?: string | null;
 
+  @Prop({ type: String, default: null, index: true })
+  assignmentId?: string | null;
+
+  @Prop({ type: String, default: null })
+  assignmentTitle?: string | null;
+
   @Prop({ required: true, trim: true })
   title: string;
 
@@ -79,4 +85,3 @@ export class ToolTask {
 export const ToolTaskSchema = SchemaFactory.createForClass(ToolTask);
 ToolTaskSchema.index({ teacherId: 1, createdAt: -1 });
 ToolTaskSchema.index({ type: 1, status: 1, createdAt: -1 });
-

@@ -11,6 +11,10 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
+import {
+  Assignment,
+  AssignmentDocument,
+} from '../assignments/schemas/assignment.schema';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import {
   ClassMembership,
@@ -27,6 +31,10 @@ import {
   StandardAnswerMap,
 } from './objective-grading.service';
 import { ToolTaskQueryDto } from './dto/tool-task-query.dto';
+import {
+  Submission,
+  SubmissionDocument,
+} from '../submissions/schemas/submission.schema';
 import {
   ToolTask,
   ToolTaskDocument,
@@ -58,6 +66,10 @@ export class TeacherToolsService {
     private readonly classModel: Model<ClassDocument>,
     @InjectModel(ClassMembership.name)
     private readonly membershipModel: Model<ClassMembershipDocument>,
+    @InjectModel(Assignment.name)
+    private readonly assignmentModel: Model<AssignmentDocument>,
+    @InjectModel(Submission.name)
+    private readonly submissionModel: Model<SubmissionDocument>,
     private readonly appService: AppService,
     private readonly doubaoVisionService: DoubaoVisionService,
     private readonly objectiveGradingService: ObjectiveGradingService,
@@ -119,7 +131,13 @@ export class TeacherToolsService {
     const scoreConfig = this.objectiveGradingService.normalizeScoreConfig(
       this.parseJsonField(body.scoreConfig, {}),
     );
-    const classInfo = await this.resolveClass(currentUser, body.classId);
+    let classInfo = await this.resolveClass(currentUser, body.classId);
+    const assignmentInfo = await this.resolveAssignment(
+      currentUser,
+      body.assignmentId,
+      classInfo?.id,
+    );
+    classInfo = classInfo || this.singleAssignmentClass(assignmentInfo);
     const storedFiles = await this.storeFiles(files, 'objective-grading');
     const task = await this.toolTaskModel.create({
       type: 'objective_grading',
@@ -127,6 +145,8 @@ export class TeacherToolsService {
       teacherName: currentUser.name,
       classId: classInfo?.id || null,
       className: classInfo?.name || null,
+      assignmentId: assignmentInfo?.id || null,
+      assignmentTitle: assignmentInfo?.title || null,
       title:
         this.readString(body.title) ||
         `${classInfo?.name || '未关联班级'}客观题批分`,
@@ -139,6 +159,12 @@ export class TeacherToolsService {
         standardAnswers,
         scoreConfig,
         files: storedFiles,
+        syncToSubmissions:
+          !!assignmentInfo && this.readBoolean(body.syncToSubmissions, true),
+        overwriteExistingSubmissions: this.readBoolean(
+          body.overwriteExistingSubmissions,
+          false,
+        ),
       },
       items: [],
       resultSummary: {},
@@ -162,7 +188,13 @@ export class TeacherToolsService {
       throw new BadRequestException('At least one essay image is required');
     }
 
-    const classInfo = await this.resolveClass(currentUser, body.classId);
+    let classInfo = await this.resolveClass(currentUser, body.classId);
+    const assignmentInfo = await this.resolveAssignment(
+      currentUser,
+      body.assignmentId,
+      classInfo?.id,
+    );
+    classInfo = classInfo || this.singleAssignmentClass(assignmentInfo);
     const [storedRequirementImages, storedEssayImages] = await Promise.all([
       this.storeFiles(files.requirementImages || [], 'essay-requirements'),
       this.storeFiles(essayImages, 'essay-batch'),
@@ -173,6 +205,8 @@ export class TeacherToolsService {
       teacherName: currentUser.name,
       classId: classInfo?.id || null,
       className: classInfo?.name || null,
+      assignmentId: assignmentInfo?.id || null,
+      assignmentTitle: assignmentInfo?.title || null,
       title:
         this.readString(body.title) ||
         `${classInfo?.name || '未关联班级'}批量作文检查`,
@@ -185,6 +219,12 @@ export class TeacherToolsService {
         requirementText: this.readString(body.requirementText) || '',
         requirementImages: storedRequirementImages,
         essayImages: storedEssayImages,
+        syncToSubmissions:
+          !!assignmentInfo && this.readBoolean(body.syncToSubmissions, true),
+        overwriteExistingSubmissions: this.readBoolean(
+          body.overwriteExistingSubmissions,
+          false,
+        ),
       },
       items: [],
       resultSummary: {},
@@ -293,7 +333,7 @@ export class TeacherToolsService {
     );
 
     for (const file of files) {
-      if (task.status === 'cancelled') return;
+      if (await this.isTaskCancelled(task.id)) return;
       const itemBase = {
         fileName: file.originalName,
         filePath: file.path,
@@ -305,6 +345,7 @@ export class TeacherToolsService {
         const recognized = await this.doubaoVisionService.recognizeAnswerCard(
           file,
         );
+        if (await this.isTaskCancelled(task.id)) return;
         const grading = this.objectiveGradingService.gradeStudentAnswers(
           recognized.data.answers || {},
           standardAnswers,
@@ -318,7 +359,7 @@ export class TeacherToolsService {
           studentNumber: recognized.data.studentNumber,
         });
 
-        await this.pushOrReplaceItem(task, {
+        const completedItem = {
           ...itemBase,
           status: 'completed',
           studentName: recognized.data.studentName || '',
@@ -328,6 +369,14 @@ export class TeacherToolsService {
           grading,
           totalScore,
           rawContent: recognized.rawContent,
+        };
+        const syncResult = await this.syncItemToSubmission(
+          task,
+          completedItem,
+        );
+        await this.pushOrReplaceItem(task, {
+          ...completedItem,
+          submissionSync: syncResult,
         });
         task.successCount += 1;
       } catch (error: unknown) {
@@ -368,7 +417,7 @@ export class TeacherToolsService {
     }
 
     for (const file of essayImages) {
-      if (task.status === 'cancelled') return;
+      if (await this.isTaskCancelled(task.id)) return;
       const itemBase = {
         fileName: file.originalName,
         filePath: file.path,
@@ -382,13 +431,14 @@ export class TeacherToolsService {
           requirementImages,
           essayImage: file,
         });
+        if (await this.isTaskCancelled(task.id)) return;
         const score = this.clampScore(reviewed.data.score);
         const matchedStudent = await this.matchStudent(task.classId, {
           studentName: reviewed.data.studentName,
           studentNumber: reviewed.data.studentNumber,
         });
 
-        await this.pushOrReplaceItem(task, {
+        const completedItem = {
           ...itemBase,
           status: 'completed',
           studentName: reviewed.data.studentName || '',
@@ -403,6 +453,14 @@ export class TeacherToolsService {
             : [],
           summaryComment: reviewed.data.summary_comment || '',
           rawContent: reviewed.rawContent,
+        };
+        const syncResult = await this.syncItemToSubmission(
+          task,
+          completedItem,
+        );
+        await this.pushOrReplaceItem(task, {
+          ...completedItem,
+          submissionSync: syncResult,
         });
         task.successCount += 1;
       } catch (error: unknown) {
@@ -453,6 +511,40 @@ export class TeacherToolsService {
     return { id: classItem._id.toString(), name: classItem.name };
   }
 
+  private async resolveAssignment(
+    currentUser: AuthenticatedUser,
+    rawAssignmentId: unknown,
+    classId?: string | null,
+  ) {
+    const assignmentId = this.readString(rawAssignmentId);
+    if (!assignmentId) return null;
+
+    const assignment = await this.assignmentModel.findById(assignmentId).lean();
+    if (!assignment) {
+      throw new BadRequestException('Assignment not found');
+    }
+    if (
+      currentUser.role !== 'superadmin' &&
+      assignment.teacherId !== currentUser.id
+    ) {
+      throw new ForbiddenException('You can only use your own assignments');
+    }
+    if (classId && !assignment.classes.some((item) => item.id === classId)) {
+      throw new BadRequestException('Assignment does not include this class');
+    }
+    if (!classId && assignment.classes.length !== 1) {
+      throw new BadRequestException(
+        'Class is required when the selected assignment has multiple classes',
+      );
+    }
+
+    return {
+      id: assignment._id.toString(),
+      title: assignment.title,
+      classes: assignment.classes,
+    };
+  }
+
   private async matchStudent(
     classId: string | null | undefined,
     input: { studentName?: string | null; studentNumber?: string | null },
@@ -492,6 +584,16 @@ export class TeacherToolsService {
     return { status: 'unmatched', reason: 'no_student_match' };
   }
 
+  private singleAssignmentClass(
+    assignmentInfo: Awaited<ReturnType<TeacherToolsService['resolveAssignment']>>,
+  ) {
+    if (!assignmentInfo || assignmentInfo.classes.length !== 1) {
+      return null;
+    }
+    const [classItem] = assignmentInfo.classes;
+    return { id: classItem.id, name: classItem.name };
+  }
+
   private toMatchedStudent(
     student: {
       studentId: string;
@@ -509,6 +611,245 @@ export class TeacherToolsService {
       studentNumber: student.studentNumber,
       classId: student.classId,
     };
+  }
+
+  private async syncItemToSubmission(
+    task: ToolTaskDocument,
+    item: Record<string, unknown>,
+  ) {
+    const config = task.config as {
+      syncToSubmissions?: boolean;
+      overwriteExistingSubmissions?: boolean;
+    };
+    if (!config.syncToSubmissions || !task.assignmentId) {
+      return { status: 'skipped', reason: 'no_assignment' };
+    }
+
+    const matched = item.matchedStudent as Record<string, unknown> | undefined;
+    if (matched?.status !== 'matched' || !matched.studentId) {
+      return { status: 'skipped', reason: 'student_not_matched' };
+    }
+
+    const assignment = await this.assignmentModel.findById(task.assignmentId).lean();
+    if (!assignment) {
+      return { status: 'failed', reason: 'assignment_not_found' };
+    }
+
+    const existing = await this.submissionModel.findOne({
+      assignmentId: task.assignmentId,
+      studentId: String(matched.studentId),
+    });
+    if (existing?.status === 'teacher_reviewed') {
+      return {
+        status: 'skipped',
+        reason: 'teacher_reviewed',
+        submissionId: existing.id,
+      };
+    }
+    if (existing && !this.canOverwriteSubmission(existing, task, config)) {
+      return {
+        status: 'skipped',
+        reason: 'existing_submission',
+        submissionId: existing.id,
+      };
+    }
+
+    const now = new Date();
+    const score = this.readScoreForTask(task, item);
+    const classId = String(matched.classId || task.classId || '');
+    const className =
+      task.className ||
+      assignment.classes.find((classItem) => classItem.id === classId)?.name ||
+      '';
+    const content = this.buildSubmissionContent(task, item);
+    const aiReviewContent = this.buildSubmissionReview(task, item);
+    const attachments = [
+      {
+        fileName: String(item.fileName || ''),
+        fileUrl: '',
+        fileSize: 0,
+        fileType: task.type,
+        source: 'teacher_tools',
+        toolTaskId: task.id,
+        localPath: item.filePath,
+      },
+    ];
+    const aiReviewMetadata = {
+      provider: 'doubao',
+      queueStatus: 'completed',
+      source: 'teacher_tools',
+      toolTaskId: task.id,
+      toolTaskType: task.type,
+      fileName: item.fileName,
+      rawContent: item.rawContent,
+      grading: item.grading,
+      recognizedAnswers: item.answers,
+      completedAt: now.toISOString(),
+    };
+
+    if (existing) {
+      existing.classId = classId;
+      existing.className = className;
+      existing.content = content;
+      existing.attachments = attachments;
+      existing.isDraft = false;
+      existing.status = 'ai_reviewed';
+      existing.submittedAt = existing.submittedAt || now;
+      existing.submissionCount = Math.max(existing.submissionCount || 0, 1);
+      existing.aiScore = score;
+      existing.aiReviewContent = aiReviewContent;
+      existing.aiReviewMetadata = aiReviewMetadata;
+      existing.aiReviewedAt = now;
+      existing.teacherScore = null;
+      existing.teacherReviewContent = null;
+      existing.teacherReviewedAt = null;
+      await existing.save();
+      await this.syncMembershipSubmissionStats(classId, String(matched.studentId), existing);
+      return { status: 'updated', submissionId: existing.id };
+    }
+
+    const created = await this.submissionModel.create({
+      assignmentId: task.assignmentId,
+      studentId: String(matched.studentId),
+      studentName: String(matched.studentName || item.studentName || ''),
+      studentNumber: String(matched.studentNumber || item.studentNumber || ''),
+      classId,
+      className,
+      content,
+      attachments,
+      status: 'ai_reviewed',
+      isDraft: false,
+      submittedAt: now,
+      submissionCount: 1,
+      aiScore: score,
+      aiReviewContent,
+      aiReviewMetadata,
+      aiReviewedAt: now,
+      teacherScore: null,
+      teacherReviewContent: null,
+      teacherReviewedAt: null,
+    });
+    await this.syncMembershipSubmissionStats(classId, String(matched.studentId), created);
+    return { status: 'created', submissionId: created.id };
+  }
+
+  private async syncMembershipSubmissionStats(
+    classId: string,
+    studentId: string,
+    submission: SubmissionDocument,
+  ) {
+    await this.membershipModel.findOneAndUpdate(
+      { classId, studentId },
+      {
+        $set: {
+          totalSubmissions: submission.submissionCount || 1,
+          lastSubmissionTime: submission.submittedAt || new Date(),
+        },
+      },
+    );
+  }
+
+  private canOverwriteSubmission(
+    submission: SubmissionDocument,
+    task: ToolTaskDocument,
+    config: { overwriteExistingSubmissions?: boolean },
+  ) {
+    if (config.overwriteExistingSubmissions) {
+      return true;
+    }
+    if (submission.isDraft || submission.status === 'draft') {
+      return true;
+    }
+    const metadata = submission.aiReviewMetadata as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    return (
+      metadata?.source === 'teacher_tools' && metadata?.toolTaskId === task.id
+    );
+  }
+
+  private readScoreForTask(task: ToolTaskDocument, item: Record<string, unknown>) {
+    const rawScore =
+      task.type === 'objective_grading' ? item.totalScore : item.score;
+    const score = Number(rawScore);
+    return Number.isFinite(score) ? score : 0;
+  }
+
+  private buildSubmissionContent(
+    task: ToolTaskDocument,
+    item: Record<string, unknown>,
+  ) {
+    if (task.type === 'essay_batch') {
+      return this.plainTextToHtml(
+        String(item.essayText || '作文图片已由教师工具箱识别并同步。'),
+      );
+    }
+
+    const answers = item.answers && typeof item.answers === 'object'
+      ? Object.entries(item.answers as Record<string, unknown>)
+          .sort(([a], [b]) => Number(a) - Number(b))
+          .map(([questionId, answer]) => `${questionId}.${answer || '空'}`)
+          .join(' ')
+      : '';
+    return [
+      '<p>由教师工具箱客观题批分任务同步。</p>',
+      `<p>来源文件：${this.escapeHtml(String(item.fileName || ''))}</p>`,
+      `<p>识别答案：${this.escapeHtml(answers || '无')}</p>`,
+    ].join('');
+  }
+
+  private buildSubmissionReview(
+    task: ToolTaskDocument,
+    item: Record<string, unknown>,
+  ) {
+    if (task.type === 'essay_batch') {
+      const suggestions = Array.isArray(item.suggestions)
+        ? item.suggestions
+            .map((suggestion, index) => {
+              const row = suggestion as Record<string, unknown>;
+              return [
+                `${index + 1}. ${this.escapePlain(String(row.reason || '修改建议'))}`,
+                row.original_sentence
+                  ? `原句：${this.escapePlain(String(row.original_sentence))}`
+                  : '',
+                row.revised_sentence
+                  ? `建议：${this.escapePlain(String(row.revised_sentence))}`
+                  : '',
+              ]
+                .filter(Boolean)
+                .join('\n');
+            })
+            .join('\n\n')
+        : '';
+      return [
+        '**批量作文检查结果**',
+        `分数：${this.readScoreForTask(task, item)}`,
+        item.summaryComment ? `总评：${this.escapePlain(String(item.summaryComment))}` : '',
+        item.strengths ? `优点：${this.escapePlain(String(item.strengths))}` : '',
+        item.weaknesses ? `问题：${this.escapePlain(String(item.weaknesses))}` : '',
+        suggestions ? `修改建议：\n${suggestions}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    }
+
+    const grading = item.grading && typeof item.grading === 'object'
+      ? (item.grading as Record<string, Record<string, unknown>>)
+      : {};
+    const wrongItems = Object.entries(grading)
+      .filter(([, result]) => !result.isCorrect)
+      .map(
+        ([questionId, result]) =>
+          `${questionId}：学生答案 ${result.studentAnswer ?? '空'}，标准答案 ${result.standardAnswer ?? ''}`,
+      );
+    return [
+      '**客观题批分结果**',
+      `总分：${this.readScoreForTask(task, item)}`,
+      wrongItems.length
+        ? `错题：\n${wrongItems.map((text) => `- ${this.escapePlain(text)}`).join('\n')}`
+        : '全部正确或未发现错题。',
+    ].join('\n\n');
   }
 
   private async storeFiles(files: UploadedFile[], folder: string) {
@@ -569,6 +910,41 @@ export class TeacherToolsService {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
+  private readBoolean(value: unknown, fallback = false) {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      return ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
+    }
+    return !!value;
+  }
+
+  private async isTaskCancelled(id: string) {
+    const task = await this.toolTaskModel.findById(id).select('status').lean();
+    return task?.status === 'cancelled';
+  }
+
+  private plainTextToHtml(value: string) {
+    return `<p>${this.escapeHtml(value).replace(/\n/g, '<br>')}</p>`;
+  }
+
+  private escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private escapePlain(value: string) {
+    return value.replace(/[<>]/g, '');
+  }
+
   private async pushOrReplaceItem(
     task: ToolTaskDocument,
     item: Record<string, unknown>,
@@ -604,14 +980,20 @@ export class TeacherToolsService {
     const scores = items
       .map((item) => Number(item.totalScore))
       .filter((score) => Number.isFinite(score));
-    return this.buildScoreSummary(scores);
+    return {
+      ...this.buildScoreSummary(scores),
+      ...this.buildSyncSummary(items),
+    };
   }
 
   private buildEssaySummary(items: Array<Record<string, unknown>>) {
     const scores = items
       .map((item) => Number(item.score))
       .filter((score) => Number.isFinite(score));
-    return this.buildScoreSummary(scores);
+    return {
+      ...this.buildScoreSummary(scores),
+      ...this.buildSyncSummary(items),
+    };
   }
 
   private buildScoreSummary(scores: number[]) {
@@ -626,6 +1008,22 @@ export class TeacherToolsService {
     };
   }
 
+  private buildSyncSummary(items: Array<Record<string, unknown>>) {
+    const syncItems = items
+      .map((item) => item.submissionSync as Record<string, unknown> | undefined)
+      .filter((item): item is Record<string, unknown> => !!item);
+    return {
+      syncedSubmissions: syncItems.filter((item) =>
+        ['created', 'updated'].includes(String(item.status)),
+      ).length,
+      skippedSubmissionSyncs: syncItems.filter(
+        (item) => item.status === 'skipped',
+      ).length,
+      failedSubmissionSyncs: syncItems.filter((item) => item.status === 'failed')
+        .length,
+    };
+  }
+
   private clampScore(score: unknown) {
     const numericScore = Number(score);
     if (!Number.isFinite(numericScore)) {
@@ -637,27 +1035,60 @@ export class TeacherToolsService {
   private buildCsv(task: ToolTaskDocument) {
     const headers =
       task.type === 'objective_grading'
-        ? ['文件名', '学生姓名', '学号', '匹配状态', '总分', '状态', '错误']
-        : ['文件名', '学生姓名', '学号', '匹配状态', '分数', '状态', '总评', '错误'];
+        ? [
+            '文件名',
+            '学生姓名',
+            '学号',
+            '关联作业',
+            '匹配状态',
+            '总分',
+            '状态',
+            '同步状态',
+            '提交记录ID',
+            '错误',
+          ]
+        : [
+            '文件名',
+            '学生姓名',
+            '学号',
+            '关联作业',
+            '匹配状态',
+            '分数',
+            '状态',
+            '同步状态',
+            '提交记录ID',
+            '总评',
+            '错误',
+          ];
     const rows = (task.items || []).map((item) => {
       const matched = item.matchedStudent as Record<string, unknown> | undefined;
+      const sync = item.submissionSync as Record<string, unknown> | undefined;
+      const syncText = sync
+        ? [sync.status, sync.reason].filter(Boolean).join(':')
+        : '';
       return task.type === 'objective_grading'
         ? [
             item.fileName,
             item.studentName,
             item.studentNumber,
+            task.assignmentTitle,
             matched?.status,
             item.totalScore,
             item.status,
+            syncText,
+            sync?.submissionId,
             item.error,
           ]
         : [
             item.fileName,
             item.studentName,
             item.studentNumber,
+            task.assignmentTitle,
             matched?.status,
             item.score,
             item.status,
+            syncText,
+            sync?.submissionId,
             item.summaryComment,
             item.error,
           ];
@@ -685,6 +1116,8 @@ export class TeacherToolsService {
       teacherName: item.teacherName,
       classId: item.classId,
       className: item.className,
+      assignmentId: item.assignmentId,
+      assignmentTitle: item.assignmentTitle,
       title: item.title,
       status: item.status,
       totalCount: item.totalCount,
@@ -704,4 +1137,3 @@ export class TeacherToolsService {
     return error instanceof Error ? error.message : 'Unknown error';
   }
 }
-

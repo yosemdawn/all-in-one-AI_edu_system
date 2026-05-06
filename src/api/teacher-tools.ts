@@ -1,4 +1,4 @@
-import request from "@/utils/request";
+import request, { downloadFile } from "@/utils/request";
 
 export type ToolTaskType = "objective_grading" | "essay_batch";
 export type ToolTaskStatus =
@@ -16,6 +16,8 @@ export interface ToolTask {
   title: string;
   classId?: string | null;
   className?: string | null;
+  assignmentId?: string | null;
+  assignmentTitle?: string | null;
   status: ToolTaskStatus;
   totalCount: number;
   processedCount: number;
@@ -120,3 +122,10 @@ export function getToolTaskExportUrl(id: string) {
   return `${baseURL}/teacher/tools/tasks/${id}/export`;
 }
 
+export function downloadToolTask(id: string, filename?: string) {
+  return downloadFile(
+    `/teacher/tools/tasks/${id}/export`,
+    undefined,
+    filename || `tool-task-${id}.csv`
+  );
+}
