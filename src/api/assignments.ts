@@ -95,6 +95,7 @@ export interface AssignmentQueryParams {
   title?: string;
   status?: AssignmentStatus;
   teacherName?: string;
+  classId?: string;
   className?: string;
   startDate?: string;
   endDate?: string;

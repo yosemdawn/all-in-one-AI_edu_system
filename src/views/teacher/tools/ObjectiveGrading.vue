@@ -23,6 +23,32 @@
               />
             </el-select>
           </el-form-item>
+          <el-form-item label="关联作业">
+            <el-select
+              v-model="form.assignmentId"
+              clearable
+              filterable
+              placeholder="可选，选择后会同步到作业记录"
+            >
+              <el-option
+                v-for="item in assignments"
+                :key="item.id"
+                :label="item.title"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="form.assignmentId">
+            <el-checkbox v-model="form.syncToSubmissions">
+              批分完成后同步到学生提交记录
+            </el-checkbox>
+            <el-checkbox
+              v-if="form.syncToSubmissions"
+              v-model="form.overwriteExistingSubmissions"
+            >
+              覆盖已有学生提交
+            </el-checkbox>
+          </el-form-item>
           <el-form-item label="答题卡图片">
             <el-upload
               v-model:file-list="answerCardFiles"
@@ -95,7 +121,7 @@
             {{ taskStatusText(currentTask.status) }}
           </el-tag>
         </div>
-        <el-button :icon="Download" @click="downloadResult(currentTask.id)">导出结果</el-button>
+        <el-button :icon="Download" @click="downloadResult(currentTask)">导出结果</el-button>
       </div>
       <el-progress :percentage="progressPercent(currentTask)" />
       <el-table :data="currentTask.items" border>
@@ -114,9 +140,9 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Download,
   List,
@@ -125,12 +151,13 @@ import {
   UploadFilled,
 } from "@element-plus/icons-vue";
 import PageHeader from "@/components/PageHeader.vue";
+import { AssignmentStatus, getAssignmentList, type Assignment } from "@/api/assignments";
 import { getClassList } from "@/api/classes";
 import type { Class } from "@/types/classes";
 import {
   createObjectiveTask,
+  downloadToolTask,
   getToolTask,
-  getToolTaskExportUrl,
   parseObjectiveAnswers,
   parseObjectiveScoreConfig,
   type ToolTask,
@@ -144,6 +171,7 @@ import {
 
 const router = useRouter();
 const classes = ref<Class[]>([]);
+const assignments = ref<Assignment[]>([]);
 const answerCardFiles = ref<any[]>([]);
 const answerText = ref("");
 const scoreText = ref("");
@@ -158,16 +186,43 @@ let pollTimer: number | undefined;
 const form = reactive({
   title: "",
   classId: "",
+  assignmentId: "",
+  syncToSubmissions: true,
+  overwriteExistingSubmissions: false,
 });
 
 onMounted(async () => {
-  const data = await getClassList({ page: 1, limit: 100, status: "active" });
-  classes.value = data.items || [];
+  await Promise.all([loadClasses(), loadAssignments()]);
 });
+
+watch(
+  () => form.classId,
+  async () => {
+    form.assignmentId = "";
+    await loadAssignments();
+  }
+);
 
 onBeforeUnmount(() => {
   if (pollTimer) window.clearInterval(pollTimer);
 });
+
+async function loadClasses() {
+  const data = await getClassList({ page: 1, limit: 100, status: "active" });
+  classes.value = data.items || [];
+}
+
+async function loadAssignments() {
+  const data = await getAssignmentList({
+    page: 1,
+    pageSize: 100,
+    status: AssignmentStatus.PUBLISHED,
+    classId: form.classId || undefined,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  });
+  assignments.value = data.items || [];
+}
 
 async function handleParseAnswers() {
   if (!answerText.value.trim()) {
@@ -208,12 +263,27 @@ async function submitTask() {
     ElMessage.warning("请先填写或解析标准答案 JSON");
     return;
   }
+  if (form.assignmentId && form.overwriteExistingSubmissions) {
+    await ElMessageBox.confirm(
+      "覆盖后，已有学生提交的 AI 结果会被本次批分结果替换；教师已批改记录不会被覆盖。确认继续吗？",
+      "覆盖已有提交",
+      { type: "warning" }
+    );
+  }
 
   submitting.value = true;
   try {
     const data = new FormData();
     data.append("title", form.title);
     if (form.classId) data.append("classId", form.classId);
+    if (form.assignmentId) {
+      data.append("assignmentId", form.assignmentId);
+      data.append("syncToSubmissions", String(form.syncToSubmissions));
+      data.append(
+        "overwriteExistingSubmissions",
+        String(form.overwriteExistingSubmissions)
+      );
+    }
     data.append("standardAnswers", JSON.stringify(standardAnswers));
     data.append(
       "scoreConfig",
@@ -239,8 +309,8 @@ function startPolling(taskId: string) {
   }, 3000);
 }
 
-function downloadResult(id: string) {
-  window.open(getToolTaskExportUrl(id), "_blank");
+function downloadResult(task: ToolTask) {
+  downloadToolTask(task.id, `${task.title || "客观题批分"}-${task.id}.csv`);
 }
 </script>
 
@@ -296,4 +366,3 @@ function downloadResult(id: string) {
   }
 }
 </style>
-

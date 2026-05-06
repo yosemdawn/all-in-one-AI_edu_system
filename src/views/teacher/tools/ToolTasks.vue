@@ -34,6 +34,9 @@
           <template #default="{ row }">{{ taskTypeText(row.type) }}</template>
         </el-table-column>
         <el-table-column prop="className" label="班级" width="150" />
+        <el-table-column prop="assignmentTitle" label="关联作业" min-width="180">
+          <template #default="{ row }">{{ row.assignmentTitle || "-" }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <el-tag :type="taskStatusType(row.status)">
@@ -47,6 +50,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="successCount" label="成功" width="80" />
+        <el-table-column label="已同步" width="90">
+          <template #default="{ row }">
+            {{ row.resultSummary?.syncedSubmissions ?? 0 }}
+          </template>
+        </el-table-column>
         <el-table-column prop="failureCount" label="失败" width="80" />
         <el-table-column prop="createdAt" label="创建时间" width="180">
           <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
@@ -87,6 +95,7 @@
           <span>总数：{{ selectedTask.totalCount }}</span>
           <span>成功：{{ selectedTask.successCount }}</span>
           <span>失败：{{ selectedTask.failureCount }}</span>
+          <span>同步：{{ selectedTask.resultSummary?.syncedSubmissions ?? 0 }}</span>
           <span>平均分：{{ selectedTask.resultSummary?.averageScore ?? "-" }}</span>
         </div>
         <el-table :data="selectedTask.items" border>
@@ -95,6 +104,9 @@
           <el-table-column prop="studentNumber" label="学号" width="120" />
           <el-table-column label="分数" width="90">
             <template #default="{ row }">{{ row.totalScore ?? row.score ?? "-" }}</template>
+          </el-table-column>
+          <el-table-column label="同步" width="110">
+            <template #default="{ row }">{{ syncStatusText(row.submissionSync) }}</template>
           </el-table-column>
           <el-table-column prop="summaryComment" label="总评" min-width="240" show-overflow-tooltip />
           <el-table-column prop="error" label="错误" min-width="200" />
@@ -112,8 +124,8 @@ import { DocumentChecked, EditPen, Refresh } from "@element-plus/icons-vue";
 import PageHeader from "@/components/PageHeader.vue";
 import {
   cancelToolTask,
+  downloadToolTask,
   getToolTask,
-  getToolTaskExportUrl,
   getToolTasks,
   type ToolTask,
   type ToolTaskStatus,
@@ -172,11 +184,23 @@ async function handleCancel(task: ToolTask) {
 }
 
 function downloadResult(id: string) {
-  window.open(getToolTaskExportUrl(id), "_blank");
+  const task = tasks.value.find((item) => item.id === id) || selectedTask.value;
+  downloadToolTask(id, `${task?.title || "工具批改记录"}-${id}.csv`);
 }
 
 function taskTypeText(type: string) {
   return type === "objective_grading" ? "客观题批分" : "批量作文检查";
+}
+
+function syncStatusText(sync?: Record<string, any>) {
+  if (!sync) return "-";
+  const map: Record<string, string> = {
+    created: "已创建",
+    updated: "已更新",
+    skipped: "已跳过",
+    failed: "失败",
+  };
+  return map[sync.status] || sync.status || "-";
 }
 
 function formatDate(value?: string) {
@@ -220,4 +244,3 @@ function formatDate(value?: string) {
   margin-bottom: 16px;
 }
 </style>
-
