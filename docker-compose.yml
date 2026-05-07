@@ -1,0 +1,82 @@
+services:
+  # 前端服务 (Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nengdou-frontend:prod
+    container_name: nengdou-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+    networks:
+      - nengdou-network
+
+  # 后端服务 (NestJS)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: node:22-alpine
+    image: nengdou-backend:prod
+    container_name: nengdou-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 注意：后端端口不需要映射到主机(除非调试)，
+    # 因为它通过 Docker 网络在内部与 Nginx 通信。
+    # 如果你依然想直接访问后端，可以取消下面注释：
+    # ports:
+    #   - "3000:3000"
+    networks:
+      - nengdou-network
+
+  # 数据库 (MongoDB)
+  mongo:
+    image: mongo:7
+    container_name: nengdou-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://127.0.0.1:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - nengdou-network
+
+  # 缓存 (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: nengdou-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nengdou-network
+
+networks:
+  nengdou-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  redis_data:
