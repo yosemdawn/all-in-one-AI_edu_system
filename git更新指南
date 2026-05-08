@@ -1,0 +1,12 @@
+更新指南
+cd /var/www/nengdouAI
+git pull
+
+cd backend
+docker compose -f compose.prod.yml up -d --build
+
+cd ..
+npm install
+npm run build-only
+
+sudo systemctl reload nginx
