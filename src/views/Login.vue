@@ -223,7 +223,7 @@ const rules = reactive<FormRules>({
   ],
   studentId: [
     { required: true, message: "请输入学号", trigger: "blur" },
-    { min: 6, max: 20, message: "学号长度应在6-20个字符之间", trigger: "blur" },
+    { min: 2, max: 20, message: "学号长度应在2-20个字符之间", trigger: "blur" },
   ],
   password: [
     { required: true, message: "请输入密码", trigger: "blur" },
