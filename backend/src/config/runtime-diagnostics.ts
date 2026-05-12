@@ -22,7 +22,9 @@ export function logRuntimeDiagnostics(configService: ConfigService) {
   logger.log(`Environment: ${nodeEnv}`);
   logger.log(`MongoDB: ${sanitizeConnectionTarget(mongodbUri)}`);
   logger.log(`Redis queue: ${redisUrl ? 'enabled' : 'disabled'}`);
-  logger.log(`Doubao AI: ${doubaoApiKey ? 'configured' : 'not configured'}`);
+  logger.log(
+    `Global Doubao AI key: ${doubaoApiKey ? 'configured' : 'not configured'}`,
+  );
   logger.log(
     `CORS allowlist: ${corsOrigins ? 'configured' : 'open development mode'}`,
   );
@@ -43,7 +45,7 @@ export function logRuntimeDiagnostics(configService: ConfigService) {
 
   if (!doubaoApiKey) {
     logger.warn(
-      'DOUBAO_API_KEY is not configured. AI review jobs cannot complete successfully.',
+      'DOUBAO_API_KEY is not configured. Teachers must configure their own API keys before using AI review.',
     );
   }
 
@@ -77,11 +79,6 @@ export function logRuntimeDiagnostics(configService: ConfigService) {
     );
   }
 
-  if (nodeEnv === 'production' && aiReviewRequired && !doubaoApiKey) {
-    logger.warn(
-      'AI_REVIEW_REQUIRED is enabled in production but DOUBAO_API_KEY is missing.',
-    );
-  }
 }
 
 function sanitizeConnectionTarget(uri: string) {

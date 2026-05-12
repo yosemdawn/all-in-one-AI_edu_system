@@ -103,6 +103,8 @@ export interface TeacherStatsResponse {
     className: string;
     totalStudents: number;
     submittedCount: number;
+    assignmentCount: number;
+    expectedSubmissions: number;
     submissionRate: number;
   }>;
   assignmentStatusDistribution: StatusDistribution[];

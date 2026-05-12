@@ -1,6 +1,6 @@
 <template>
   <div
-    class="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8"
+    class="login-page min-h-screen w-full flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8"
   >
     <!-- 主登录卡片 -->
     <div class="login-main-card">
@@ -322,12 +322,34 @@ const submitForm = async () => {
   width: 100%;
   max-width: 900px;
   min-height: 500px;
-  background: white;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(18px);
   display: flex;
   overflow: hidden;
   animation: cardSlideIn 0.6s ease-out;
+}
+
+.login-page {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.18), rgba(59, 130, 246, 0.16)),
+    url("../../pic/picture.jpg") center / cover no-repeat fixed;
+}
+
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(1px);
+}
+
+.login-page > * {
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes cardSlideIn {
@@ -349,19 +371,19 @@ const submitForm = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #edeee9;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(15, 23, 42, 0.12)),
+    url("../../pic/picture.jpg") center / cover no-repeat;
 }
 
 /* 视频背景 */
 .video-background {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: auto;
-  height: 85%;
-  max-width: 100%;
-  object-fit: contain;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
   z-index: 1;
 }
 
@@ -408,7 +430,8 @@ const submitForm = async () => {
   align-items: center;
   justify-content: center;
   padding: 3rem 2rem;
-  background: white;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(16px);
 }
 
 .login-form-container {

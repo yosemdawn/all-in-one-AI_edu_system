@@ -74,25 +74,28 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: transparent;
 }
 
 /* 头部导航栏样式 */
 .layout-header {
   height: 60px;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--app-glass-bg-strong);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
   z-index: 10;
   padding: 0 16px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--app-glass-border);
   flex-shrink: 0; /* 防止头部被压缩 */
 }
 
 /* 主内容区域 - 精确计算高度 */
 .layout-main {
   height: calc(100vh - 60px - 50px); /* 总高度减去头部60px和底部50px */
-  background-color: #f5f5f5;
+  background: var(--app-content-bg);
+  backdrop-filter: blur(4px);
   overflow: hidden;
   flex: 1;
 }
@@ -109,13 +112,14 @@ export default defineComponent({
 /* 底部样式 */
 .layout-footer {
   height: 50px;
-  background-color: white;
+  background: var(--app-glass-bg-strong);
   color: #6b7280;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--app-glass-border);
+  backdrop-filter: blur(18px);
   flex-shrink: 0; /* 防止底部被压缩 */
 }
 

@@ -10,3 +10,7 @@ npm install
 npm run build-only
 
 sudo systemctl reload nginx
+
+测试指南
+docker compose -f docker-compose.dev.yml up
+访问http://localhost:8080

@@ -72,6 +72,20 @@ export class User {
   @Prop({ default: 0 })
   tokenVersion?: number;
 
+  @Prop({
+    type: {
+      doubaoApiKeyEncrypted: { type: String, default: null },
+      doubaoApiKeyPreview: { type: String, default: '' },
+      doubaoApiKeyUpdatedAt: { type: Date, default: null },
+    },
+    default: {},
+  })
+  aiSettings?: {
+    doubaoApiKeyEncrypted?: string | null;
+    doubaoApiKeyPreview?: string;
+    doubaoApiKeyUpdatedAt?: Date | null;
+  };
+
   createdAt?: Date;
 
   updatedAt?: Date;

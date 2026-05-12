@@ -8,6 +8,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { readFile } from 'fs/promises';
 import { Model } from 'mongoose';
 import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
+import { decryptAiApiKey } from '../users/ai-api-key.crypto';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import {
   StandardAnswerMap,
   QuestionScoreConfig,
@@ -25,15 +27,21 @@ type ChatResult<T> = {
   model?: string;
 };
 
+type TeacherAiOptions = {
+  teacherId?: string;
+};
+
 @Injectable()
 export class DoubaoVisionService {
   constructor(
     private readonly configService: ConfigService,
     @InjectModel(AiModel.name)
     private readonly aiModelModel: Model<AiModelDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
 
-  async parseStandardAnswers(text: string) {
+  async parseStandardAnswers(text: string, options: TeacherAiOptions = {}) {
     return this.callJson<StandardAnswerMap>(
       [
         {
@@ -46,11 +54,11 @@ export class DoubaoVisionService {
           content: text,
         },
       ],
-      { timeoutMs: 45_000 },
+      { timeoutMs: 45_000, teacherId: options.teacherId },
     );
   }
 
-  async parseScoreConfig(text: string) {
+  async parseScoreConfig(text: string, options: TeacherAiOptions = {}) {
     return this.callJson<QuestionScoreConfig>(
       [
         {
@@ -63,11 +71,11 @@ export class DoubaoVisionService {
           content: text,
         },
       ],
-      { timeoutMs: 45_000 },
+      { timeoutMs: 45_000, teacherId: options.teacherId },
     );
   }
 
-  async recognizeAnswerCard(image: VisionImage) {
+  async recognizeAnswerCard(image: VisionImage, options: TeacherAiOptions = {}) {
     const imageContent = await this.toImageContent(image);
     return this.callJson<{
       studentName?: string;
@@ -91,11 +99,15 @@ export class DoubaoVisionService {
           ],
         },
       ],
-      { timeoutMs: 120_000 },
+      { timeoutMs: 120_000, teacherId: options.teacherId },
     );
   }
 
-  async previewEssayRequirements(images: VisionImage[], text?: string) {
+  async previewEssayRequirements(
+    images: VisionImage[],
+    text?: string,
+    options: TeacherAiOptions = {},
+  ) {
     const imageContents = await Promise.all(
       images.map((image) => this.toImageContent(image)),
     );
@@ -119,7 +131,7 @@ export class DoubaoVisionService {
           ],
         },
       ],
-      { timeoutMs: 90_000 },
+      { timeoutMs: 90_000, teacherId: options.teacherId },
     );
   }
 
@@ -127,7 +139,7 @@ export class DoubaoVisionService {
     requirementsText: string;
     requirementImages: VisionImage[];
     essayImage: VisionImage;
-  }) {
+  }, options: TeacherAiOptions = {}) {
     const requirementImageContents = await Promise.all(
       input.requirementImages.map((image) => this.toImageContent(image)),
     );
@@ -169,15 +181,15 @@ export class DoubaoVisionService {
           ],
         },
       ],
-      { timeoutMs: 120_000 },
+      { timeoutMs: 120_000, teacherId: options.teacherId },
     );
   }
 
   private async callJson<T>(
     messages: Array<Record<string, unknown>>,
-    options: { timeoutMs: number },
+    options: { timeoutMs: number; teacherId?: string },
   ): Promise<ChatResult<T>> {
-    const config = await this.resolveModelConfig();
+    const config = await this.resolveModelConfig(options.teacherId);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 
@@ -226,13 +238,14 @@ export class DoubaoVisionService {
     }
   }
 
-  private async resolveModelConfig() {
+  private async resolveModelConfig(teacherId?: string) {
     const model = await this.aiModelModel.findOne({ code: 'doubao' }).lean();
-    const apiKey =
-      model?.apiKey || this.configService.get<string>('DOUBAO_API_KEY') || '';
+    const apiKey = await this.resolveTeacherApiKey(teacherId);
 
     if (!apiKey) {
-      throw new ServiceUnavailableException('Doubao API key is not configured');
+      throw new ServiceUnavailableException(
+        'Teacher Doubao API key is not configured',
+      );
     }
 
     const rawBaseUrl =
@@ -248,6 +261,27 @@ export class DoubaoVisionService {
         this.configService.get<string>('DOUBAO_MODEL') ||
         'doubao-seed-2-0-lite-260215',
     };
+  }
+
+  private async resolveTeacherApiKey(teacherId?: string) {
+    if (!teacherId) {
+      return '';
+    }
+
+    const teacher = await this.userModel
+      .findById(teacherId)
+      .select('aiSettings')
+      .lean();
+    const encrypted = teacher?.aiSettings?.doubaoApiKeyEncrypted;
+    if (!encrypted) {
+      return '';
+    }
+
+    try {
+      return decryptAiApiKey(encrypted);
+    } catch {
+      return '';
+    }
   }
 
   private async toImageContent(image: VisionImage) {

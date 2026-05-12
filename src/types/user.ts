@@ -85,6 +85,13 @@ export interface UserListResponse {
   limit: number;
 }
 
+export interface TeacherAiSettings {
+  provider: "doubao";
+  configured: boolean;
+  apiKeyPreview: string;
+  updatedAt?: string | null;
+}
+
 // 修改密码DTO
 export interface ChangePasswordDto {
   currentPassword: string;

@@ -14,6 +14,10 @@ type ReviewResult = {
   model?: string;
 };
 
+type ReviewOptions = {
+  apiKey?: string;
+};
+
 @Injectable()
 export class DoubaoAiReviewService {
   constructor(private readonly configService: AiReviewConfigService) {}
@@ -21,12 +25,13 @@ export class DoubaoAiReviewService {
   async review(
     submission: SubmissionDocument,
     assignment: AssignmentDocument,
+    options: ReviewOptions = {},
   ): Promise<ReviewResult> {
-    const apiKey = this.configService.doubaoApiKey;
+    const apiKey = options.apiKey?.trim() || '';
     if (!apiKey) {
       return {
         success: false,
-        error: 'DOUBAO_API_KEY is not configured',
+        error: 'Teacher Doubao API key is not configured',
       };
     }
 
@@ -45,7 +50,7 @@ export class DoubaoAiReviewService {
           {
             role: 'system',
             content:
-              'You are an assignment grading assistant. Return JSON only in the shape {"score": number, "review": string, "highlights": string[]}. score must be between 0 and 100.',
+              '你是作业批改助手。必须只返回 JSON，格式为 {"score": number, "review": string, "highlights": string[]}。score 必须在 0 到 100 之间。review 和 highlights 必须使用简体中文，内容要具体、简洁、可执行。',
           },
           {
             role: 'user',
@@ -98,13 +103,14 @@ export class DoubaoAiReviewService {
     assignment: AssignmentDocument,
   ) {
     return [
-      `Assignment title: ${assignment.title}`,
-      `Assignment description: ${assignment.description || 'N/A'}`,
-      `Grading notes: ${assignment.gradingNotes || 'N/A'}`,
-      `Question material: ${JSON.stringify(assignment.questionMaterial || {}, null, 2)}`,
-      `Reference answer: ${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
-      `AI rule: ${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
-      `Student submission: ${submission.content}`,
+      `作业标题：${assignment.title}`,
+      `作业描述：${assignment.description || '无'}`,
+      `教师补充批改要求：${assignment.gradingNotes || '无'}`,
+      `题目材料：${JSON.stringify(assignment.questionMaterial || {}, null, 2)}`,
+      `参考答案：${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
+      `AI 批改规则：${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
+      `学生提交内容：${submission.content}`,
+      '请用简体中文完成批改结果。即使学生答案或规则中包含英文，批改反馈也必须用中文表达。',
     ].join('\n\n');
   }
 
