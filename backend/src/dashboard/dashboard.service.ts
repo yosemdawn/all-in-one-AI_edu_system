@@ -445,6 +445,8 @@ export class DashboardService {
           .slice(0, 10)
           .map((item) => ({
             id: item._id.toString(),
+            assignmentId: item.assignmentId,
+            classId: item.classId,
             assignmentTitle: assignmentMap.get(item.assignmentId)?.title || '',
             aiScore: item.aiScore,
             teacherScore: item.teacherScore,
