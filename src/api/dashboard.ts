@@ -166,6 +166,8 @@ export interface StudentStatsResponse {
   }>;
   recentSubmissions: Array<{
     id: string;
+    assignmentId?: string;
+    classId?: string;
     assignmentTitle: string;
     aiScore?: number;
     teacherScore?: number;

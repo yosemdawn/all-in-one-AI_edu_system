@@ -27,6 +27,12 @@ const state = () => ({
 // 定义getters
 const getters = {
   getUserInfo: (state) => state.userInfo,
+  userName: (state) =>
+    state.userInfo?.username ||
+    state.userInfo?.name ||
+    state.userInfo?.studentId ||
+    state.userInfo?.email ||
+    "",
   getToken: (state) => state.userInfo?.token || localStorage.getItem("token"),
   getRefreshToken: (state) => state.userInfo?.refreshToken,
   isLoggedIn: (state) =>
