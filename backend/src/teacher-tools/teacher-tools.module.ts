@@ -22,6 +22,7 @@ import {
   Submission,
   SubmissionSchema,
 } from '../submissions/schemas/submission.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { TeacherToolsController } from './teacher-tools.controller';
 import { TeacherToolsProcessor } from './teacher-tools.processor';
 import { TeacherToolsQueueService } from './teacher-tools-queue.service';
@@ -52,6 +53,7 @@ const queueProviders = redisUrl
       { name: AiModel.name, schema: AiModelSchema },
       { name: Assignment.name, schema: AssignmentSchema },
       { name: Submission.name, schema: SubmissionSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   providers: [

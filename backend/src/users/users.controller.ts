@@ -22,6 +22,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { DeleteUsersDto } from './dto/delete-users.dto';
 import { ImportUserRowDto } from './dto/import-user-row.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -81,6 +82,36 @@ export class UsersController {
     return this.appService.envelope(
       await this.usersService.updateCurrentUserPassword(currentUser, body),
       'password updated',
+    );
+  }
+
+  @Roles('teacher')
+  @Get('ai-settings')
+  async getAiSettings(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.appService.envelope(
+      await this.usersService.getCurrentUserAiSettings(currentUser),
+      'ai settings fetched',
+    );
+  }
+
+  @Roles('teacher')
+  @Put('ai-settings')
+  async updateAiSettings(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: UpdateAiSettingsDto,
+  ) {
+    return this.appService.envelope(
+      await this.usersService.updateCurrentUserAiSettings(currentUser, body),
+      'ai settings updated',
+    );
+  }
+
+  @Roles('teacher')
+  @Delete('ai-settings')
+  async clearAiSettings(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.appService.envelope(
+      await this.usersService.clearCurrentUserAiSettings(currentUser),
+      'ai settings cleared',
     );
   }
 

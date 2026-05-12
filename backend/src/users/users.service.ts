@@ -21,11 +21,13 @@ import { AdminUpdateUserPasswordDto } from './dto/admin-update-user-password.dto
 import { CreateUserDto } from './dto/create-user.dto';
 import { ImportUserRowDto } from './dto/import-user-row.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserListQueryDto } from './dto/user-list-query.dto';
 import { User, UserDocument } from './schemas/user.schema';
+import { encryptAiApiKey, maskAiApiKey } from './ai-api-key.crypto';
 
 type AllowedRole = 'superadmin' | 'teacher' | 'student';
 const ALLOWED_USER_SORT_FIELDS = new Set([
@@ -195,6 +197,46 @@ export class UsersService {
     await user.save();
 
     return { success: true };
+  }
+
+  async getCurrentUserAiSettings(currentUser: AuthenticatedUser) {
+    const user = await this.getCurrentUserDocument(currentUser);
+    return this.toAiSettingsPayload(user);
+  }
+
+  async updateCurrentUserAiSettings(
+    currentUser: AuthenticatedUser,
+    body: UpdateAiSettingsDto,
+  ) {
+    const user = await this.getCurrentUserDocument(currentUser);
+    const apiKey = body.apiKey?.trim();
+    if (!apiKey) {
+      throw new BadRequestException('API key is required');
+    }
+
+    const updatedAt = new Date();
+    user.aiSettings = {
+      ...(user.aiSettings || {}),
+      doubaoApiKeyEncrypted: encryptAiApiKey(apiKey),
+      doubaoApiKeyPreview: maskAiApiKey(apiKey),
+      doubaoApiKeyUpdatedAt: updatedAt,
+    };
+    await user.save();
+
+    return this.toAiSettingsPayload(user);
+  }
+
+  async clearCurrentUserAiSettings(currentUser: AuthenticatedUser) {
+    const user = await this.getCurrentUserDocument(currentUser);
+    user.aiSettings = {
+      ...(user.aiSettings || {}),
+      doubaoApiKeyEncrypted: null,
+      doubaoApiKeyPreview: '',
+      doubaoApiKeyUpdatedAt: null,
+    };
+    await user.save();
+
+    return this.toAiSettingsPayload(user);
   }
 
   async createUser(body: CreateUserDto) {
@@ -486,6 +528,15 @@ export class UsersService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       lastLogin: includeAuthDates ? user.lastLoginAt : undefined,
+    };
+  }
+
+  private toAiSettingsPayload(user: UserDocument) {
+    return {
+      provider: 'doubao',
+      configured: !!user.aiSettings?.doubaoApiKeyEncrypted,
+      apiKeyPreview: user.aiSettings?.doubaoApiKeyPreview || '',
+      updatedAt: user.aiSettings?.doubaoApiKeyUpdatedAt || null,
     };
   }
 }

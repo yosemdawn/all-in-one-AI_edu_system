@@ -38,13 +38,23 @@ describe('AiReviewProcessor', () => {
       findById: jest.fn().mockResolvedValue(submission),
     };
     const assignmentModel = {
-      findById: jest.fn().mockResolvedValue({ id: 'assignment-1' }),
+      findById: jest.fn().mockResolvedValue({
+        id: 'assignment-1',
+        teacherId: 'teacher-1',
+      }),
     };
     const aiModelModel = {
       updateOne: jest.fn(),
     };
     const membershipModel = {
       findOneAndUpdate: jest.fn(),
+    };
+    const userModel = {
+      findById: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({ aiSettings: {} }),
+        }),
+      }),
     };
     const doubaoAiReviewService = {
       review: jest.fn().mockResolvedValue({
@@ -58,7 +68,8 @@ describe('AiReviewProcessor', () => {
       assignmentModel as unknown as ProcessorDependencies[1],
       aiModelModel as unknown as ProcessorDependencies[2],
       membershipModel as unknown as ProcessorDependencies[3],
-      doubaoAiReviewService as unknown as ProcessorDependencies[4],
+      userModel as unknown as ProcessorDependencies[4],
+      doubaoAiReviewService as unknown as ProcessorDependencies[5],
     );
     const job = {
       id: 'job-1',

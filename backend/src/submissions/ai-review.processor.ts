@@ -15,6 +15,8 @@ import {
 import { AI_REVIEW_QUEUE } from './ai-review.constants';
 import { DoubaoAiReviewService } from './doubao-ai-review.service';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { decryptAiApiKey } from '../users/ai-api-key.crypto';
 
 @Processor(AI_REVIEW_QUEUE)
 export class AiReviewProcessor extends WorkerHost {
@@ -29,6 +31,8 @@ export class AiReviewProcessor extends WorkerHost {
     private readonly aiModelModel: Model<AiModelDocument>,
     @InjectModel(ClassMembership.name)
     private readonly membershipModel: Model<ClassMembershipDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly doubaoAiReviewService: DoubaoAiReviewService,
   ) {
     super();
@@ -70,10 +74,10 @@ export class AiReviewProcessor extends WorkerHost {
     };
     await submission.save();
 
-    const result = await this.doubaoAiReviewService.review(
-      submission,
-      assignment,
-    );
+    const teacherApiKey = await this.resolveTeacherApiKey(assignment);
+    const result = await this.doubaoAiReviewService.review(submission, assignment, {
+      apiKey: teacherApiKey,
+    });
 
     if (!result.success) {
       submission.status = 'ai_review_failed';
@@ -137,5 +141,22 @@ export class AiReviewProcessor extends WorkerHost {
       usage?.total_tokens || usage?.totalTokens || 0,
     );
     return Number.isFinite(totalTokensValue) ? totalTokensValue : 0;
+  }
+
+  private async resolveTeacherApiKey(assignment: AssignmentDocument) {
+    const teacher = await this.userModel
+      .findById(assignment.teacherId)
+      .select('aiSettings')
+      .lean();
+
+    try {
+      return decryptAiApiKey(teacher?.aiSettings?.doubaoApiKeyEncrypted);
+    } catch (error) {
+      this.logger.error(
+        `Failed to decrypt teacher AI key for teacher ${assignment.teacherId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return '';
+    }
   }
 }

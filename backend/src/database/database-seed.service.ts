@@ -120,9 +120,10 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       classes: [{ id: classItem.id, name: classItem.name }],
       aiRule: {
         id: 'rule-1',
-        name: 'Default Review Rule',
+        name: '默认中文批改规则',
         modelType: 'doubao',
-        prompt: 'Provide a score and short improvement advice.',
+        prompt:
+          '请根据作业要求、参考答案和学生提交内容进行批改。请给出 0-100 分的分数，并用简体中文提供简洁、具体、可执行的改进建议。',
         originalRuleId: 'rule-1',
         snapshotAt: new Date().toISOString(),
       },
@@ -132,7 +133,7 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       referenceAnswer: {
         content: '<p>1.A 2.C 3.B 4.D 5.A</p>',
       },
-      gradingNotes: 'Score each question and explain mistakes briefly.',
+      gradingNotes: '请逐题给分，并用中文简要说明错误原因和改进建议。',
       submissionFormat: 'answers_only',
       startDate: new Date(),
       endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

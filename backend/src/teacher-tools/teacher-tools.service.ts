@@ -77,16 +77,22 @@ export class TeacherToolsService {
     private readonly queueService?: TeacherToolsQueueService,
   ) {}
 
-  async parseStandardAnswers(text: string) {
-    const result = await this.doubaoVisionService.parseStandardAnswers(text);
+  async parseStandardAnswers(currentUser: AuthenticatedUser, text: string) {
+    this.assertTeacher(currentUser);
+    const result = await this.doubaoVisionService.parseStandardAnswers(text, {
+      teacherId: currentUser.id,
+    });
     const standardAnswers = this.objectiveGradingService.normalizeStandardAnswers(
       result.data,
     );
     return this.appService.envelope({ standardAnswers }, 'success');
   }
 
-  async parseScoreConfig(text: string) {
-    const result = await this.doubaoVisionService.parseScoreConfig(text);
+  async parseScoreConfig(currentUser: AuthenticatedUser, text: string) {
+    this.assertTeacher(currentUser);
+    const result = await this.doubaoVisionService.parseScoreConfig(text, {
+      teacherId: currentUser.id,
+    });
     const scoreConfig = this.objectiveGradingService.normalizeScoreConfig(
       result.data,
     );
@@ -106,6 +112,7 @@ export class TeacherToolsService {
     const result = await this.doubaoVisionService.previewEssayRequirements(
       storedFiles,
       this.readString(body.requirementText),
+      { teacherId: currentUser.id },
     );
     return this.appService.envelope(result.data, 'success');
   }
@@ -344,6 +351,7 @@ export class TeacherToolsService {
       try {
         const recognized = await this.doubaoVisionService.recognizeAnswerCard(
           file,
+          { teacherId: task.teacherId },
         );
         if (await this.isTaskCancelled(task.id)) return;
         const grading = this.objectiveGradingService.gradeStudentAnswers(
@@ -410,6 +418,8 @@ export class TeacherToolsService {
     if (!requirementsText && requirementImages.length) {
       const preview = await this.doubaoVisionService.previewEssayRequirements(
         requirementImages,
+        undefined,
+        { teacherId: task.teacherId },
       );
       requirementsText = preview.data.requirements || '';
       task.config = { ...task.config, requirementText: requirementsText };
@@ -430,6 +440,8 @@ export class TeacherToolsService {
           requirementsText,
           requirementImages,
           essayImage: file,
+        }, {
+          teacherId: task.teacherId,
         });
         if (await this.isTaskCancelled(task.id)) return;
         const score = this.clampScore(reviewed.data.score);

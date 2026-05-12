@@ -136,10 +136,6 @@ function assertProductionReadiness(config: EnvironmentVariables) {
       config.REDIS_URL,
       'REDIS_URL is required in production when AI_REVIEW_REQUIRED is not false',
     );
-    requireValue(
-      config.DOUBAO_API_KEY,
-      'DOUBAO_API_KEY is required in production when AI_REVIEW_REQUIRED is not false',
-    );
   }
 }
 

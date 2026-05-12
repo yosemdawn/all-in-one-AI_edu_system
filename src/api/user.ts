@@ -5,6 +5,7 @@ import type {
   UserListResponse,
   CreateUserDto,
   UpdateUserDto,
+  TeacherAiSettings,
 } from "@/types/user";
 
 /**
@@ -116,6 +117,30 @@ export const changePassword = (passwordData: {
     url: "/users/password",
     method: "put",
     data: passwordData,
+  });
+};
+
+export const getTeacherAiSettings = (): Promise<TeacherAiSettings> => {
+  return request({
+    url: "/users/ai-settings",
+    method: "get",
+  });
+};
+
+export const updateTeacherAiSettings = (data: {
+  apiKey: string;
+}): Promise<TeacherAiSettings> => {
+  return request({
+    url: "/users/ai-settings",
+    method: "put",
+    data,
+  });
+};
+
+export const clearTeacherAiSettings = (): Promise<TeacherAiSettings> => {
+  return request({
+    url: "/users/ai-settings",
+    method: "delete",
   });
 };
 
@@ -246,6 +271,9 @@ export default {
   getUserProfile,
   updateUserProfile,
   changePassword,
+  getTeacherAiSettings,
+  updateTeacherAiSettings,
+  clearTeacherAiSettings,
   getUsers,
   getUser,
   createUser,

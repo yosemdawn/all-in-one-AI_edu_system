@@ -1,170 +1,80 @@
 <template>
   <div class="teacher-dashboard">
-    <!-- 页面头部 -->
-    <div class="dashboard-header">
-      <div class="header-content">
-        <h1 class="dashboard-title">👨‍🏫 {{ userName }}的教学中心</h1>
-        <div class="header-actions">
-          <el-button
-            type="primary"
-            :icon="Reading"
-            @click="viewMyClasses"
-            size="default"
-          >
-            我的班级
-          </el-button>
-          <el-button
-            type="success"
-            :icon="Plus"
-            @click="createAssignment"
-            size="default"
-          >
-            新建作业
-          </el-button>
-          <el-button :icon="DocumentChecked" @click="viewAllSubmissions" size="default">
-            待批改
-          </el-button>
-          <el-button :icon="Setting" @click="manageAiRules" size="default">
-            评分规则模板
-          </el-button>
-        </div>
+    <section class="dashboard-hero">
+      <div class="hero-copy">
+        <h1 class="dashboard-title">👋 {{ greetingText }}，{{ userName }}老师</h1>
+        <p class="hero-subtitle">
+          {{ greetingMessage }}
+        </p>
       </div>
-    </div>
+ 
+      <div class="hero-actions">
+        <button class="primary-action primary-action--publish" type="button" @click="createAssignment">
+          <el-icon class="primary-action__icon"><Plus /></el-icon>
+          <strong>发布作业</strong>
+          <span>创建作业并发送给班级</span>
+        </button>
+        <button class="primary-action primary-action--review" type="button" @click="viewAllSubmissions">
+          <el-icon class="primary-action__icon"><DocumentChecked /></el-icon>
+          <strong>批改作业</strong>
+          <span>查看提交并写评语</span>
+        </button>
+      </div>
+    </section>
 
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <StatCard
-        title="我的班级"
-        :value="teacherStats?.myClasses || 0"
-        unit="个"
-        subtitle="活跃/解散"
-        icon="school"
-        variant="primary"
-        :loading="loading"
-      />
-      <StatCard
-        title="我的作业"
-        :value="teacherStats?.myAssignments || 0"
-        unit="个"
-        subtitle="发布/草稿"
-        icon="document"
-        variant="success"
-        :loading="loading"
-      />
-      <StatCard
-        title="待批改"
-        :value="teacherStats?.pendingReviews || 0"
-        unit="份"
-        subtitle="AI已批改"
-        icon="list"
-        variant="warning"
-        :loading="loading"
-        :trend="pendingTrend"
-        :trend-value="pendingTrendValue"
-      />
-      <StatCard
-        title="班级学生"
-        :value="teacherStats?.totalStudents || 0"
-        unit="人"
-        subtitle="活跃学生"
-        icon="user"
-        variant="info"
-        :loading="loading"
-      />
-    </div>
-
-    <div class="focus-grid">
-      <div class="focus-card">
-        <div class="focus-card__header">
-          <div>
-            <h3 class="focus-card__title">班级与作业进度</h3>
-            <p class="focus-card__subtitle">
-              聚焦本周最需要处理的班级与作业进度
-            </p>
-          </div>
-          <el-button type="primary" link @click="viewClassSubmissionDetails">
-            查看班级详情
-          </el-button>
+    <section class="class-progress-card">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">班级作业提交情况</h2>
+          <p class="section-subtitle">
+            按班级汇总已发布作业的提交率，优先处理提交率低或待批改多的班级。
+          </p>
         </div>
-
-        <div class="class-submission-list" v-loading="loading">
-          <div
-            v-for="(item, index) in displayedClassSubmissionData"
-            :key="item.name"
-            class="submission-item"
-            :class="{ 'top-performer': index < 3 }"
-          >
-            <div class="submission-rank">
-              <span class="rank-number" :class="getRankClass(index)">{{
-                index + 1
-              }}</span>
-            </div>
-            <div class="submission-info">
-              <div class="class-name">{{ item.name }}</div>
-              <div class="submission-stats">
-                <span class="students-count">{{ item.totalStudents }}人</span>
-                <span class="submitted-count">已提交{{ item.submittedCount }}份</span>
-              </div>
-            </div>
-            <div class="submission-rate">
-              <div class="rate-circle-progress" :style="{ '--progress': item.value }">
-                <span class="rate-text" :class="getRateClass(item.value)">{{ item.value }}%</span>
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="!loading && displayedClassSubmissionData.length === 0"
-            class="empty-state"
-          >
-            <p>暂无班级数据</p>
-          </div>
-        </div>
+        <el-button type="primary" plain @click="viewClassSubmissionDetails">
+          查看班级详情
+        </el-button>
       </div>
 
-      <div class="focus-card focus-card--compact">
-        <div class="focus-card__header">
-          <div>
-            <h3 class="focus-card__title">AI批改概览</h3>
-            <p class="focus-card__subtitle">只保留与你日常批改最相关的数据</p>
-          </div>
-          <el-button type="primary" link @click="viewAllSubmissions">
-            进入待批改
-          </el-button>
-        </div>
-
-        <div class="quick-metrics">
-          <div class="quick-metric">
-            <span class="quick-metric__label">今日AI批改</span>
-            <strong class="quick-metric__value">{{ teacherStats?.aiReviewStats?.todayReviews || 0 }}份</strong>
-          </div>
-          <div class="quick-metric">
-            <span class="quick-metric__label">等待批改</span>
-            <strong class="quick-metric__value quick-metric__value--pending">{{ teacherStats?.aiReviewStats?.pendingReviews || 0 }}份</strong>
-          </div>
-          <div class="quick-metric">
-            <span class="quick-metric__label">平均完成率</span>
-            <strong class="quick-metric__value">{{ averageSubmissionRate }}%</strong>
-          </div>
-          <div class="quick-metric">
-            <span class="quick-metric__label">作业状态</span>
-            <div class="quick-metric__chart">
-              <DonutChart
-                :data="assignmentStatusData"
-                :height="190"
-                :loading="loading"
-              />
+      <div class="class-progress-list" v-loading="loading">
+        <button
+          v-for="item in classSubmissionData"
+          :key="item.classId"
+          class="class-progress-item"
+          type="button"
+          @click="viewMyClasses"
+        >
+          <div class="class-progress-main">
+            <div class="class-progress-title-row">
+              <h3 class="class-name">{{ item.name }}</h3>
+              <strong class="class-percent" :class="getRateClass(item.value)">
+                {{ item.value }}%
+              </strong>
+            </div>
+            <div class="progress-bar" aria-hidden="true">
+              <div
+                class="progress-fill"
+                :class="getRateClass(item.value)"
+                :style="{ width: `${Math.min(item.value, 100)}%` }"
+              ></div>
+            </div>
+            <div class="class-progress-meta">
+              <span>{{ item.submittedCount }}/{{ item.expectedSubmissions }} 份已提交</span>
+              <span>{{ item.assignmentCount }} 份作业</span>
+              <span>{{ item.totalStudents }} 名学生</span>
             </div>
           </div>
+        </button>
+
+        <div v-if="!loading && classSubmissionData.length === 0" class="empty-state">
+          暂无班级作业数据，先新建作业或创建班级。
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 数据表格区域 -->
     <div class="tables-grid-two">
-      <!-- 我的作业管理 -->
       <div class="table-card">
         <div class="table-header">
-          <h3 class="table-title">📝 我的作业管理</h3>
+          <h3 class="table-title">我的作业</h3>
           <el-button type="primary" size="small" @click="viewAllAssignments">
             查看全部
           </el-button>
@@ -179,13 +89,13 @@
           <el-table-column
             prop="title"
             label="作业名"
-            min-width="100"
+            min-width="120"
             show-overflow-tooltip
           />
           <el-table-column
             prop="classCount"
             label="班级"
-            width="60"
+            width="70"
             align="center"
           >
             <template #default="{ row }"> {{ row.classCount }}班 </template>
@@ -197,15 +107,12 @@
             align="center"
           >
             <template #default="{ row }">
-              <div
-                class="submission-rate"
-                :class="{ 'low-rate': row.submissionRate < 50 }"
-              >
+              <span class="table-rate" :class="{ 'table-rate--low': row.submissionRate < 60 }">
                 {{ row.submissionRate }}%
-              </div>
+              </span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="70" align="center">
+          <el-table-column prop="status" label="状态" width="80" align="center">
             <template #default="{ row }">
               <el-tag :type="getAssignmentStatusType(row.status)" size="small">
                 {{ getAssignmentStatusText(row.status) }}
@@ -215,26 +122,19 @@
           <el-table-column
             prop="endDate"
             label="截止时间"
-            width="90"
+            width="110"
             align="center"
             show-overflow-tooltip
           >
             <template #default="{ row }">
-              <div
-                class="deadline"
-                :class="{ 'deadline--urgent': isUrgent(row.endDate) }"
-              >
+              <span class="deadline" :class="{ 'deadline--urgent': isUrgent(row.endDate) }">
                 {{ formatDateTime(row.endDate) }}
-              </div>
+              </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="60" align="center" fixed="right">
+          <el-table-column label="操作" width="76" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button
-                type="primary"
-                size="small"
-                @click="viewAssignment(row.id)"
-              >
+              <el-button type="primary" size="small" @click="viewAssignment(row.id)">
                 查看
               </el-button>
             </template>
@@ -242,16 +142,11 @@
         </el-table>
       </div>
 
-      <!-- 待处理提交 -->
       <div class="table-card">
         <div class="table-header">
-          <h3 class="table-title">✅ 待处理提交</h3>
+          <h3 class="table-title">待批改提交</h3>
           <div class="table-header-right">
-            <el-tag
-              v-if="teacherStats?.pendingReviews"
-              type="warning"
-              size="small"
-            >
+            <el-tag v-if="teacherStats?.pendingReviews" type="warning" size="small">
               {{ teacherStats.pendingReviews }} 份待批改
             </el-tag>
             <el-button type="primary" size="small" @click="viewAllSubmissions">
@@ -269,30 +164,23 @@
           <el-table-column
             prop="studentName"
             label="学生"
-            width="70"
+            width="80"
             align="center"
             show-overflow-tooltip
           />
           <el-table-column
             prop="assignmentTitle"
             label="作业"
-            min-width="100"
+            min-width="120"
             show-overflow-tooltip
           />
-          <el-table-column
-            prop="aiScore"
-            label="AI分"
-            width="60"
-            align="center"
-          >
+          <el-table-column prop="aiScore" label="AI分" width="70" align="center">
             <template #default="{ row }">
-              <span v-if="row.aiScore" class="ai-score"
-                >{{ row.aiScore }}分</span
-              >
+              <span v-if="row.aiScore" class="ai-score">{{ row.aiScore }}分</span>
               <span v-else class="no-score">--</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="70" align="center">
+          <el-table-column prop="status" label="状态" width="82" align="center">
             <template #default="{ row }">
               <el-tag :type="getSubmissionStatusType(row.status)" size="small">
                 {{ getSubmissionStatusText(row.status) }}
@@ -302,7 +190,7 @@
           <el-table-column
             prop="submittedAt"
             label="提交时间"
-            width="80"
+            width="92"
             align="center"
             show-overflow-tooltip
           >
@@ -310,13 +198,9 @@
               {{ formatRelativeTime(row.submittedAt) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="60" align="center" fixed="right">
+          <el-table-column label="操作" width="76" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button
-                type="primary"
-                size="small"
-                @click="reviewSubmission(row.assignmentId)"
-              >
+              <el-button type="primary" size="small" @click="reviewSubmission(row.assignmentId)">
                 批改
               </el-button>
             </template>
@@ -332,121 +216,57 @@ import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { Plus, Setting, Reading, DocumentChecked } from "@element-plus/icons-vue";
-import StatCard from "./components/StatCard.vue";
-import DonutChart from "./components/charts/DonutChart.vue";
+import { Plus, DocumentChecked } from "@element-plus/icons-vue";
 import { formatDateTime, formatRelativeTime, isUrgent } from "@/utils/date";
 import { getTeacherPendingTasks } from "@/api/dashboard";
 
 const store = useStore();
 const router = useRouter();
 
-// 响应式数据
-const isRefreshing = ref(false);
 const pendingTasks = ref<any>(null);
 
-// 计算属性
 const loading = computed(() => store.getters["dashboard/isLoading"]("teacher"));
 const teacherStats = computed(() => store.getters["dashboard/teacherStats"]);
 const userName = computed(() => store.getters["user/userName"] || "教师");
 
-// 班级提交统计数据转换
+const greetingText = computed(() => {
+  const hour = new Date().getHours();
+  if (hour < 5) return "凌晨好";
+  if (hour < 11) return "早上好";
+  if (hour < 14) return "中午好";
+  if (hour < 18) return "下午好";
+  return "晚上好";
+});
+
+const greetingMessage = computed(() => {
+  const hour = new Date().getHours();
+  const pendingCount = teacherStats.value?.pendingReviews || 0;
+  const assignmentText = pendingCount
+    ? `今天有 ${pendingCount} 份作业等待您的审阅。`
+    : "今天暂无待批改作业。";
+
+  if (hour < 5) return `凌晨还在批改卷子，辛苦了，注意身体。${assignmentText}`;
+  if (hour < 11) return `${assignmentText}开启高效教学的一天吧。`;
+  if (hour < 14) return `中午也别忘了休息一下。${assignmentText}`;
+  if (hour < 18) return `${assignmentText}处理完关键任务，就能更从容收尾。`;
+  return `晚上好，辛苦一天了。${assignmentText}`;
+});
+
 const classSubmissionData = computed(() => {
   if (!teacherStats.value?.classSubmissionStats) return [];
 
   return teacherStats.value.classSubmissionStats
     .map((item) => ({
+      classId: item.classId,
       name: item.className,
-      value: Math.round(item.submissionRate * 10) / 10,
+      value: Math.min(100, Math.round((item.submissionRate || 0) * 10) / 10),
       totalStudents: item.totalStudents || 0,
       submittedCount: item.submittedCount || 0,
-      color:
-        item.submissionRate >= 90
-          ? "#34C759"
-          : item.submissionRate >= 70
-          ? "#007AFF"
-          : item.submissionRate >= 50
-          ? "#FF9F0A"
-          : "#FF3B30",
+      assignmentCount: item.assignmentCount || 0,
+      expectedSubmissions: item.expectedSubmissions || 0,
     }))
-    .sort((a, b) => b.value - a.value); // 按提交率降序排列
+    .sort((a, b) => a.value - b.value);
 });
-
-// 显示的班级提交数据（默认只显示前3个）
-const displayedClassSubmissionData = computed(() => {
-  return classSubmissionData.value.slice(0, 3);
-});
-
-// 作业状态分布数据转换
-const assignmentStatusData = computed(() => {
-  if (!teacherStats.value?.assignmentStatusDistribution) return [];
-
-  const statusMap: Record<string, { name: string; color: string }> = {
-    draft: { name: "草稿", color: "#8E8E93" },
-    published: { name: "发布中", color: "#007AFF" },
-    terminated: { name: "已终止", color: "#FF3B30" },
-  };
-
-  return teacherStats.value.assignmentStatusDistribution.map((item) => ({
-    name: statusMap[item.status]?.name || item.status,
-    value: item.count,
-    color: statusMap[item.status]?.color,
-  }));
-});
-
-// 平均提交率
-const averageSubmissionRate = computed(() => {
-  if (!teacherStats.value?.classSubmissionStats?.length) return 0;
-
-  const total = teacherStats.value.classSubmissionStats.reduce(
-    (sum, item) => sum + item.submissionRate,
-    0
-  );
-  return (
-    Math.round((total / teacherStats.value.classSubmissionStats.length) * 10) /
-    10
-  );
-});
-
-// 待批改趋势
-const pendingTrend = computed(() => {
-  // 这里可以根据历史数据计算趋势，简化处理
-  const pending = teacherStats.value?.pendingReviews || 0;
-  return pending > 20 ? "up" : pending < 5 ? "down" : "stable";
-});
-
-const pendingTrendValue = computed(() => {
-  // 模拟趋势值
-  return Math.floor(Math.random() * 20) + 5;
-});
-
-// 分数差异相关
-const scoreDifferenceText = computed(() => {
-  const diff = teacherStats.value?.studentScoreAnalysis?.scoreDifference || 0;
-  const prefix = diff > 0 ? "+" : "";
-  return `${prefix}${diff.toFixed(1)}分`;
-});
-
-const scoreDifferenceClass = computed(() => {
-  const diff = teacherStats.value?.studentScoreAnalysis?.scoreDifference || 0;
-  return diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral";
-});
-
-// 方法
-const refreshData = async () => {
-  isRefreshing.value = true;
-  try {
-    await Promise.all([
-      store.dispatch("dashboard/fetchTeacherDashboard", true),
-      loadPendingTasks(),
-    ]);
-    ElMessage.success("数据刷新成功");
-  } catch (error) {
-    ElMessage.error("数据刷新失败");
-  } finally {
-    isRefreshing.value = false;
-  }
-};
 
 const loadPendingTasks = async () => {
   try {
@@ -464,10 +284,6 @@ const createAssignment = () => {
   router.push("/teacher/assignmentsEdit");
 };
 
-const manageAiRules = () => {
-  router.push("/teacher/ai-rules");
-};
-
 const viewAllAssignments = () => {
   router.push("/teacher/assignments");
 };
@@ -481,16 +297,12 @@ const viewAssignment = (assignmentId: string) => {
 };
 
 const reviewSubmission = (assignmentId: string) => {
-  console.log("批改作业 - assignmentId:", assignmentId);
-
   if (assignmentId) {
-    // 跳转到作业详情页面，自动打开第一个待批改的作业
     router.push(
       `/teacher/assignments/detail?id=${assignmentId}&openFirstPending=true`
     );
   } else {
-    console.log("assignmentId 为空，跳转到作业管理页面");
-    router.push(`/teacher/assignments`);
+    router.push("/teacher/assignments");
   }
 };
 
@@ -498,27 +310,11 @@ const viewClassSubmissionDetails = () => {
   router.push("/teacher/classes?tab=submission-stats");
 };
 
-const getRankClass = (index: number) => {
-  if (index === 0) return "rank-first";
-  if (index === 1) return "rank-second";
-  if (index === 2) return "rank-third";
-  return "rank-normal";
-};
-
 const getRateClass = (rate: number) => {
   if (rate >= 90) return "rate-excellent";
   if (rate >= 70) return "rate-good";
   if (rate >= 50) return "rate-normal";
   return "rate-poor";
-};
-
-const formatNumber = (num: number) => {
-  if (num >= 10000) {
-    return (num / 10000).toFixed(1) + "万";
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "k";
-  }
-  return num.toString();
 };
 
 const getAssignmentStatusType = (status: string) => {
@@ -563,7 +359,6 @@ const getSubmissionStatusText = (status: string) => {
   return textMap[status] || status;
 };
 
-// 生命周期
 onMounted(async () => {
   try {
     await Promise.all([
@@ -578,402 +373,249 @@ onMounted(async () => {
 
 <style scoped>
 .teacher-dashboard {
+  min-height: 100%;
   padding: 24px;
-  background: #f8f9fa;
-  overflow-x: hidden; /* 防止页面级别的水平滚动 */
+  background: #f6f7fb;
+  overflow-x: hidden;
 }
 
-.dashboard-header {
-  margin-bottom: 24px;
-}
-
-.header-content {
+.dashboard-hero {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
+  margin-bottom: 18px;
+  padding: 22px 24px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.hero-copy {
+  min-width: 0;
+  width: 100%;
 }
 
 .dashboard-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1d1d1f;
   margin: 0;
+  color: #111827;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
-.header-actions {
+.hero-subtitle {
+  margin: 10px 0 0;
+  color: #5b6472;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.hero-actions {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+.primary-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: min(360px, 100%);
+  min-height: 150px;
+  padding: 24px;
+  color: #ffffff;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+.primary-action:hover {
+  filter: brightness(1.02);
+  transform: translateY(-2px);
 }
 
-.chart-card {
+.primary-action--publish {
+  background: #16a34a;
+  box-shadow: 0 14px 28px rgba(22, 163, 74, 0.24);
+}
+
+.primary-action--review {
+  background: #2563eb;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
+}
+
+.primary-action__icon {
+  margin-bottom: 14px;
+  font-size: 28px;
+}
+
+.primary-action strong {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.primary-action span {
+  margin-top: 10px;
+  font-size: 15px;
+  opacity: 0.9;
+}
+
+.class-progress-card,
+.table-card {
   background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f0f0f0;
-  overflow: hidden; /* 防止内容溢出 */
-  min-width: 0; /* 允许flex子元素收缩 */
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
 }
 
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.class-progress-card {
+  padding: 22px;
   margin-bottom: 16px;
 }
 
-.chart-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin: 0;
-}
-
-.chart-actions {
+.section-header,
+.table-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  margin-bottom: 16px;
 }
 
-.chart-subtitle {
-  font-size: 14px;
-  color: #666;
-  font-weight: 500;
+.section-title,
+.table-title {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
 }
 
-/* 班级提交统计样式 */
-.class-submission-list {
-  min-height: 280px;
-  display: flex;
-  flex-direction: column;
+.section-subtitle {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.class-progress-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  min-height: 120px;
 }
 
-.submission-item {
-  display: flex;
-  align-items: center;
+.class-progress-item {
+  display: block;
+  width: 100%;
   padding: 16px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  transition: all 0.3s ease;
-  border: 2px solid transparent;
+  text-align: left;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.submission-item:hover {
-  background: #f0f1f3;
+.class-progress-item:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.submission-item.top-performer {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
-  border-color: #e3f2fd;
-}
-
-.submission-rank {
-  margin-right: 16px;
-}
-
-.rank-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.rank-first {
-  background: linear-gradient(135deg, #ffd700, #ffa500);
-  color: white;
-  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
-}
-
-.rank-second {
-  background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-  color: white;
-  box-shadow: 0 2px 8px rgba(192, 192, 192, 0.3);
-}
-
-.rank-third {
-  background: linear-gradient(135deg, #cd7f32, #b87333);
-  color: white;
-  box-shadow: 0 2px 8px rgba(205, 127, 50, 0.3);
-}
-
-.rank-normal {
-  background: #e9ecef;
-  color: #666;
-}
-
-.submission-info {
-  flex: 1;
-  min-width: 0;
+.class-progress-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
 }
 
 .class-name {
+  margin: 0;
+  color: #111827;
   font-size: 16px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin-bottom: 4px;
-  white-space: nowrap;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.submission-stats {
+.class-percent {
+  flex: 0 0 auto;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.progress-bar {
+  height: 10px;
+  margin-top: 14px;
+  overflow: hidden;
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+
+.class-progress-meta {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  color: #6b7280;
   font-size: 12px;
-  color: #666;
-}
-
-.students-count,
-.submitted-count {
-  background: #fff;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid #e9ecef;
-}
-
-.submission-rate {
-  margin-left: 16px;
-}
-
-.rate-circle-progress {
-  position: relative;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent calc(360deg * (100 - var(--progress)) / 100),
-    #e9ecef calc(360deg * (100 - var(--progress)) / 100),
-    #e9ecef 360deg
-  );
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rate-circle-progress::before {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: #f8f9fa;
-}
-
-.rate-text {
-  position: relative;
-  z-index: 1;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .rate-excellent {
-  color: #34c759;
+  color: #16a34a;
+}
+
+.progress-fill.rate-excellent {
+  background: #16a34a;
 }
 
 .rate-good {
-  color: #007aff;
+  color: #2563eb;
+}
+
+.progress-fill.rate-good {
+  background: #2563eb;
 }
 
 .rate-normal {
-  color: #ff9f0a;
+  color: #d97706;
+}
+
+.progress-fill.rate-normal {
+  background: #f59e0b;
 }
 
 .rate-poor {
-  color: #ff3b30;
+  color: #dc2626;
 }
 
-/* 优秀率的特殊样式 */
-.submission-item.top-performer .rate-circle-progress {
-  background: conic-gradient(
-    from 0deg,
-    #34c759 0deg,
-    #34c759 calc(360deg * var(--progress) / 100),
-    #e9ecef calc(360deg * var(--progress) / 100),
-    #e9ecef 360deg
-  );
-}
-
-.submission-item:nth-child(2) .rate-circle-progress {
-  background: conic-gradient(
-    from 0deg,
-    #007aff 0deg,
-    #007aff calc(360deg * var(--progress) / 100),
-    #e9ecef calc(360deg * var(--progress) / 100),
-    #e9ecef 360deg
-  );
-}
-
-.submission-item:nth-child(3) .rate-circle-progress {
-  background: conic-gradient(
-    from 0deg,
-    #ff9f0a 0deg,
-    #ff9f0a calc(360deg * var(--progress) / 100),
-    #e9ecef calc(360deg * var(--progress) / 100),
-    #e9ecef 360deg
-  );
+.progress-fill.rate-poor {
+  background: #ef4444;
 }
 
 .empty-state {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px;
-  color: #999;
-  font-size: 14px;
-}
-
-.ai-status {
-  display: flex;
-  gap: 8px;
-}
-
-.ai-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.ai-stat-item {
-  text-align: center;
-  padding: 16px;
-  background: #f8f9fa;
+  min-height: 120px;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
   border-radius: 8px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.stat-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1d1d1f;
-}
-
-.stat-value.error {
-  color: #ff3b30;
-}
-
-.stat-value.pending {
-  color: #ff9f0a;
-}
-
-.score-analysis {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.score-comparison {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.score-item {
-  text-align: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.score-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.score-value {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.score-value.ai {
-  color: #007aff;
-}
-
-.score-value.teacher {
-  color: #34c759;
-}
-
-.score-value.positive {
-  color: #34c759;
-}
-
-.score-value.negative {
-  color: #ff3b30;
-}
-
-.score-value.neutral {
-  color: #8e8e93;
-}
-
-.performance-rates {
-  display: flex;
-  justify-content: space-around;
-  gap: 20px;
-}
-
-.rate-item {
-  text-align: center;
-}
-
-.rate-circle {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 8px;
-}
-
-.rate-circle.excellent {
-  background: linear-gradient(135deg, #34c759, #30d158);
-}
-
-.rate-circle.pass {
-  background: linear-gradient(135deg, #007aff, #5ac8fa);
-}
-
-.rate-label {
-  font-size: 12px;
-  color: #666;
-}
-
-.tables-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
 }
 
 .tables-grid-two {
@@ -983,13 +625,15 @@ onMounted(async () => {
 }
 
 .table-card {
-  background: #ffffff;
-  border-radius: 12px;
+  min-width: 0;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f0f0f0;
-  overflow: hidden; /* 防止内容溢出 */
-  min-width: 0; /* 允许flex子元素收缩 */
+  overflow: hidden;
+}
+
+.table-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .table-card :deep(.el-table) {
@@ -1000,185 +644,59 @@ onMounted(async () => {
   overflow-x: auto;
 }
 
-.table-card :deep(.el-table__header-wrapper) {
-  overflow-x: hidden;
+.table-rate {
+  color: #16a34a;
+  font-weight: 700;
 }
 
-.table-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.table-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.table-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1d1d1f;
-  margin: 0;
-}
-
-.submission-rate {
-  font-weight: 500;
-  color: #34c759;
-}
-
-.submission-rate.low-rate {
-  color: #ff3b30;
+.table-rate--low,
+.deadline--urgent {
+  color: #dc2626;
 }
 
 .deadline {
-  font-size: 14px;
-  color: #666;
-}
-
-.deadline--urgent {
-  color: #ff3b30;
-  font-weight: 500;
+  color: #4b5563;
+  font-size: 13px;
 }
 
 .ai-score {
-  color: #007aff;
-  font-weight: 500;
+  color: #2563eb;
+  font-weight: 700;
 }
 
 .no-score {
-  color: #8e8e93;
+  color: #9ca3af;
 }
 
-/* 响应式设计 */
-
-/* 中等屏幕 - 平板横屏 */
 @media (max-width: 1200px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-
-  .ai-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
-
-/* 平板和小屏幕笔记本 */
-@media (max-width: 1024px) {
+  .class-progress-list,
   .tables-grid-two {
     grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .score-comparison {
-    grid-template-columns: 1fr;
   }
 }
 
-/* 手机和小平板 */
 @media (max-width: 768px) {
   .teacher-dashboard {
     padding: 16px;
   }
 
   .dashboard-title {
-    font-size: 20px;
+    font-size: 22px;
   }
 
-  .header-content {
-    flex-direction: column;
+  .section-header,
+  .table-header {
     align-items: flex-start;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .chart-card,
-  .table-card {
-    padding: 16px;
-  }
-
-  .ai-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  /* 表格在中等屏幕上的优化 */
-  .table-card :deep(.el-table__cell) {
-    padding: 10px 6px;
-  }
-
-  .table-card :deep(.el-table) {
-    font-size: 13px;
-  }
-}
-
-/* 小屏手机 */
-@media (max-width: 480px) {
-  .teacher-dashboard {
-    padding: 12px;
-  }
-
-  .dashboard-title {
-    font-size: 18px;
-  }
-
-  .header-actions {
     flex-direction: column;
+  }
+
+  .hero-actions,
+  .primary-action {
     width: 100%;
-    gap: 8px;
   }
 
-  .header-actions .el-button {
-    width: 100%;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .chart-card,
-  .table-card {
-    padding: 12px;
-  }
-
-  .ai-stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* 表格在小屏幕上的优化 */
-  .table-card :deep(.el-table__cell) {
-    padding: 8px 4px;
-  }
-
-  .table-card :deep(.el-table) {
-    font-size: 12px;
-  }
-
-  .table-card :deep(.el-button) {
-    padding: 4px 8px;
-    font-size: 11px;
+  .class-percent {
+    font-size: 24px;
   }
 }
 </style>

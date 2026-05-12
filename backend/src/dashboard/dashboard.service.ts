@@ -68,19 +68,34 @@ export class DashboardService {
         ).length,
         totalStudents: memberships.length,
         classSubmissionStats: myClasses.map((cls) => {
+          const classId = cls._id.toString();
+          const classAssignments = myAssignments.filter(
+            (assignment) =>
+              assignment.status === 'published' &&
+              assignment.classes.some((item) => item.id === classId),
+          );
+          const classAssignmentIds = new Set(
+            classAssignments.map((assignment) => assignment._id.toString()),
+          );
           const totalStudents = memberships.filter(
-            (m) => m.classId === cls._id.toString(),
+            (m) => m.classId === classId,
           ).length;
           const submittedCount = submissions.filter(
-            (s) => s.classId === cls._id.toString() && !s.isDraft,
+            (s) =>
+              s.classId === classId &&
+              classAssignmentIds.has(s.assignmentId) &&
+              !s.isDraft,
           ).length;
+          const expectedSubmissions = totalStudents * classAssignments.length;
           return {
-            classId: cls._id.toString(),
+            classId,
             className: cls.name,
             totalStudents,
+            assignmentCount: classAssignments.length,
             submittedCount,
-            submissionRate: totalStudents
-              ? Math.round((submittedCount / totalStudents) * 1000) / 10
+            expectedSubmissions,
+            submissionRate: expectedSubmissions
+              ? Math.round((submittedCount / expectedSubmissions) * 1000) / 10
               : 0,
           };
         }),

@@ -1,14 +1,14 @@
 <template>
-  <div class="h-screen flex overflow-hidden relative">
+  <div class="app-layout h-screen flex overflow-hidden relative">
     <!-- 左侧侧边栏区域 - 移动端时使用fixed定位覆盖 -->
     <!-- 设置下右侧边框颜色 -->
     <el-aside
       :width="sidebarWidth"
       v-if="!isMobile || sidebarOpened"
       :class="[
-        'h-screen border-r border-gray-300 transition-all duration-300 ease-in-out overflow-y-auto',
+        'app-sidebar-shell h-screen border-r transition-all duration-300 ease-in-out overflow-y-auto',
         isMobile
-          ? 'fixed bg-[#ffffff] left-0 top-0 bottom-0 z-30 '
+          ? 'fixed left-0 top-0 bottom-0 z-30 '
           : 'relative',
       ]"
     >
@@ -35,7 +35,7 @@
       <!-- Header区域 -->
       <el-header
         height="60px"
-        class="bg-white shadow z-10 px-4 flex items-center flex-shrink-0"
+        class="app-shell-header z-10 px-4 flex items-center flex-shrink-0"
       >
         <div class="flex items-center justify-between w-full">
           <AppHeader />
@@ -44,7 +44,7 @@
 
       <!-- Main内容区域 - 使用calc计算精确高度 -->
       <div
-        class="bg-gray-100 p-4 md:p-4"
+        class="app-shell-main p-4 md:p-4"
         style="height: calc(100vh - 60px - 50px); overflow-y: auto"
       >
         <!-- 使用router-view作为内容区域 -->
@@ -56,7 +56,7 @@
       <!-- Footer区域 - 固定高度，不随内容伸缩 -->
       <el-footer
         height="50px"
-        class="bg-white text-gray-600 text-center flex items-center justify-center border-t border-gray-200 flex-shrink-0"
+        class="app-shell-footer text-gray-600 text-center flex items-center justify-center border-t flex-shrink-0"
       >
         © {{ new Date().getFullYear() }} Yosem - 版权所有
       </el-footer>
@@ -157,8 +157,35 @@ export default defineComponent({
 
 <style scoped>
 /* 布局相关样式 */
+.app-layout {
+  background: transparent;
+}
+
+.app-sidebar-shell,
+.app-shell-header,
+.app-shell-footer {
+  background: var(--app-glass-bg-strong);
+  border-color: var(--app-glass-border);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.app-shell-main {
+  background: var(--app-content-bg);
+  backdrop-filter: blur(4px);
+}
+
+.app-sidebar-shell {
+  border-right-color: rgba(148, 163, 184, 0.42);
+}
+
+.app-shell-footer {
+  border-top-color: rgba(148, 163, 184, 0.32);
+}
+
 :deep(.el-menu) {
   border-right: none !important;
+  background: transparent !important;
 }
 
 :deep(.el-aside) {

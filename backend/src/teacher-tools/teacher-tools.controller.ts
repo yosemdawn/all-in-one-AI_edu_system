@@ -88,13 +88,22 @@ export class TeacherToolsController {
   }
 
   @Post('objective-grading/parse-answers')
-  parseAnswers(@Body() body: ParseTextDto) {
-    return this.teacherToolsService.parseStandardAnswers(body.text);
+  parseAnswers(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: ParseTextDto,
+  ) {
+    return this.teacherToolsService.parseStandardAnswers(
+      currentUser,
+      body.text,
+    );
   }
 
   @Post('objective-grading/parse-score-config')
-  parseScoreConfig(@Body() body: ParseTextDto) {
-    return this.teacherToolsService.parseScoreConfig(body.text);
+  parseScoreConfig(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() body: ParseTextDto,
+  ) {
+    return this.teacherToolsService.parseScoreConfig(currentUser, body.text);
   }
 
   @Post('objective-grading/tasks')
