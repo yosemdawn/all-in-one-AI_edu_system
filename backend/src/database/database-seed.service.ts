@@ -59,7 +59,6 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
     const createdUsers: UserDocument[] = await this.userModel.create([
       {
         username: 'admin',
-        email: 'admin@nengdou.local',
         name: 'Admin',
         role: 'superadmin',
         status: 'active',
@@ -67,7 +66,6 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       },
       {
         username: 'teacher1',
-        email: 'teacher@nengdou.local',
         name: 'Teacher One',
         role: 'teacher',
         status: 'active',
@@ -75,7 +73,6 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
       },
       {
         username: 'student1',
-        email: 'student@nengdou.local',
         studentId: '20250001',
         name: 'Student One',
         role: 'student',

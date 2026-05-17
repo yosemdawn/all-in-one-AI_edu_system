@@ -32,7 +32,7 @@
             <p class="text-red-500">单次最多导入100条数据</p>
             <div class="text-gray-600 text-sm mt-2 mb-2">
               <p><strong>必填字段：</strong>姓名、学号</p>
-              <p><strong>可选字段：</strong>用户名、邮箱、手机号（如果填写需符合格式要求）</p>
+              <p><strong>可选字段：</strong>用户名、手机号（如果填写需符合格式要求）</p>
               <p class="text-blue-600">💡 用户名为空时，将自动使用姓名作为用户名</p>
             </div>
             <el-button
@@ -89,12 +89,6 @@
           <template #default="{ row }">
             <span>{{ row.username || row.name }}</span>
             <el-tag v-if="!row.username" size="small" type="info" class="ml-1">自动</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="email" label="邮箱" min-width="180">
-          <template #default="{ row }">
-            <span v-if="row.email">{{ row.email }}</span>
-            <span v-else class="text-gray-400">未填写</span>
           </template>
         </el-table-column>
         <el-table-column prop="phone" label="手机号" width="120">
@@ -263,7 +257,6 @@ const parseFile = async (file) => {
           const item = {
             username: row["用户名"] || "",
             name: row["姓名"] || "",
-            email: row["邮箱"] || "",
             studentId: row["学号"]?.toString() || "",
             phone: row["手机号"] || "",
           };
@@ -283,12 +276,6 @@ const parseFile = async (file) => {
           // 验证可选字段格式（有内容时才验证）
           let isValid = true;
           let errorMsg = "";
-          
-          // 邮箱格式验证（如果有内容）
-          if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
-            isValid = false;
-            errorMsg = "邮箱格式不正确";
-          }
           
           // 手机号格式验证（如果有内容）
           if (item.phone && !/^1[3-9]\d{9}$/.test(item.phone)) {

@@ -18,7 +18,7 @@
       <el-table :data="tableData" border style="width: 100%; height: 100%">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="姓名" />
-        <el-table-column prop="email" label="邮箱" />
+        <el-table-column prop="username" label="用户名" />
         <el-table-column prop="role" label="角色" />
         <el-table-column prop="status" label="状态" />
         <el-table-column label="操作" width="200">
@@ -74,21 +74,21 @@ const tableData = ref([
   {
     id: 1,
     name: "张三",
-    email: "zhangsan@example.com",
+    username: "zhangsan",
     role: "管理员",
     status: "正常",
   },
   {
     id: 2,
     name: "李四",
-    email: "lisi@example.com",
+    username: "lisi",
     role: "用户",
     status: "正常",
   },
   {
     id: 3,
     name: "王五",
-    email: "wangwu@example.com",
+    username: "wangwu",
     role: "用户",
     status: "禁用",
   },
@@ -96,7 +96,7 @@ const tableData = ref([
   ...Array.from({ length: 50 }, (_, i) => ({
     id: i + 4,
     name: `用户${i + 4}`,
-    email: `user${i + 4}@example.com`,
+    username: `user${i + 4}`,
     role: "用户",
     status: i % 3 === 0 ? "禁用" : "正常",
   })),

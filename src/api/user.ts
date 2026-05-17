@@ -13,7 +13,7 @@ import type {
  * @param credentials 登录凭证
  * @returns 登录结果
  */
-export const login = (credentials: { email: string; password: string }) => {
+export const login = (credentials: { username: string; password: string }) => {
   return request({
     url: "/auth/login",
     method: "post",
@@ -28,7 +28,6 @@ export const login = (credentials: { email: string; password: string }) => {
  */
 export const register = (userData: {
   name: string;
-  email: string;
   password: string;
 }) => {
   return request({

@@ -78,12 +78,12 @@ export function firstChangePassword(data: ChangePasswordParams) {
  * 忘记密码请求
  */
 export const forgotPassword = (
-  email: string
+  username: string
 ): Promise<{ success: boolean }> => {
   return request({
     url: "/v1/auth/forgot-password",
     method: "post",
-    data: { email },
+    data: { username },
   });
 };
 
@@ -108,8 +108,8 @@ export interface RegisterParams {
   username: string;
   password: string;
   confirmPassword: string;
-  email: string;
   name?: string;
+  role?: "student" | "teacher";
 }
 
 export interface RegisterResult {

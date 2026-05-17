@@ -63,7 +63,6 @@ export interface RecentUsersResponse {
     id: string;
     name: string;
     role: string;
-    email: string;
     createdAt: string;
     status: string;
   }>;

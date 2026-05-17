@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsIn,
   IsObject,
   IsOptional,
@@ -13,9 +12,6 @@ export class CreateUserDto {
   @MinLength(2)
   @MaxLength(50)
   username: string;
-
-  @IsEmail()
-  email: string;
 
   @IsString()
   @MinLength(6)

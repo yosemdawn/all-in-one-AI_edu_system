@@ -34,7 +34,6 @@ const ALLOWED_USER_SORT_FIELDS = new Set([
   'createdAt',
   'updatedAt',
   'username',
-  'email',
   'name',
   'role',
   'status',
@@ -45,7 +44,6 @@ type UserPayloadSource = {
   _id?: { toString(): string };
   id?: string;
   username?: string;
-  email?: string;
   name?: string;
   role?: string;
   status?: string;
@@ -89,7 +87,6 @@ export class UsersService {
       const normalizedKeyword = String(keyword).trim();
       filter.$or = [
         { username: { $regex: normalizedKeyword, $options: 'i' } },
-        { email: { $regex: normalizedKeyword, $options: 'i' } },
         { name: { $regex: normalizedKeyword, $options: 'i' } },
         { studentId: { $regex: normalizedKeyword, $options: 'i' } },
         { phone: { $regex: normalizedKeyword, $options: 'i' } },
@@ -143,17 +140,6 @@ export class UsersService {
   ) {
     const user = await this.getCurrentUserDocument(currentUser);
 
-    if (body.email) {
-      const duplicated = await this.userModel.exists({
-        _id: { $ne: user._id },
-        email: body.email,
-      });
-      if (duplicated) {
-        throw new BadRequestException('Email already exists');
-      }
-    }
-
-    user.email = body.email ?? user.email;
     user.name = body.name ?? user.name;
     user.phone = body.phone ?? user.phone;
     user.avatar = body.avatar ?? user.avatar;
@@ -240,23 +226,21 @@ export class UsersService {
   }
 
   async createUser(body: CreateUserDto) {
-    if (!body.username || !body.email || !body.password || !body.name) {
+    if (!body.username || !body.password || !body.name) {
       throw new BadRequestException(
-        'username, email, name, and password are required',
+        'username, name, and password are required',
       );
     }
 
     const normalizedRole = (body.role || 'student') as AllowedRole;
     await this.assertUniqueUserFields({
       username: body.username,
-      email: body.email,
       studentId: normalizedRole === 'student' ? body.studentId : undefined,
     });
 
     const passwordHash = await this.hashPassword(body.password);
     const user = await this.userModel.create({
       username: body.username,
-      email: body.email,
       name: body.name,
       role: normalizedRole,
       status: body.status || 'active',
@@ -285,7 +269,6 @@ export class UsersService {
     await this.assertUniqueUserFields(
       {
         username: body.username,
-        email: body.email,
         studentId:
           nextRole === 'student'
             ? (body.studentId ?? user.studentId)
@@ -295,7 +278,6 @@ export class UsersService {
     );
 
     if (body.username !== undefined) user.username = body.username;
-    if (body.email !== undefined) user.email = body.email;
     if (body.name !== undefined) user.name = body.name;
     if (body.role !== undefined) user.role = nextRole;
     if (body.status !== undefined) user.status = body.status;
@@ -394,13 +376,9 @@ export class UsersService {
           item.username?.trim() ||
           item.name?.trim() ||
           `user${Date.now()}${index}`;
-        const email =
-          item.email?.trim() ||
-          `${username.toLowerCase()}_${Date.now()}@import.local`;
 
         await this.createUser({
           username,
-          email,
           password: item.password || '123456',
           name: item.name || username,
           role: item.role || 'student',
@@ -473,7 +451,7 @@ export class UsersService {
   }
 
   private async assertUniqueUserFields(
-    payload: { username?: string; email?: string; studentId?: string },
+    payload: { username?: string; studentId?: string },
     excludeId?: string,
   ) {
     if (payload.username) {
@@ -483,16 +461,6 @@ export class UsersService {
       });
       if (existing) {
         throw new BadRequestException('Username already exists');
-      }
-    }
-
-    if (payload.email) {
-      const existing = await this.userModel.exists({
-        _id: { $ne: excludeId },
-        email: payload.email,
-      });
-      if (existing) {
-        throw new BadRequestException('Email already exists');
       }
     }
 
@@ -515,7 +483,6 @@ export class UsersService {
     return {
       _id: user._id?.toString?.() || user.id,
       username: user.username,
-      email: user.email,
       name: user.name,
       role: user.role,
       status: user.status === 'locked' ? 'inactive' : user.status,

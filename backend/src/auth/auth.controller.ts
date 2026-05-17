@@ -44,16 +44,15 @@ export class AuthController {
   })
   @Post('auth/login')
   loginCompat(@Body() body: CompatLoginDto) {
-    const usernameOrEmailOrStudentId =
-      body.usernameOrEmailOrStudentId || body.email || body.username;
-    if (!usernameOrEmailOrStudentId) {
+    const usernameOrStudentId = body.usernameOrStudentId || body.username;
+    if (!usernameOrStudentId) {
       throw new BadRequestException(
-        'usernameOrEmailOrStudentId, email, or username is required',
+        'usernameOrStudentId or username is required',
       );
     }
 
     return this.authService.login({
-      usernameOrEmailOrStudentId,
+      usernameOrStudentId,
       password: body.password,
       rememberMe: body.rememberMe,
     });
@@ -142,11 +141,11 @@ export class AuthController {
   @Post('auth/register')
   registerCompat(@Body() body: CompatRegisterDto) {
     return this.authService.register({
-      username: body.username || body.email || body.name,
-      email: body.email,
+      username: body.username || body.name,
       password: body.password,
       confirmPassword: body.confirmPassword || body.password,
       name: body.name,
+      role: body.role,
     });
   }
 }

@@ -16,7 +16,7 @@
         <el-form-item label="关键词">
           <el-input
             v-model="searchForm.keyword"
-            placeholder="用户名/姓名/邮箱"
+            placeholder="用户名/姓名/学号/手机号"
             clearable
             style="width: 200px"
           />

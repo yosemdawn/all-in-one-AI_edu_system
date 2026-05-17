@@ -46,12 +46,28 @@
             class="mt-2"
           >
             <!-- 注册表单显示用户名字段 -->
-            <el-form-item v-if="isRegister" label="用户名" prop="username">
+            <el-form-item
+              v-if="isRegister || (!isRegister && form.loginType === 'username')"
+              label="用户名"
+              prop="username"
+            >
               <el-input
                 v-model="form.username"
                 placeholder="请输入用户名"
                 class="!rounded"
               ></el-input>
+            </el-form-item>
+
+            <!-- 注册身份选择 -->
+            <el-form-item v-if="isRegister" label="注册身份" prop="accountRole">
+              <el-segmented
+                v-model="form.accountRole"
+                :options="[
+                  { label: '学生', value: 'student' },
+                  { label: '教师', value: 'teacher' }
+                ]"
+                class="w-full"
+              />
             </el-form-item>
 
             <!-- 登录方式选择 -->
@@ -60,7 +76,7 @@
                 v-model="form.loginType" 
                 :options="[
                   { label: '学号登录', value: 'studentId' },
-                  { label: '邮箱登录', value: 'email' }
+                  { label: '用户名登录', value: 'username' }
                 ]"
                 @change="handleLoginTypeChange"
                 class="w-full"
@@ -72,15 +88,6 @@
               <el-input
                 v-model="form.studentId"
                 placeholder="请输入学号"
-                class="!rounded"
-              ></el-input>
-            </el-form-item>
-
-            <!-- 邮箱字段 -->
-            <el-form-item v-if="isRegister || form.loginType === 'email'" label="邮箱" prop="email">
-              <el-input
-                v-model="form.email"
-                placeholder="请输入邮箱"
                 class="!rounded"
               ></el-input>
             </el-form-item>
@@ -197,10 +204,10 @@ const error = ref<string | null>(null);
 // 表单数据
 const form = reactive({
   username: "",
-  email: "",
   studentId: "",
   password: "",
   confirmPassword: "",
+  accountRole: "student",
   rememberMe: true, // 默认勾选记住密码
   loginType: "studentId", // 默认学号登录
 });
@@ -217,13 +224,12 @@ const validateConfirmPassword = (rule: any, value: string, callback: any) => {
 // 表单校验规则
 const rules = reactive<FormRules>({
   username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-  email: [
-    { required: true, message: "请输入邮箱", trigger: "blur" },
-    { type: "email", message: "请输入正确的邮箱格式", trigger: "blur" },
-  ],
   studentId: [
     { required: true, message: "请输入学号", trigger: "blur" },
     { min: 2, max: 20, message: "学号长度应在2-20个字符之间", trigger: "blur" },
+  ],
+  accountRole: [
+    { required: true, message: "请选择注册身份", trigger: "change" },
   ],
   password: [
     { required: true, message: "请输入密码", trigger: "blur" },
@@ -238,13 +244,13 @@ const rules = reactive<FormRules>({
 // 处理登录方式切换
 const handleLoginTypeChange = (value: string) => {
   // 清空相应字段的值和错误信息
-  if (value === 'email') {
+  if (value === 'studentId') {
+    form.username = '';
+  } else if (value === 'username') {
     form.studentId = '';
-  } else if (value === 'studentId') {
-    form.email = '';
   }
   // 清除表单验证错误
-  formRef.value?.clearValidate(['email', 'studentId']);
+  formRef.value?.clearValidate(['studentId', 'username']);
 };
 
 // 处理忘记密码
@@ -270,16 +276,17 @@ const submitForm = async () => {
           // 注册逻辑
           await store.dispatch("user/register", {
             username: form.username,
-            email: form.email,
             password: form.password,
             confirmPassword: form.confirmPassword,
+            role: form.accountRole,
           });
 
           ElMessage.success("注册成功");
         } else {
           // 登录逻辑 - 根据登录类型选择不同的字段
           const loginData = {
-            usernameOrEmailOrStudentId: form.loginType === 'email' ? form.email : form.studentId,
+            usernameOrStudentId:
+              form.loginType === 'username' ? form.username : form.studentId,
             password: form.password,
             rememberMe: form.rememberMe,
           };

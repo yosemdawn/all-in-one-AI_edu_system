@@ -31,7 +31,6 @@ const getters = {
     state.userInfo?.username ||
     state.userInfo?.name ||
     state.userInfo?.studentId ||
-    state.userInfo?.email ||
     "",
   getToken: (state) => state.userInfo?.token || localStorage.getItem("token"),
   getRefreshToken: (state) => state.userInfo?.refreshToken,
@@ -68,9 +67,9 @@ const actions = {
   /**
    * 用户登录
    */
-  async login({ commit, dispatch }, { usernameOrEmailOrStudentId, password, rememberMe = false }) {
+  async login({ commit, dispatch }, { usernameOrStudentId, password, rememberMe = false }) {
     try {
-      const response = await login({ usernameOrEmailOrStudentId, password, rememberMe });
+      const response = await login({ usernameOrStudentId, password, rememberMe });
 
       // 保存token到localStorage
       localStorage.setItem("token", response.token);
