@@ -326,7 +326,15 @@ defineOptions({
 /* 响应式设计 */
 @media (max-width: 768px) {
   .assignment-detail-page {
-    padding: 0 8px;
+    padding: 0 10px 16px;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
   }
 }
 </style>

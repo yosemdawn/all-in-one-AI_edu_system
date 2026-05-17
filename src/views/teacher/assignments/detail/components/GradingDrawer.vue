@@ -1000,10 +1000,55 @@ defineOptions({
 
 /* 响应式 */
 @media (max-width: 768px) {
+  .grading-drawer {
+    width: 100% !important;
+    max-width: 100vw;
+  }
+
+  .grading-drawer .el-drawer__header {
+    padding: 14px 16px;
+    min-height: 56px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .grading-drawer .el-drawer__body {
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .drawer-content {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 0 14px 88px;
+  }
+
   .student-header {
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     align-items: flex-start;
+    padding: 14px 0;
+    margin-bottom: 14px;
+  }
+
+  .student-info {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .student-avatar {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .student-details {
+    min-width: 0;
+  }
+
+  .student-name {
+    font-size: 17px;
+    line-height: 1.35;
+    margin-bottom: 6px;
   }
 
   .student-meta {
@@ -1023,26 +1068,72 @@ defineOptions({
   }
 
   .collapse-title {
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
+    min-width: 0;
   }
 
   .collapse-title-left {
-    align-self: flex-start;
+    min-width: 0;
   }
 
   .collapse-title-right {
-    align-self: flex-start;
-    margin-top: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
   }
 
   .grading-collapse :deep(.el-collapse-item__header) {
-    padding: 12px 16px;
+    padding: 12px;
   }
 
   .collapse-content {
-    padding: 16px;
+    padding: 12px;
+  }
+
+  .submission-content,
+  .ai-content,
+  .ai-error-content,
+  .current-content {
+    padding: 12px;
+    word-break: break-word;
+  }
+
+  .grading-form .el-form-item {
+    display: block;
+  }
+
+  .grading-form .el-form-item__label {
+    display: block;
+    width: auto !important;
+    text-align: left;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  .grading-form .el-form-item__content {
+    display: flex;
+    margin-left: 0 !important;
+    width: 100%;
+  }
+
+  .grading-form .el-input,
+  .grading-form .el-input-number,
+  .grading-form .el-textarea {
+    width: 100% !important;
+  }
+
+  .drawer-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 12px 14px;
+    background: #fff;
+    box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.08);
+  }
+
+  .drawer-footer .el-button {
+    flex: 1;
+    min-width: 0;
   }
 }
 

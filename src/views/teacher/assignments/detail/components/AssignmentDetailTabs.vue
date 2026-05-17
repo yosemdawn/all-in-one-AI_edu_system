@@ -192,8 +192,13 @@ defineOptions({
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .assignment-detail-tabs {
+    border-radius: 10px;
+    overflow: visible;
+  }
+
   .detail-tabs :deep(.el-tabs__nav-wrap) {
-    padding: 0 16px;
+    padding: 0 12px;
   }
 
   .detail-tabs :deep(.el-tabs__item) {
@@ -202,11 +207,23 @@ defineOptions({
   }
 
   .tab-content {
-    padding: 12px 16px;
+    padding: 12px;
   }
 
   .search-section {
     padding: 12px;
+  }
+
+  .pagination-section {
+    justify-content: center;
+    overflow-x: auto;
+    padding: 12px 0 4px;
+  }
+
+  .pagination-section :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
   }
 }
 </style>
