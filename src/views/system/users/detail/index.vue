@@ -51,9 +51,6 @@
           <el-descriptions-item label="用户 ID">
             {{ user._id || "--" }}
           </el-descriptions-item>
-          <el-descriptions-item label="邮箱">
-            {{ user.email || "--" }}
-          </el-descriptions-item>
           <el-descriptions-item label="手机号">
             {{ user.phone || "--" }}
           </el-descriptions-item>

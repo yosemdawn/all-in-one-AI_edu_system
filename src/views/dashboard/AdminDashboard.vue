@@ -170,12 +170,6 @@
             width="100"
             show-overflow-tooltip
           />
-          <el-table-column
-            prop="email"
-            label="邮箱"
-            min-width="180"
-            show-overflow-tooltip
-          />
           <el-table-column prop="role" label="角色" width="110">
             <template #default="{ row }">
               <el-tag :type="getRoleTagType(row.role)" size="small">

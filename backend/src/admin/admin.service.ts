@@ -93,7 +93,6 @@ export class AdminService {
           id: item._id.toString(),
           name: item.name,
           role: this.toRoleCode(item.role),
-          email: item.email,
           createdAt: item.createdAt,
           status: item.status,
         })),

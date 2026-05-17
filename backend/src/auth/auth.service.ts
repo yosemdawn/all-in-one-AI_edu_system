@@ -35,15 +35,10 @@ export class AuthService {
   ) {}
 
   async login(body: LoginDto) {
-    const credential = body.usernameOrEmailOrStudentId.trim();
-    const normalizedEmail = credential.toLowerCase();
+    const credential = body.usernameOrStudentId.trim();
 
     const user = await this.userModel.findOne({
-      $or: [
-        { email: normalizedEmail },
-        { studentId: credential },
-        { username: credential },
-      ],
+      $or: [{ studentId: credential }, { username: credential }],
     });
 
     if (!user) {
@@ -146,18 +141,15 @@ export class AuthService {
       throw new BadRequestException('Passwords do not match');
     }
 
-    const normalizedEmail = body.email.toLowerCase().trim();
     const normalizedUsername = body.username.trim();
     const normalizedName = body.name?.trim() || normalizedUsername;
+    const normalizedRole = body.role || 'student';
 
     const existingUser = await this.userModel.findOne({
-      $or: [{ email: normalizedEmail }, { username: normalizedUsername }],
+      username: normalizedUsername,
     });
 
     if (existingUser) {
-      if (existingUser.email === body.email) {
-        throw new BadRequestException('Email already exists');
-      }
       throw new BadRequestException('Username already exists');
     }
 
@@ -165,10 +157,12 @@ export class AuthService {
 
     const user = await this.userModel.create({
       username: normalizedUsername,
-      email: normalizedEmail,
-      studentId: `${Math.floor(10000000 + Math.random() * 90000000)}`,
+      studentId:
+        normalizedRole === 'student'
+          ? `${Math.floor(10000000 + Math.random() * 90000000)}`
+          : undefined,
       name: normalizedName,
-      role: 'student',
+      role: normalizedRole,
       status: 'active',
       passwordHash,
     });
@@ -238,7 +232,7 @@ export class AuthService {
 
   async forgotPassword(body: ForgotPasswordDto) {
     const user = await this.userModel.findOne({
-      email: body.email.toLowerCase().trim(),
+      username: body.username.trim(),
     });
     if (!user) {
       return this.appService.envelope(
@@ -470,7 +464,6 @@ export class AuthService {
     return {
       id: user.id,
       username: user.username,
-      email: user.email,
       name: user.name,
       role: user.role,
       mustChangePassword: !!user.mustChangePassword,

@@ -120,8 +120,8 @@ export class RequestLoggingMiddleware
     const body = (request.body || {}) as Record<string, unknown>;
     return (
       this.readString(body.username) ||
-      this.readString(body.usernameOrEmailOrStudentId) ||
-      this.readString(body.email)
+      this.readString(body.usernameOrStudentId) ||
+      this.readString(body.studentId)
     );
   }
 

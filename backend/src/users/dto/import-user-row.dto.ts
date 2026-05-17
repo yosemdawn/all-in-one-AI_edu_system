@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsIn,
   IsObject,
   IsOptional,
@@ -11,10 +10,6 @@ export class ImportUserRowDto {
   @IsOptional()
   @IsString()
   username?: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
 
   @IsOptional()
   @IsString()

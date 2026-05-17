@@ -12,7 +12,6 @@ export type UserStatus = "active" | "inactive";
 export interface User {
   _id: string;
   username: string;
-  email: string;
   name: string;
   role: UserRole;
   status: UserStatus;
@@ -39,7 +38,6 @@ export { UserType as User };
 // 创建用户DTO
 export interface CreateUserDto {
   username: string;
-  email: string;
   password: string;
   name: string;
   role?: UserRole;
@@ -53,7 +51,6 @@ export interface CreateUserDto {
 // 更新用户DTO
 export interface UpdateUserDto {
   username?: string;
-  email?: string;
   name?: string;
   role?: UserRole;
   studentId?: string;
@@ -68,7 +65,6 @@ export interface UserQueryParams {
   page?: number;
   limit?: number;
   username?: string;
-  email?: string;
   name?: string;
   status?: UserStatus;
   role?: UserRole;

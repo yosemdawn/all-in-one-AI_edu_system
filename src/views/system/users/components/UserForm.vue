@@ -26,13 +26,6 @@
               ></el-input>
             </el-form-item>
 
-            <el-form-item label="邮箱" prop="email">
-              <el-input
-                v-model="form.email"
-                placeholder="请输入邮箱"
-              ></el-input>
-            </el-form-item>
-
             <el-form-item label="用户角色" prop="role">
               <el-select
                 v-model="form.role"
@@ -155,7 +148,6 @@ const dialogTitle = computed(() => {
 // 表单数据
 const form = reactive<CreateUserDto & { confirmPassword?: string }>({
   username: "",
-  email: "",
   password: "",
   confirmPassword: "",
   name: "",
@@ -172,10 +164,6 @@ const rules = reactive<FormRules>({
     { min: 2, max: 20, message: "长度应为2-20个字符", trigger: "blur" },
   ],
   name: [{ required: true, message: "请输入姓名", trigger: "blur" }],
-  email: [
-    { required: true, message: "请输入邮箱", trigger: "blur" },
-    { type: "email", message: "请输入有效的邮箱地址", trigger: "blur" },
-  ],
   phone: [
     {
       pattern: /^1[3-9]\d{9}$/,
@@ -276,7 +264,6 @@ const resetForm = () => {
     // 重置表单数据
     Object.assign(form, {
       username: "",
-      email: "",
       password: "",
       confirmPassword: "",
       name: "",
@@ -297,7 +284,6 @@ const loadUserData = async (id: string) => {
     // 填充表单数据
     Object.assign(form, {
       username: userData.username || "",
-      email: userData.email || "",
       name: userData.name || "",
       role: userData.role || "student",
       studentId: userData.studentId || "",
@@ -327,7 +313,6 @@ const submitForm = () => {
       try {
         const userData = {
           username: form.username,
-          email: form.email,
           name: form.name,
           role: form.role,
           studentId: form.role === "student" ? form.studentId : undefined,

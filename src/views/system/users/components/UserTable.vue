@@ -38,13 +38,6 @@
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="email"
-        label="邮箱"
-        min-width="150"
-        show-overflow-tooltip
-      />
-
       <!-- 手机号 -->
       <el-table-column
         prop="phone"

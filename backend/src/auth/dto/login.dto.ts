@@ -4,7 +4,7 @@ import { TrimString } from '../../common/dto/transformers';
 export class LoginDto {
   @TrimString()
   @IsString()
-  usernameOrEmailOrStudentId: string;
+  usernameOrStudentId: string;
 
   @IsString()
   @MinLength(6)

@@ -10,7 +10,6 @@
       <el-table :data="pagedFailures" border style="width: 100%">
         <el-table-column prop="user.username" label="用户名" width="120" />
         <el-table-column prop="user.name" label="姓名" width="100" />
-        <el-table-column prop="user.email" label="邮箱" min-width="180" />
         <el-table-column prop="user.role" label="角色" width="100" />
         <el-table-column prop="user.studentId" label="学号" width="100" />
         <el-table-column prop="reason" label="失败原因" min-width="200" />
@@ -39,7 +38,6 @@ interface FailureItem {
   user: {
     username: string;
     name: string;
-    email: string;
     role: string;
     studentId: string;
   };

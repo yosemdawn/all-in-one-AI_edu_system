@@ -46,7 +46,6 @@ export class AuthContextService {
     return {
       id: user.id,
       username: user.username,
-      email: user.email,
       name: user.name,
       role: user.role,
       status: user.status,

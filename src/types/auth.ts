@@ -2,7 +2,7 @@
  * 登录参数
  */
 export interface LoginParams {
-  usernameOrEmailOrStudentId: string;
+  usernameOrStudentId: string;
   password: string;
   rememberMe?: boolean;
 }
@@ -20,7 +20,6 @@ export interface LoginResult {
   user?: {
     id: string;
     username: string;
-    email: string;
     name: string;
     role: string;
     mustChangePassword: boolean;
@@ -35,7 +34,6 @@ export interface UserInfo {
   username: string;
   name: string;
   avatar?: string;
-  email?: string;
   role: string;
   classId?: string;
   className?: string;
@@ -68,7 +66,7 @@ export interface ChangePasswordParams {
  * 忘记密码参数
  */
 export interface ForgotPasswordParams {
-  email: string;
+  username: string;
 }
 
 /**

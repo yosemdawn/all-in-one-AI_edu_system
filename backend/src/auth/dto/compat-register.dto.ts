@@ -1,4 +1,9 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { TrimString } from '../../common/dto/transformers';
 
 export class CompatRegisterDto {
@@ -6,10 +11,6 @@ export class CompatRegisterDto {
   @IsOptional()
   @IsString()
   username?: string;
-
-  @TrimString()
-  @IsEmail()
-  email: string;
 
   @IsString()
   @MinLength(6)
@@ -22,4 +23,8 @@ export class CompatRegisterDto {
   @TrimString()
   @IsString()
   name: string;
+
+  @IsOptional()
+  @IsIn(['student', 'teacher'])
+  role?: 'student' | 'teacher';
 }
