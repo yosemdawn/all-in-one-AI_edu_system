@@ -171,6 +171,99 @@
       </el-table>
     </div>
 
+    <!-- 移动端学生卡片列表 -->
+    <div class="mobile-submission-list">
+      <el-empty
+        v-if="submissionData.length === 0"
+        description="暂无学生提交数据"
+        :image-size="80"
+      />
+      <article
+        v-for="(row, index) in submissionData"
+        v-else
+        :key="row._id || `${row.studentNumber}-${index}`"
+        class="submission-card"
+      >
+        <div class="submission-card-header">
+          <div class="student-info">
+            <el-avatar :size="40" class="student-avatar">
+              {{ row.studentName?.charAt(0) || "?" }}
+            </el-avatar>
+            <div class="student-details">
+              <div class="student-name">
+                {{ row.studentName || "未知学生" }}
+              </div>
+              <div class="student-number">
+                {{ row.studentNumber || "无学号" }}
+              </div>
+            </div>
+          </div>
+          <span class="submission-index">#{{ index + 1 }}</span>
+        </div>
+
+        <div class="submission-tags">
+          <el-tag
+            :type="getSubmissionStatusType(row.status)"
+            size="small"
+            effect="light"
+          >
+            {{ getSubmissionStatusText(row.status) }}
+          </el-tag>
+          <el-tag
+            :type="getGradingStatusType(row.status)"
+            size="small"
+            effect="light"
+          >
+            {{ getGradingStatusText(row.status) }}
+          </el-tag>
+          <el-tag v-if="row.className" type="info" size="small" effect="light">
+            {{ row.className }}
+          </el-tag>
+        </div>
+
+        <div v-if="row.content" class="submission-card-content">
+          {{ getContentPreview(row.content) }}
+        </div>
+        <div v-else class="submission-card-content empty-content">
+          暂无提交内容
+        </div>
+
+        <div class="submission-card-meta">
+          <div>
+            <span>字数</span>
+            <strong>{{ row.content ? getWordCount(row.content) : "-" }}</strong>
+          </div>
+          <div>
+            <span>AI评分</span>
+            <strong>{{ row.aiScore ?? "-" }}</strong>
+          </div>
+          <div>
+            <span>教师评分</span>
+            <strong>{{ row.teacherScore ?? "-" }}</strong>
+          </div>
+        </div>
+
+        <div class="submission-card-footer">
+          <div class="submission-time">
+            {{ row.submittedAt ? formatDateTime(row.submittedAt) : "未提交" }}
+          </div>
+          <el-button
+            v-if="canGrade(row.status)"
+            type="primary"
+            size="small"
+            :icon="Edit"
+            @click="handleGradeSubmission(row)"
+          >
+            批改作业
+          </el-button>
+          <span v-else-if="row.status === 'draft'" class="no-action">
+            草稿状态
+          </span>
+          <span v-else class="no-action">未提交</span>
+        </div>
+      </article>
+    </div>
+
     <!-- 批改抽屉 -->
     <GradingDrawer
       :visible="gradingDrawerVisible"
@@ -186,7 +279,7 @@
 import { ref, watch, nextTick, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { View, Edit } from "@element-plus/icons-vue";
+import { Edit } from "@element-plus/icons-vue";
 import GradingDrawer from "./GradingDrawer.vue";
 
 // Props
@@ -412,6 +505,10 @@ defineOptions({
   overflow-y: hidden;
 }
 
+.mobile-submission-list {
+  display: none;
+}
+
 /* 学生信息样式 */
 .student-info {
   display: flex;
@@ -586,6 +683,36 @@ defineOptions({
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .assignment-detail-table {
+    overflow: visible;
+  }
+
+  .table-container {
+    display: none;
+  }
+
+  .mobile-submission-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .submission-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  .submission-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
   .student-info {
     gap: 8px;
   }
@@ -594,6 +721,86 @@ defineOptions({
     width: 32px;
     height: 32px;
     font-size: 14px;
+  }
+
+  .submission-card .student-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .submission-index {
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 24px;
+  }
+
+  .submission-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .submission-card-content {
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    word-break: break-word;
+  }
+
+  .empty-content {
+    color: #9ca3af;
+  }
+
+  .submission-card-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .submission-card-meta div {
+    background: #f9fafb;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    padding: 8px;
+    min-width: 0;
+  }
+
+  .submission-card-meta span {
+    display: block;
+    color: #64748b;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .submission-card-meta strong {
+    color: #1f2937;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .submission-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .submission-time {
+    min-width: 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .submission-card-footer .el-button {
+    flex-shrink: 0;
   }
 
   .content-preview {

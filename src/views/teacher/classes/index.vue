@@ -23,70 +23,10 @@
     </page-header>
 
     <!-- 内容容器 -->
-    <div class="classes-container" ref="containerRef">
-      <!-- 搜索和筛选区域 -->
-      <div class="search-section" ref="searchRef">
-        <el-form :inline="true" :model="searchForm" class="search-form">
-          <div class="search-row">
-            <el-form-item label="班级名称">
-              <el-input
-                v-model="searchForm.search"
-                placeholder="搜索班级名称"
-                :prefix-icon="Search"
-                clearable
-                style="width: 200px"
-                @keyup.enter="handleSearch"
-              />
-            </el-form-item>
-
-            <el-form-item label="状态">
-              <el-select
-                v-model="searchForm.status"
-                placeholder="选择状态"
-                clearable
-                style="width: 120px"
-              >
-                <el-option label="活跃" value="active" />
-                <el-option label="暂停" value="inactive" />
-                <el-option label="已解散" value="disbanded" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item>
-              <el-button type="primary" :icon="Search" @click="handleSearch">
-                搜索
-              </el-button>
-              <el-button @click="resetSearch">重置</el-button>
-            </el-form-item>
-
-            <!-- 布局切换 -->
-            <el-form-item class="ml-auto">
-              <el-button-group class="mr-3">
-                <el-button
-                  :type="viewMode === 'grid' ? 'primary' : 'default'"
-                  :icon="Operation"
-                  size="default"
-                  @click="viewMode = 'grid'"
-                  title="网格模式"
-                />
-                <el-button
-                  :type="viewMode === 'list' ? 'primary' : 'default'"
-                  :icon="Menu"
-                  size="default"
-                  @click="viewMode = 'list'"
-                  title="列表模式"
-                />
-              </el-button-group>
-            </el-form-item>
-          </div>
-        </el-form>
-      </div>
-
+    <div class="classes-container">
       <!-- 班级列表内容区域 -->
       <div
         class="content-section"
-        ref="contentRef"
-        :style="{ height: contentHeight }"
         v-loading="loading"
         element-loading-text="加载中..."
       >
@@ -106,7 +46,7 @@
         </div>
 
         <!-- 网格模式 -->
-        <div v-else-if="viewMode === 'grid'" class="classes-grid">
+        <div v-else class="classes-grid">
           <class-card
             v-for="classItem in classList"
             :key="classItem._id"
@@ -118,38 +58,6 @@
             @regenerate-code="handleRegenerateCode"
           />
         </div>
-
-        <!-- 列表模式 -->
-        <div v-else class="classes-list">
-          <class-card
-            v-for="classItem in classList"
-            :key="classItem._id"
-            :class-data="classItem"
-            view-mode="list"
-            @view="handleViewClass"
-            @edit="handleEditClass"
-            @disband="handleDisbandClass"
-            @regenerate-code="handleRegenerateCode"
-          />
-        </div>
-      </div>
-
-      <!-- 分页区域 -->
-      <div
-        v-if="pagination.total > 0"
-        class="pagination-section"
-        ref="paginationRef"
-      >
-        <el-pagination
-          :current-page="pagination.page"
-          :page-size="pagination.limit"
-          :page-sizes="[3, 6, 10, 24, 48, 96]"
-          :total="pagination.total"
-          background
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
       </div>
     </div>
 
@@ -163,15 +71,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import {
-  Plus,
-  Refresh,
-  Search,
-  Operation,
-  Menu,
-} from "@element-plus/icons-vue";
+import { Plus, Refresh } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 // 使用相对路径导入，避免导入问题
 import {
@@ -198,8 +100,6 @@ interface Class {
 interface ClassQueryParams {
   page?: number;
   limit?: number;
-  status?: "active" | "inactive" | "disbanded";
-  search?: string;
 }
 
 // 导入组件
@@ -214,122 +114,22 @@ const loading = ref(false);
 const classList = ref<any[]>([]);
 const showCreateDialog = ref(false);
 const editingClass = ref<any | null>(null);
+const CLASS_LIST_LIMIT = 50;
 
-// 自适应高度相关
-const containerRef = ref<HTMLElement>();
-const searchRef = ref<HTMLElement>();
-const contentRef = ref<HTMLElement>();
-const paginationRef = ref<HTMLElement>();
-const contentHeight = ref("400px");
-
-// 搜索表单（移除排序相关字段）
-const searchForm = reactive<ClassQueryParams>({
-  search: "",
-  status: undefined,
-});
-
-// 分页数据
-const pagination = reactive({
-  page: 1,
-  limit: 10,
-  total: 0,
-});
-
-// 布局模式
-const viewMode = ref<"grid" | "list">("grid");
-
-// 动态高度计算
-const calculateContentHeight = () => {
-  if (!containerRef.value || !searchRef.value) return;
-
-  try {
-    const containerRect = containerRef.value.getBoundingClientRect();
-    const searchRect = searchRef.value.getBoundingClientRect();
-
-    // 容器总高度
-    const containerHeight = containerRect.height;
-
-    // 计算已用高度
-    let usedHeight = 0;
-    usedHeight += 32; // 容器padding (16px * 2)
-    usedHeight += searchRect.height + 24; // 搜索区域 + margin
-
-    // 如果有分页区域，计算分页高度
-    if (paginationRef.value) {
-      const paginationRect = paginationRef.value.getBoundingClientRect();
-      usedHeight += paginationRect.height + 32; // 分页区域 + margin
-    } else {
-      usedHeight += 32; // 预留分页区域高度
-    }
-
-    // 计算内容可用高度
-    const availableHeight = containerHeight - usedHeight;
-    const minHeight = 300;
-    const finalHeight = Math.max(availableHeight, minHeight);
-
-    contentHeight.value = `${finalHeight}px`;
-
-    console.log("🔍 班级管理页面高度计算:", {
-      容器总高度: containerHeight,
-      搜索区域高度: searchRect.height,
-      分页区域高度: paginationRef.value?.getBoundingClientRect().height || 0,
-      已用高度: usedHeight,
-      内容可用高度: availableHeight,
-      最终内容高度: contentHeight.value,
-    });
-  } catch (error) {
-    console.error("❌ 计算内容高度失败:", error);
-    contentHeight.value = "400px";
-  }
-};
-
-const debounce = (func: Function, wait: number) => {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  return (...args: any[]) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(null, args), wait);
-  };
-};
-
-const debouncedCalculate = debounce(calculateContentHeight, 100);
-
-const handleResize = () => {
-  debouncedCalculate();
-};
 
 // 加载班级列表
 const loadClassList = async () => {
   loading.value = true;
   try {
     const params: ClassQueryParams = {
-      page: pagination.page,
-      limit: pagination.limit,
-      ...searchForm,
+      page: 1,
+      limit: CLASS_LIST_LIMIT,
     };
-
-    // 过滤空值
-    Object.keys(params).forEach((key) => {
-      if (
-        params[key] === "" ||
-        params[key] === undefined ||
-        params[key] === null
-      ) {
-        delete params[key];
-      }
-    });
 
     const response = await getClassList(params);
     console.log(response, "---response");
 
     classList.value = response.items;
-    pagination.total = response.total;
-
-    // 重新计算高度
-    nextTick(() => {
-      setTimeout(() => {
-        calculateContentHeight();
-      }, 50);
-    });
   } catch (error) {
     // 错误提示已在统一请求层处理，此处不重复弹出
   } finally {
@@ -337,35 +137,7 @@ const loadClassList = async () => {
   }
 };
 
-// 搜索处理
-const handleSearch = () => {
-  pagination.page = 1;
-  loadClassList();
-};
-
-// 重置搜索（移除排序相关字段）
-const resetSearch = () => {
-  Object.assign(searchForm, {
-    search: "",
-    status: undefined,
-  });
-  pagination.page = 1;
-  loadClassList();
-};
-
-// 刷新数据
 const refreshData = () => {
-  loadClassList();
-};
-
-// 分页处理
-const handleSizeChange = (size: number) => {
-  pagination.limit = size;
-  loadClassList();
-};
-
-const handleCurrentChange = (page: number) => {
-  pagination.page = page;
   loadClassList();
 };
 
@@ -442,22 +214,12 @@ const handleCreateSuccess = () => {
 // 初始化
 onMounted(() => {
   loadClassList();
-  nextTick(() => {
-    setTimeout(() => {
-      calculateContentHeight();
-    }, 100);
-  });
-  window.addEventListener("resize", handleResize);
-});
-
-onUnmounted(() => {
-  window.removeEventListener("resize", handleResize);
 });
 </script>
 
 <style scoped>
 .classes-management {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   background-color: #f8fafc;
@@ -471,28 +233,7 @@ onUnmounted(() => {
   margin: 0 auto;
   /* padding: 0 24px; */
   box-sizing: border-box;
-  overflow: hidden;
-}
-
-/* 搜索区域 */
-.search-section {
-  flex-shrink: 0;
-  margin-bottom: 24px;
-}
-
-.search-form {
-  background: white;
-  padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e5e7eb;
-}
-
-.search-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: end;
+  overflow: visible;
 }
 
 :deep(.el-form-item) {
@@ -508,7 +249,7 @@ onUnmounted(() => {
 /* 内容区域 */
 .content-section {
   flex: 1;
-  overflow-y: auto;
+  overflow: visible;
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -522,13 +263,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 20px;
-}
-
-/* 班级列表 */
-.classes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 /* 空状态 */
@@ -559,33 +293,29 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* 分页区域 */
-.pagination-section {
-  flex-shrink: 0;
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
-}
-
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .classes-management {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
   .classes-container {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow: visible;
   }
 
-  .search-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-row .el-form-item {
-    width: 100%;
+  .content-section {
+    padding: 12px;
+    border-radius: 10px;
+    overflow: visible;
   }
 
   .classes-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
   }
 }
 
@@ -601,13 +331,4 @@ onUnmounted(() => {
   border-color: #d1d5db;
 }
 
-/* 分页组件样式优化 */
-:deep(.el-pagination) {
-  font-weight: 500;
-}
-
-:deep(.el-pagination .el-pager li.is-active) {
-  background: #667eea;
-  border-color: #667eea;
-}
 </style>

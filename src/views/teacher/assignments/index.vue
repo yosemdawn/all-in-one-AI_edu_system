@@ -984,23 +984,100 @@ onUnmounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .assignments-management {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
   .assignments-container {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow: visible;
+  }
+
+  .search-section {
+    margin-bottom: 16px;
+  }
+
+  .search-form {
+    padding: 16px;
+    border-radius: 10px;
   }
 
   .search-row {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
 
   .search-row .el-form-item {
     width: 100%;
   }
 
+  .view-controls {
+    margin-left: 0;
+  }
+
+  :deep(.search-form .el-form-item__content) {
+    width: 100%;
+  }
+
+  :deep(.search-form .el-input),
+  :deep(.search-form .el-select) {
+    width: 100% !important;
+  }
+
+  :deep(.search-form .el-button) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  :deep(.search-form .el-radio-group) {
+    width: 100%;
+  }
+
+  :deep(.search-form .el-radio-button) {
+    flex: 1;
+  }
+
+  :deep(.search-form .el-radio-button__inner) {
+    width: 100%;
+  }
+
+  .content-section {
+    height: auto !important;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
   .assignments-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
+  }
+
+  .assignments-list {
+    overflow-x: auto;
+  }
+
+  .pagination-section {
+    justify-content: center;
+    margin-top: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  :deep(.pagination-section .el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  :deep(.el-drawer) {
+    width: 100% !important;
   }
 }
 
