@@ -77,12 +77,47 @@
             AI 解析答案
           </el-button>
         </div>
-        <el-input
-          v-model="standardAnswersJson"
-          type="textarea"
-          :rows="8"
-          placeholder='解析后可检查 JSON，例如 {"1":{"content":"A","type":"single_choice","score":1}}'
-        />
+        <div class="parse-feedback" :class="{ empty: !answerPreviewItems.length }">
+          <template v-if="answerPreviewItems.length">
+            <div class="feedback-summary">
+              <div>
+                <strong>{{ answerPreviewItems.length }}</strong>
+                <span>道题</span>
+              </div>
+              <div>
+                <strong>{{ answerTypeCounts.single }}</strong>
+                <span>道选择题</span>
+              </div>
+              <div>
+                <strong>{{ answerTypeCounts.blank }}</strong>
+                <span>道填空/简答</span>
+              </div>
+            </div>
+            <div class="feedback-note">
+              已把标准答案整理成可批分格式。请快速核对题号和答案，确认无误后即可创建批分任务。
+            </div>
+            <div class="answer-preview-list">
+              <div
+                v-for="item in answerPreviewItems"
+                :key="item.questionId"
+                class="answer-preview-item"
+              >
+                <span class="question-no">第 {{ item.questionId }} 题</span>
+                <span class="answer-content">{{ item.content || "空" }}</span>
+                <el-tag size="small" effect="plain">{{ item.typeText }}</el-tag>
+                <span v-if="item.scoreText" class="inline-score">
+                  {{ item.scoreText }}
+                </span>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <el-empty
+              description="点击上方 AI 解析后，这里会显示老师能直接核对的答案清单"
+              :image-size="80"
+            />
+          </template>
+        </div>
       </section>
 
       <section class="panel">
@@ -98,12 +133,43 @@
             AI 解析分值
           </el-button>
         </div>
-        <el-input
-          v-model="scoreConfigJson"
-          type="textarea"
-          :rows="8"
-          placeholder='解析后可检查 JSON，例如 {"1":1,"2":1,"21":2.5}'
-        />
+        <div class="parse-feedback" :class="{ empty: !scorePreviewItems.length }">
+          <template v-if="scorePreviewItems.length">
+            <div class="feedback-summary">
+              <div>
+                <strong>{{ scorePreviewItems.length }}</strong>
+                <span>道题有分值</span>
+              </div>
+              <div>
+                <strong>{{ scoreTotal }}</strong>
+                <span>总分</span>
+              </div>
+              <div>
+                <strong>{{ scoreGroups.length }}</strong>
+                <span>条分值规则</span>
+              </div>
+            </div>
+            <div class="feedback-note">
+              已把分值规则整理为逐题分值。请核对总分和题号范围，确认无误后即可创建批分任务。
+            </div>
+            <div class="score-rule-list">
+              <div
+                v-for="group in scoreGroups"
+                :key="`${group.range}-${group.score}`"
+                class="score-rule-item"
+              >
+                <span>{{ group.range }}</span>
+                <strong>每题 {{ group.score }} 分</strong>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <el-empty
+              description="点击上方 AI 解析后，这里会显示清晰的分值范围和总分"
+              :image-size="80"
+            />
+          </template>
+        </div>
       </section>
     </div>
 
@@ -140,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -189,6 +255,122 @@ const form = reactive({
   assignmentId: "",
   syncToSubmissions: true,
   overwriteExistingSubmissions: false,
+});
+
+type StandardAnswer = {
+  content?: string;
+  type?: string;
+  score?: number;
+};
+
+type AnswerPreviewItem = {
+  questionId: string;
+  content: string;
+  typeText: string;
+  scoreText: string;
+};
+
+type ScorePreviewItem = {
+  questionId: string;
+  score: number;
+};
+
+const parsedStandardAnswers = computed<Record<string, StandardAnswer>>(() =>
+  safeJsonParse(standardAnswersJson.value, {})
+);
+
+const parsedScoreConfig = computed<Record<string, number>>(() =>
+  safeJsonParse(scoreConfigJson.value, {})
+);
+
+const answerPreviewItems = computed<AnswerPreviewItem[]>(() =>
+  Object.entries(parsedStandardAnswers.value)
+    .sort(([a], [b]) => sortQuestionId(a, b))
+    .map(([questionId, answer]) => {
+      const content = String(answer?.content ?? "").trim();
+      const score = Number(answer?.score);
+      return {
+        questionId,
+        content,
+        typeText: answerTypeText(answer?.type),
+        scoreText: Number.isFinite(score) ? `${score} 分` : "",
+      };
+    })
+);
+
+const answerTypeCounts = computed(() => {
+  return answerPreviewItems.value.reduce(
+    (counts, item) => {
+      if (item.typeText === "选择题") counts.single += 1;
+      else counts.blank += 1;
+      return counts;
+    },
+    { single: 0, blank: 0 }
+  );
+});
+
+const scorePreviewItems = computed<ScorePreviewItem[]>(() =>
+  Object.entries(parsedScoreConfig.value)
+    .map(([questionId, score]) => ({
+      questionId,
+      score: Number(score),
+    }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => sortQuestionId(a.questionId, b.questionId))
+);
+
+const scoreTotal = computed(() =>
+  Number(
+    scorePreviewItems.value
+      .reduce((total, item) => total + item.score, 0)
+      .toFixed(2)
+  )
+);
+
+const scoreGroups = computed(() => {
+  const groups: Array<{ range: string; score: number }> = [];
+  let current:
+    | { start: string; end: string; startNum: number | null; endNum: number | null; score: number }
+    | null = null;
+
+  const pushCurrent = () => {
+    if (!current) return;
+    groups.push({
+      range:
+        current.start === current.end
+          ? `第 ${current.start} 题`
+          : `第 ${current.start} - ${current.end} 题`,
+      score: current.score,
+    });
+  };
+
+  scorePreviewItems.value.forEach((item) => {
+    const numericId = numericQuestionId(item.questionId);
+    const canMerge =
+      current &&
+      current.score === item.score &&
+      current.endNum !== null &&
+      numericId !== null &&
+      numericId === current.endNum + 1;
+
+    if (canMerge) {
+      current.end = item.questionId;
+      current.endNum = numericId;
+      return;
+    }
+
+    pushCurrent();
+    current = {
+      start: item.questionId,
+      end: item.questionId,
+      startNum: numericId,
+      endNum: numericId,
+      score: item.score,
+    };
+  });
+
+  pushCurrent();
+  return groups;
 });
 
 onMounted(async () => {
@@ -252,6 +434,26 @@ async function handleParseScores() {
   }
 }
 
+function answerTypeText(type?: string) {
+  if (type === "single_choice") return "选择题";
+  if (type === "fill_in_blank") return "填空/简答";
+  return "题型待确认";
+}
+
+function numericQuestionId(questionId: string) {
+  const numeric = Number(questionId);
+  return Number.isInteger(numeric) ? numeric : null;
+}
+
+function sortQuestionId(a: string, b: string) {
+  const numA = numericQuestionId(a);
+  const numB = numericQuestionId(b);
+  if (numA !== null && numB !== null) return numA - numB;
+  if (numA !== null) return -1;
+  if (numB !== null) return 1;
+  return a.localeCompare(b, "zh-CN");
+}
+
 async function submitTask() {
   const files = answerCardFiles.value.map((item) => item.raw).filter(Boolean);
   if (!files.length) {
@@ -260,7 +462,7 @@ async function submitTask() {
   }
   const standardAnswers = safeJsonParse(standardAnswersJson.value, null);
   if (!standardAnswers) {
-    ElMessage.warning("请先填写或解析标准答案 JSON");
+    ElMessage.warning("请先解析并核对标准答案");
     return;
   }
   if (form.assignmentId && form.overwriteExistingSubmissions) {
@@ -343,6 +545,112 @@ function downloadResult(task: ToolTask) {
   margin: 10px 0;
 }
 
+.parse-feedback {
+  min-height: 226px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.parse-feedback.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+
+.feedback-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.feedback-summary div {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.feedback-summary strong {
+  display: block;
+  color: #1f2937;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.feedback-summary span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.feedback-note {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.answer-preview-list,
+.score-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.answer-preview-item,
+.score-rule-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.question-no {
+  color: #334155;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.answer-content {
+  color: #111827;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.inline-score {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.score-rule-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.score-rule-item span {
+  color: #334155;
+  font-weight: 600;
+}
+
+.score-rule-item strong {
+  color: #166534;
+  white-space: nowrap;
+}
+
 .submit-bar {
   display: flex;
   justify-content: flex-end;
@@ -363,6 +671,18 @@ function downloadResult(task: ToolTask) {
 @media (max-width: 1100px) {
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feedback-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-preview-item {
+    grid-template-columns: 1fr auto;
+  }
+
+  .answer-content {
+    grid-column: 1 / -1;
   }
 }
 </style>
