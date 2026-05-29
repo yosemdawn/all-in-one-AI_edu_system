@@ -1,3 +1,9 @@
+本项目前端开源自另一名大佬 https://github.com/yinuoguan/nengdou-ai-review-helper-web
+
+ 本人根据一线教师实际需要做了一些删改和优化
+
+-----------------------------------------
+
 All in one 中小学教师减负助手
 
 功能包括：教师端 学生端
@@ -18,9 +24,11 @@ All in one 中小学教师减负助手
 
 现开启灰度测试 yosem.vip 欢迎访问 欢迎提交issue 
 
+教师测试账号 teacher1 密码123456 
+学生测试账号 student1 密码123456
+申请APIKEY用字节火山的 https://www.volcengine.com/ 
 
-
-（具体readme等我补充）
+（最近有教学比赛 太忙了。。等忙完补充具体的功能说明和截图）
 
 待增加：
 
