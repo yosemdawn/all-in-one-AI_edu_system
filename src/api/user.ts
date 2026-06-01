@@ -127,7 +127,8 @@ export const getTeacherAiSettings = (): Promise<TeacherAiSettings> => {
 };
 
 export const updateTeacherAiSettings = (data: {
-  apiKey: string;
+  apiKey?: string;
+  model?: string;
 }): Promise<TeacherAiSettings> => {
   return request({
     url: "/users/ai-settings",

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
 
 @Injectable()
 export class AiReviewConfigService {
@@ -42,7 +43,7 @@ export class AiReviewConfigService {
   get doubaoModel() {
     return (
       this.configService.get<string>('DOUBAO_MODEL') ||
-      'doubao-seed-2-0-lite-260215'
+      DEFAULT_DOUBAO_MODEL
     );
   }
 }

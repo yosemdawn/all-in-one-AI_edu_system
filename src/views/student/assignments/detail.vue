@@ -112,6 +112,7 @@ type AssignmentDetail = {
   submissionStatus?: string;
   terminatedReason?: string;
   classId?: string;
+  assignmentType?: "normal" | "online";
 };
 
 const route = useRoute();
@@ -213,6 +214,17 @@ const goBack = () => {
 };
 
 const goToSubmission = () => {
+  if ((assignment.value as any)?.assignmentType === "online") {
+    void router.push({
+      path: "/student/online-assignment",
+      query: {
+        assignmentId: assignmentId.value,
+        classId: classId.value || assignment.value?.classId || "",
+      },
+    });
+    return;
+  }
+
   void router.push({
     path: "/student/submissions",
     query: {

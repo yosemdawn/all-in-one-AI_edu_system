@@ -37,6 +37,39 @@ export class Assignment {
   @Prop({ type: Object, default: null })
   referenceAnswer?: Record<string, unknown> | null;
 
+  @Prop({
+    required: true,
+    enum: ['normal', 'online'],
+    default: 'normal',
+  })
+  assignmentType?: 'normal' | 'online';
+
+  @Prop({
+    type: [
+      {
+        id: { type: String, required: true },
+        type: {
+          type: String,
+          required: true,
+          enum: ['single_choice', 'fill_blank'],
+        },
+        stem: { type: String, required: true },
+        options: { type: Array, default: [] },
+        answer: { type: String, required: true },
+        score: { type: Number, default: 1 },
+      },
+    ],
+    default: [],
+  })
+  onlineQuestions?: Array<{
+    id: string;
+    type: 'single_choice' | 'fill_blank';
+    stem: string;
+    options?: string[];
+    answer: string;
+    score?: number;
+  }>;
+
   @Prop({ default: '' })
   gradingNotes?: string;
 

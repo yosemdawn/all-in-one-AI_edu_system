@@ -17,6 +17,10 @@ import { DoubaoAiReviewService } from './doubao-ai-review.service';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { decryptAiApiKey } from '../users/ai-api-key.crypto';
+import {
+  DEFAULT_DOUBAO_MODEL,
+  resolveDoubaoModel,
+} from '../common/doubao-models';
 
 @Processor(AI_REVIEW_QUEUE)
 export class AiReviewProcessor extends WorkerHost {
@@ -62,10 +66,11 @@ export class AiReviewProcessor extends WorkerHost {
       return;
     }
 
+    const teacherAiSettings = await this.resolveTeacherAiSettings(assignment);
     submission.status = 'ai_review_queued';
     submission.aiReviewMetadata = {
       provider: 'doubao',
-      modelUsed: 'doubao-seed-2-0-lite-260215',
+      modelUsed: teacherAiSettings.model,
       queueStatus: 'processing',
       jobId: String(job.id),
       queuedAt:
@@ -74,10 +79,14 @@ export class AiReviewProcessor extends WorkerHost {
     };
     await submission.save();
 
-    const teacherApiKey = await this.resolveTeacherApiKey(assignment);
-    const result = await this.doubaoAiReviewService.review(submission, assignment, {
-      apiKey: teacherApiKey,
-    });
+    const result = await this.doubaoAiReviewService.review(
+      submission,
+      assignment,
+      {
+        apiKey: teacherAiSettings.apiKey,
+        model: teacherAiSettings.model,
+      },
+    );
 
     if (!result.success) {
       submission.status = 'ai_review_failed';
@@ -86,7 +95,7 @@ export class AiReviewProcessor extends WorkerHost {
       submission.aiReviewedAt = null;
       submission.aiReviewMetadata = {
         provider: 'doubao',
-        modelUsed: 'doubao-seed-2-0-lite-260215',
+        modelUsed: teacherAiSettings.model,
         queueStatus: 'failed',
         error: result.error,
         rawContent: result.rawContent,
@@ -102,7 +111,7 @@ export class AiReviewProcessor extends WorkerHost {
     submission.aiReviewedAt = new Date();
     submission.aiReviewMetadata = {
       provider: 'doubao',
-      modelUsed: result.model || 'doubao-seed-2-0-lite-260215',
+      modelUsed: result.model || teacherAiSettings.model,
       queueStatus: 'completed',
       usage: result.usage,
       tokenUsed: this.resolveUsageTokens(result.usage),
@@ -143,20 +152,27 @@ export class AiReviewProcessor extends WorkerHost {
     return Number.isFinite(totalTokensValue) ? totalTokensValue : 0;
   }
 
-  private async resolveTeacherApiKey(assignment: AssignmentDocument) {
+  private async resolveTeacherAiSettings(assignment: AssignmentDocument) {
     const teacher = await this.userModel
       .findById(assignment.teacherId)
       .select('aiSettings')
       .lean();
 
+    const model = resolveDoubaoModel(teacher?.aiSettings?.doubaoModel);
     try {
-      return decryptAiApiKey(teacher?.aiSettings?.doubaoApiKeyEncrypted);
+      return {
+        apiKey: decryptAiApiKey(teacher?.aiSettings?.doubaoApiKeyEncrypted),
+        model,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to decrypt teacher AI key for teacher ${assignment.teacherId}`,
         error instanceof Error ? error.stack : undefined,
       );
-      return '';
+      return {
+        apiKey: '',
+        model: model || DEFAULT_DOUBAO_MODEL,
+      };
     }
   }
 }

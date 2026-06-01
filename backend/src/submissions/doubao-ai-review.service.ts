@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { resolveDoubaoModel } from '../common/doubao-models';
 import { AssignmentDocument } from '../assignments/schemas/assignment.schema';
 import { AiReviewConfigService } from './ai-review-config.service';
 import { SubmissionDocument } from './schemas/submission.schema';
@@ -16,6 +17,7 @@ type ReviewResult = {
 
 type ReviewOptions = {
   apiKey?: string;
+  model?: string;
 };
 
 @Injectable()
@@ -37,6 +39,9 @@ export class DoubaoAiReviewService {
 
     const prompt = this.buildPrompt(submission, assignment);
     const url = `${this.configService.doubaoBaseUrl}/chat/completions`;
+    const model = resolveDoubaoModel(
+      options.model || this.configService.doubaoModel,
+    );
 
     const response = await fetch(url, {
       method: 'POST',
@@ -45,7 +50,7 @@ export class DoubaoAiReviewService {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: this.configService.doubaoModel,
+        model,
         messages: [
           {
             role: 'system',
@@ -94,7 +99,7 @@ export class DoubaoAiReviewService {
       highlights: this.readStringArray(parsed, 'highlights'),
       rawContent: content,
       usage: this.readRecord(data, 'usage'),
-      model: this.readString(data, 'model') || this.configService.doubaoModel,
+      model: this.readString(data, 'model') || model,
     };
   }
 

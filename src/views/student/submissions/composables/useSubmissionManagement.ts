@@ -190,6 +190,15 @@ export function useSubmissionManagement() {
       submissionData.value = await SubmissionsApi.getMySubmission(
         assignmentId.value
       );
+      if (submissionData.value?.assignment?.assignmentType === "online") {
+        await router.replace({
+          path: "/student/online-assignment",
+          query: {
+            assignmentId: assignmentId.value,
+            classId: classId.value,
+          },
+        });
+      }
     } catch (error) {
       console.error("Failed to load submission detail:", error);
       ElMessage.error("加载作业数据失败");

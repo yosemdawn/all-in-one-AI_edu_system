@@ -28,6 +28,7 @@ import {
 import { DoubaoVisionService } from './doubao-vision.service';
 import {
   ObjectiveGradingService,
+  QuestionScoreConfig,
   StandardAnswerMap,
 } from './objective-grading.service';
 import { ToolTaskQueryDto } from './dto/tool-task-query.dto';
@@ -90,6 +91,14 @@ export class TeacherToolsService {
 
   async parseScoreConfig(currentUser: AuthenticatedUser, text: string) {
     this.assertTeacher(currentUser);
+    const localScoreConfig = this.parseScoreConfigText(text);
+    if (Object.keys(localScoreConfig).length) {
+      return this.appService.envelope(
+        { scoreConfig: localScoreConfig },
+        'success',
+      );
+    }
+
     const result = await this.doubaoVisionService.parseScoreConfig(text, {
       teacherId: currentUser.id,
     });
@@ -1042,6 +1051,56 @@ export class TeacherToolsService {
       return 0;
     }
     return Math.max(0, Math.min(100, numericScore));
+  }
+
+  private parseScoreConfigText(text: string): QuestionScoreConfig {
+    const normalized = text
+      .replace(/[—–－~～至到]/g, '-')
+      .replace(/（/g, '(')
+      .replace(/）/g, ')')
+      .replace(/\s+/g, '');
+    const result: QuestionScoreConfig = {};
+    const consumed = new Set<string>();
+
+    const addRange = (start: string, end: string, score: string) => {
+      const startNum = Number(start);
+      const endNum = Number(end);
+      const scoreNum = Number(score);
+      if (
+        !Number.isInteger(startNum) ||
+        !Number.isInteger(endNum) ||
+        startNum <= 0 ||
+        endNum < startNum ||
+        endNum - startNum > 300 ||
+        !Number.isFinite(scoreNum)
+      ) {
+        return;
+      }
+      for (let question = startNum; question <= endNum; question += 1) {
+        result[String(question)] = scoreNum;
+      }
+    };
+
+    const rangePattern =
+      /(?:第)?(\d+)(?:题)?-(?:第)?(\d+)(?:题)?[^，,;；。]*?(?:每(?:小)?题|每题|每个|各)?(\d+(?:\.\d+)?)分/g;
+    for (const match of normalized.matchAll(rangePattern)) {
+      addRange(match[1], match[2], match[3]);
+      consumed.add(match[0]);
+    }
+
+    const singlePattern =
+      /(?:第)?(\d+)(?:题)[^，,;；。]*?(?:每(?:小)?题|每题|得|共|为)?(\d+(?:\.\d+)?)分/g;
+    for (const match of normalized.matchAll(singlePattern)) {
+      if (consumed.has(match[0])) {
+        continue;
+      }
+      const score = Number(match[2]);
+      if (Number.isFinite(score)) {
+        result[match[1]] = score;
+      }
+    }
+
+    return result;
   }
 
   private buildCsv(task: ToolTaskDocument) {

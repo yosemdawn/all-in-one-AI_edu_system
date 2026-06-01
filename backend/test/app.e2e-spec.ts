@@ -199,7 +199,7 @@ describe('Backend e2e', () => {
       code: 200,
       message: 'backend ready',
       data: {
-        name: 'nengdou-backend',
+        name: 'yosem-backend',
         ok: true,
       },
     });
@@ -291,7 +291,7 @@ describe('Backend e2e', () => {
 
     const compatLoginResponse = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'admin@nengdou.local', password: '123456' });
+      .send({ email: 'admin@yosem.local', password: '123456' });
     const compatLogin = unwrap<LoginPayload>(compatLoginResponse);
     expect(compatLogin.token).toBeTruthy();
 
@@ -664,7 +664,7 @@ describe('Backend e2e', () => {
       .set(authHeader(adminLogin.token))
       .send({
         username: 'managed_teacher',
-        email: 'managed_teacher@nengdou.local',
+        email: 'managed_teacher@yosem.local',
         password: '123456',
         name: 'Managed Teacher',
         role: 'teacher',
@@ -895,7 +895,7 @@ describe('Backend e2e', () => {
 
     const forgotPasswordResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/forgot-password')
-      .send({ email: 'managed_teacher@nengdou.local' });
+      .send({ email: 'managed_teacher@yosem.local' });
     const forgotPasswordResult = unwrap<{
       success: boolean;
       resetToken: string;

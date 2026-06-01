@@ -106,8 +106,20 @@
                 </el-form-item>
               </div>
 
-              <!-- 评分规则模板 -->
               <div class="mb-6">
+                <el-form-item label="作业类型" prop="assignmentType" class="form-item">
+                  <el-radio-group v-model="formData.assignmentType">
+                    <el-radio-button label="normal">普通作业</el-radio-button>
+                    <el-radio-button label="online">在线作业</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+                <p class="form-helper-text">
+                  普通作业沿用文本/图片提交；在线作业适合选择题、填空题，学生逐题在线作答并自动判分。
+                </p>
+              </div>
+
+              <!-- 评分规则模板 -->
+              <div v-if="formData.assignmentType === 'normal'" class="mb-6">
                 <el-form-item
                   label="评分规则模板"
                   prop="aiRule"
@@ -121,7 +133,7 @@
               </div>
 
               <!-- 批改依据 -->
-              <div class="mb-6 space-y-6">
+              <div v-if="formData.assignmentType === 'normal'" class="mb-6 space-y-6">
                 <div class="material-block">
                   <div class="material-block__header">
                     <h4 class="material-block__title">作业原题</h4>
@@ -178,6 +190,117 @@
                 </el-form-item>
               </div>
 
+              <div v-else class="mb-6">
+                <div class="online-builder">
+                  <div class="online-builder__header">
+                    <div>
+                      <h4 class="online-builder__title">在线题目</h4>
+                      <p class="online-builder__desc">
+                        选择题答案必须与某个选项完全一致；填空题会按字符完全一致判分，英文字母大小写也必须一致。
+                      </p>
+                    </div>
+                    <el-button type="primary" :icon="Plus" plain @click="addOnlineQuestion">
+                      添加题目
+                    </el-button>
+                  </div>
+
+                  <div class="online-question-list">
+                    <div
+                      v-for="(question, questionIndex) in formData.onlineQuestions"
+                      :key="question.id"
+                      class="online-question-card"
+                    >
+                      <div class="online-question-card__top">
+                        <div class="online-question-card__index">
+                          第 {{ questionIndex + 1 }} 题
+                        </div>
+                        <div class="online-question-card__actions">
+                          <el-select v-model="question.type" class="question-type-select" @change="handleQuestionTypeChange(question)">
+                            <el-option label="选择题" value="single_choice" />
+                            <el-option label="填空题" value="fill_blank" />
+                          </el-select>
+                          <el-input-number
+                            v-model="question.score"
+                            :min="0.5"
+                            :step="0.5"
+                            :precision="1"
+                            controls-position="right"
+                            class="question-score-input"
+                          />
+                          <el-button
+                            :icon="Delete"
+                            plain
+                            type="danger"
+                            :disabled="formData.onlineQuestions.length <= 1"
+                            @click="removeOnlineQuestion(questionIndex)"
+                          />
+                        </div>
+                      </div>
+
+                      <el-form-item
+                        :prop="`onlineQuestions.${questionIndex}.stem`"
+                        label="题目"
+                        class="form-item"
+                      >
+                        <el-input
+                          v-model="question.stem"
+                          type="textarea"
+                          :rows="3"
+                          maxlength="1000"
+                          show-word-limit
+                          placeholder="请输入题干"
+                        />
+                      </el-form-item>
+
+                      <div v-if="question.type === 'single_choice'" class="option-list">
+                        <div
+                          v-for="(option, optionIndex) in question.options"
+                          :key="`${question.id}-option-${optionIndex}`"
+                          class="option-row"
+                        >
+                          <span class="option-label">{{ getOptionLabel(optionIndex) }}</span>
+                          <el-input
+                            v-model="question.options[optionIndex]"
+                            placeholder="选项内容"
+                          />
+                          <el-button
+                            :icon="Delete"
+                            link
+                            type="danger"
+                            :disabled="question.options.length <= 2"
+                            @click="removeOption(question, optionIndex)"
+                          />
+                        </div>
+                        <el-button link type="primary" :icon="Plus" @click="addOption(question)">
+                          添加选项
+                        </el-button>
+                      </div>
+
+                      <el-form-item label="标准答案" class="form-item">
+                        <el-select
+                          v-if="question.type === 'single_choice'"
+                          v-model="question.answer"
+                          class="w-full"
+                          placeholder="请选择正确选项"
+                        >
+                          <el-option
+                            v-for="(option, optionIndex) in question.options.filter(Boolean)"
+                            :key="`${question.id}-answer-${optionIndex}`"
+                            :label="`${getOptionLabel(optionIndex)}. ${option}`"
+                            :value="option"
+                          />
+                        </el-select>
+                        <el-input
+                          v-else
+                          v-model="question.answer"
+                          placeholder="请输入标准答案，判分时大小写和空格必须完全一致"
+                        />
+                      </el-form-item>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- 时间设置 - 响应式网格 -->
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <el-form-item
@@ -217,9 +340,13 @@
               </el-form-item>
 
               <div class="grading-hint-card">
-                <h4>AI 批改说明</h4>
+                <h4>{{ formData.assignmentType === 'online' ? '在线作业说明' : 'AI 批改说明' }}</h4>
                 <p>
-                  当前默认采用“题目 + 标准答案 + 评分规则模板”进行批改。适合答题卡、仅答案、简答题和混合提交场景。
+                  {{
+                    formData.assignmentType === 'online'
+                      ? '学生将在独立答题页逐题完成，提交后系统立即按标准答案自动判分。'
+                      : '当前默认采用“题目 + 标准答案 + 评分规则模板”进行批改。适合答题卡、仅答案、简答题和混合提交场景。'
+                  }}
                 </p>
               </div>
             </div>
@@ -234,7 +361,7 @@
 import { ref, reactive, onMounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { ArrowLeft } from "@element-plus/icons-vue";
+import { ArrowLeft, Delete, Plus } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
 import {
   getAssignment,
@@ -246,6 +373,7 @@ import {
 import type {
   CreateAssignmentDto,
   AiRuleSnapshot,
+  OnlineQuestion,
   SubmissionFormat,
 } from "@/types/assignments";
 import type { Assignment as ApiAssignment } from "@/api/assignments";
@@ -282,6 +410,8 @@ const formData = reactive<CreateAssignmentDto & { allowAttachments: boolean }>({
   description: "",
   classes: [],
   aiRule: null as AiRuleSnapshot | null,
+  assignmentType: "normal",
+  onlineQuestions: [],
   questionMaterial: {
     content: "",
   },
@@ -331,12 +461,44 @@ const formRules: FormRules = {
     },
   ],
   classes: [{ required: true, message: "请选择关联班级", trigger: "change" }],
-  aiRule: [{ required: true, message: "请选择评分规则模板", trigger: "change" }],
+  assignmentType: [
+    { required: true, message: "请选择作业类型", trigger: "change" },
+  ],
+  aiRule: [
+    {
+      validator: (_rule, value, callback) => {
+        if (formData.assignmentType === "normal" && !value) {
+          callback(new Error("请选择评分规则模板"));
+          return;
+        }
+        callback();
+      },
+      trigger: "change",
+    },
+  ],
   "questionMaterial.content": [
-    { required: true, message: "请输入作业原题", trigger: "blur" },
+    {
+      validator: (_rule, value, callback) => {
+        if (formData.assignmentType === "normal" && !value) {
+          callback(new Error("请输入作业原题"));
+          return;
+        }
+        callback();
+      },
+      trigger: "blur",
+    },
   ],
   "referenceAnswer.content": [
-    { required: true, message: "请输入标准答案", trigger: "blur" },
+    {
+      validator: (_rule, value, callback) => {
+        if (formData.assignmentType === "normal" && !value) {
+          callback(new Error("请输入标准答案"));
+          return;
+        }
+        callback();
+      },
+      trigger: "blur",
+    },
   ],
   submissionFormat: [
     { required: true, message: "请选择学生提交形式", trigger: "change" },
@@ -412,6 +574,8 @@ const initFormData = () => {
     formData.questionMaterial = { content: "" };
     formData.referenceAnswer = { content: "" };
     formData.gradingNotes = "";
+    formData.assignmentType = "normal";
+    formData.onlineQuestions = [createOnlineQuestion()];
     formData.submissionFormat = "mixed";
   }
 };
@@ -430,6 +594,11 @@ const loadAssignmentData = async () => {
       aiRule: assignment.aiRule,
       questionMaterial: assignment.questionMaterial || { content: "" },
       referenceAnswer: assignment.referenceAnswer || { content: "" },
+      assignmentType: assignment.assignmentType || "normal",
+      onlineQuestions:
+        assignment.onlineQuestions?.length
+          ? assignment.onlineQuestions
+          : [createOnlineQuestion()],
       gradingNotes: assignment.gradingNotes || "",
       submissionFormat: assignment.submissionFormat || "mixed",
       startDate: moment(assignment.startDate).format("YYYY-MM-DD HH:mm:ss"),
@@ -450,14 +619,21 @@ const buildAssignmentData = (includeStatus = false) => {
     title: formData.title,
     description: formData.description,
     classes: formData.classes,
-    aiRule: formData.aiRule,
-    questionMaterial: formData.questionMaterial,
-    referenceAnswer: formData.referenceAnswer,
+    aiRule: formData.assignmentType === "normal" ? formData.aiRule : null,
+    questionMaterial:
+      formData.assignmentType === "normal" ? formData.questionMaterial : { content: "" },
+    referenceAnswer:
+      formData.assignmentType === "normal" ? formData.referenceAnswer : { content: "" },
+    assignmentType: formData.assignmentType,
+    onlineQuestions:
+      formData.assignmentType === "online" ? normalizeOnlineQuestionsForSubmit() : [],
     gradingNotes: formData.gradingNotes,
-    submissionFormat: formData.submissionFormat,
+    submissionFormat:
+      formData.assignmentType === "online" ? "answers_only" : formData.submissionFormat,
     startDate: formData.startDate,
     endDate: formData.endDate,
-    allowAttachments: formData.allowAttachments,
+    allowAttachments:
+      formData.assignmentType === "online" ? false : formData.allowAttachments,
   };
 
   if (includeStatus) {
@@ -467,6 +643,91 @@ const buildAssignmentData = (includeStatus = false) => {
   return data;
 };
 
+const createOnlineQuestion = (): OnlineQuestion => ({
+  id: `q-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  type: "single_choice",
+  stem: "",
+  options: ["", ""],
+  answer: "",
+  score: 1,
+});
+
+const addOnlineQuestion = () => {
+  formData.onlineQuestions.push(createOnlineQuestion());
+};
+
+const removeOnlineQuestion = (index: number) => {
+  if (formData.onlineQuestions.length <= 1) return;
+  formData.onlineQuestions.splice(index, 1);
+};
+
+const handleQuestionTypeChange = (question: OnlineQuestion) => {
+  question.answer = "";
+  if (question.type === "single_choice" && question.options.length < 2) {
+    question.options = ["", ""];
+  }
+  if (question.type === "fill_blank") {
+    question.options = [];
+  }
+};
+
+const addOption = (question: OnlineQuestion) => {
+  question.options.push("");
+};
+
+const removeOption = (question: OnlineQuestion, index: number) => {
+  if (question.options.length <= 2) return;
+  question.options.splice(index, 1);
+  if (!question.options.includes(question.answer)) {
+    question.answer = "";
+  }
+};
+
+const getOptionLabel = (index: number) => {
+  return String.fromCharCode(65 + index);
+};
+
+const normalizeOnlineQuestionsForSubmit = () => {
+  return formData.onlineQuestions.map((question, index) => ({
+    id: question.id || `q-${index + 1}`,
+    type: question.type,
+    stem: question.stem.trim(),
+    options:
+      question.type === "single_choice"
+        ? question.options.map((item) => item.trim()).filter(Boolean)
+        : [],
+    answer: question.answer.trim(),
+    score: Number(question.score || 1),
+  }));
+};
+
+const validateOnlineQuestions = () => {
+  if (formData.assignmentType !== "online") return true;
+
+  const questions = normalizeOnlineQuestionsForSubmit();
+  if (!questions.length) {
+    ElMessage.warning("请至少添加一道在线题目");
+    return false;
+  }
+
+  const invalidIndex = questions.findIndex((question) => {
+    if (!question.stem || !question.answer || question.score <= 0) return true;
+    if (question.type === "single_choice") {
+      return question.options.length < 2 || !question.options.includes(question.answer);
+    }
+    return false;
+  });
+
+  if (invalidIndex >= 0) {
+    ElMessage.warning(
+      `请完善第 ${invalidIndex + 1} 题：题目、分值、选项和标准答案都不能为空`
+    );
+    return false;
+  }
+
+  return true;
+};
+
 // 保存草稿
 const handleSaveDraft = async () => {
   if (!formRef.value) return;
@@ -474,6 +735,7 @@ const handleSaveDraft = async () => {
   try {
     // 表单校验失败时会自动滚动到错误字段，不需要额外提示
     await formRef.value.validate();
+    if (!validateOnlineQuestions()) return;
     saving.value = true;
 
     if (isEdit.value) {
@@ -506,6 +768,7 @@ const handlePublish = async () => {
   try {
     // 表单校验失败时会自动滚动到错误字段，不需要额外提示
     await formRef.value.validate();
+    if (!validateOnlineQuestions()) return;
 
     await ElMessageBox.confirm(
       "确定要发布这个作业吗？发布后学生将能够看到并提交作业。",
@@ -607,6 +870,100 @@ onMounted(() => {
   color: #6b7280;
 }
 
+.online-builder {
+  padding: 18px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.online-builder__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.online-builder__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.online-builder__desc {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.online-question-list {
+  display: grid;
+  gap: 14px;
+}
+
+.online-question-card {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.online-question-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.online-question-card__index {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.online-question-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.question-type-select {
+  width: 120px;
+}
+
+.question-score-input {
+  width: 110px;
+}
+
+.option-list {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 16px 100px;
+}
+
+.option-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .grading-hint-card {
   margin-top: 20px;
   padding: 16px 18px;
@@ -664,5 +1021,21 @@ onMounted(() => {
 
 .section-content {
   padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .online-builder__header,
+  .online-question-card__top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .online-question-card__actions {
+    flex-wrap: wrap;
+  }
+
+  .option-list {
+    margin-left: 0;
+  }
 }
 </style>

@@ -414,7 +414,16 @@ async function handleParseAnswers() {
   parsingAnswers.value = true;
   try {
     const result = await parseObjectiveAnswers(answerText.value);
-    standardAnswersJson.value = JSON.stringify(result.standardAnswers, null, 2);
+    const existingAnswers = parsedStandardAnswers.value;
+    const incomingAnswers = result.standardAnswers || {};
+    const mergedAnswers = {
+      ...existingAnswers,
+      ...incomingAnswers,
+    };
+    standardAnswersJson.value = JSON.stringify(mergedAnswers, null, 2);
+    ElMessage.success(
+      buildMergeMessage("答案", existingAnswers, incomingAnswers)
+    );
   } finally {
     parsingAnswers.value = false;
   }
@@ -428,10 +437,37 @@ async function handleParseScores() {
   parsingScores.value = true;
   try {
     const result = await parseObjectiveScoreConfig(scoreText.value);
-    scoreConfigJson.value = JSON.stringify(result.scoreConfig, null, 2);
+    const existingScores = parsedScoreConfig.value;
+    const incomingScores = result.scoreConfig || {};
+    const mergedScores = {
+      ...existingScores,
+      ...incomingScores,
+    };
+    scoreConfigJson.value = JSON.stringify(mergedScores, null, 2);
+    ElMessage.success(
+      buildMergeMessage("分值", existingScores, incomingScores)
+    );
   } finally {
     parsingScores.value = false;
   }
+}
+
+function buildMergeMessage(
+  label: string,
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>
+) {
+  const incomingCount = Object.keys(incoming).length;
+  const added = Object.keys(incoming).filter((key) => !(key in existing)).length;
+  const updated = incomingCount - added;
+
+  if (!incomingCount) {
+    return `没有解析到新的${label}内容`;
+  }
+  if (updated > 0) {
+    return `已合并${incomingCount}题${label}，其中${updated}题已更新`;
+  }
+  return `已追加${added}题${label}`;
 }
 
 function answerTypeText(type?: string) {

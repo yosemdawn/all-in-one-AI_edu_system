@@ -12,6 +12,7 @@ lerna-debug.log*
 node_modules
 .pnp
 .pnp.js
+3.创AI案例征集指南与模板
 
 # Build outputs
 dist

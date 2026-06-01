@@ -118,6 +118,15 @@
                     </el-tag>
 
                     <el-tag
+                      v-if="assignment.assignmentType === 'online'"
+                      type="primary"
+                      size="small"
+                      effect="plain"
+                    >
+                      在线作业
+                    </el-tag>
+
+                    <el-tag
                       v-if="assignment.hasSubmitted && assignment.submissionStatus"
                       :type="getReviewStatusType(assignment.submissionStatus)"
                       size="small"
@@ -357,6 +366,17 @@ const getReviewStatusText = (status: string) => {
 };
 
 const goToAssignment = (assignment: any) => {
+  if (assignment.assignmentType === "online") {
+    void router.push({
+      path: "/student/online-assignment",
+      query: {
+        assignmentId: assignment.id,
+        classId: selectedClass.value._id,
+      },
+    });
+    return;
+  }
+
   void router.push({
     path: "/student/submissions",
     query: {

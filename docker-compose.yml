@@ -4,15 +4,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nengdou-frontend:prod
-    container_name: nengdou-frontend
+    image: yosem-frontend:prod
+    container_name: yosem-frontend
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"
     depends_on:
       - backend
     networks:
-      - nengdou-network
+      - yosem-network
 
   # 后端服务 (NestJS)
   backend:
@@ -21,8 +21,8 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_IMAGE: node:22-alpine
-    image: nengdou-backend:prod
-    container_name: nengdou-backend
+    image: yosem-backend:prod
+    container_name: yosem-backend
     restart: unless-stopped
     env_file:
       - ./backend/.env.production
@@ -40,12 +40,12 @@ services:
     # ports:
     #   - "3000:3000"
     networks:
-      - nengdou-network
+      - yosem-network
 
   # 数据库 (MongoDB)
   mongo:
     image: mongo:7
-    container_name: nengdou-mongo
+    container_name: yosem-mongo
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
@@ -55,12 +55,12 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - nengdou-network
+      - yosem-network
 
   # 缓存 (Redis)
   redis:
     image: redis:7-alpine
-    container_name: nengdou-redis
+    container_name: yosem-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -71,10 +71,10 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nengdou-network
+      - yosem-network
 
 networks:
-  nengdou-network:
+  yosem-network:
     driver: bridge
 
 volumes:

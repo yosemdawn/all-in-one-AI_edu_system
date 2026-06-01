@@ -16,6 +16,17 @@ export interface AiRuleSnapshot {
 }
 
 export type SubmissionFormat = "answer_sheet" | "answers_only" | "mixed";
+export type AssignmentType = "normal" | "online";
+export type OnlineQuestionType = "single_choice" | "fill_blank";
+
+export interface OnlineQuestion {
+  id: string;
+  type: OnlineQuestionType;
+  stem: string;
+  options: string[];
+  answer: string;
+  score: number;
+}
 
 export interface AssignmentMaterial {
   content: string;
@@ -38,6 +49,8 @@ export interface Assignment {
   startDate: string;
   endDate: string;
   allowAttachments: boolean;
+  assignmentType?: AssignmentType;
+  onlineQuestions?: OnlineQuestion[];
   status: AssignmentStatus;
   terminatedReason?: string;
   isDeleted: boolean;
@@ -72,6 +85,8 @@ export interface AssignmentListItem {
   startDate: string;
   endDate: string;
   allowAttachments: boolean;
+  assignmentType?: AssignmentType;
+  onlineQuestions?: OnlineQuestion[];
   status: AssignmentStatus;
   terminatedReason?: string;
   isDeleted: boolean;
@@ -122,6 +137,8 @@ export interface CreateAssignmentDto {
   startDate: string;
   endDate: string;
   allowAttachments: boolean;
+  assignmentType: AssignmentType;
+  onlineQuestions: OnlineQuestion[];
 }
 
 // 更新作业DTO
@@ -152,6 +169,8 @@ export interface StudentAssignment {
   submissionStatus?: string;
   submissionId?: string;
   canSubmit: boolean;
+  assignmentType?: AssignmentType;
+  onlineQuestions?: OnlineQuestion[];
   createdAt: string;
 }
 
@@ -170,6 +189,7 @@ export interface StudentAssignmentListItem {
   submissionStatus?: string;
   submissionId?: string;
   allowAttachments: boolean;
+  assignmentType?: AssignmentType;
   createdAt: string;
   // 新增字段：支持多班级场景
   classId: string;

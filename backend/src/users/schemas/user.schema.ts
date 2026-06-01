@@ -74,6 +74,7 @@ export class User {
       doubaoApiKeyEncrypted: { type: String, default: null },
       doubaoApiKeyPreview: { type: String, default: '' },
       doubaoApiKeyUpdatedAt: { type: Date, default: null },
+      doubaoModel: { type: String, default: 'doubao-seed-2-0-lite-260428' },
     },
     default: {},
   })
@@ -81,6 +82,7 @@ export class User {
     doubaoApiKeyEncrypted?: string | null;
     doubaoApiKeyPreview?: string;
     doubaoApiKeyUpdatedAt?: Date | null;
+    doubaoModel?: string;
   };
 
   createdAt?: Date;

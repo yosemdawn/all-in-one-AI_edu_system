@@ -10,6 +10,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
+import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
 import {
   Assignment,
   AssignmentDocument,
@@ -39,6 +40,8 @@ type SubmissionSource = Pick<
   | 'className'
   | 'content'
   | 'attachments'
+  | 'onlineAnswers'
+  | 'objectiveResult'
   | 'status'
   | 'isDraft'
   | 'submittedAt'
@@ -116,6 +119,22 @@ export class SubmissionsService {
       assignment.classes.find((item) => item.id === targetClassId)?.name ||
       currentUser.className ||
       '';
+    const isOnlineAssignment = assignment.assignmentType === 'online';
+    const submissionContent = isOnlineAssignment
+      ? this.buildOnlineSubmissionContent(payload.onlineAnswers || [])
+      : String(payload.content || '').trim();
+    const onlineAnswers = isOnlineAssignment
+      ? this.normalizeOnlineAnswers(payload.onlineAnswers)
+      : [];
+    const objectiveGrading =
+      isOnlineAssignment && !payload.isDraft
+        ? this.gradeOnlineAnswers(assignment.onlineQuestions || [], onlineAnswers)
+        : null;
+    const objectiveResult = objectiveGrading?.result || null;
+
+    if (!isOnlineAssignment && !submissionContent) {
+      throw new BadRequestException('Submission content is required');
+    }
 
     let existing = await this.submissionModel.findOne({
       assignmentId: payload.assignmentId,
@@ -137,17 +156,23 @@ export class SubmissionsService {
 
       existing.classId = targetClassId;
       existing.className = className;
-      existing.content = payload.content;
-      existing.attachments = payload.attachments || [];
+      existing.content = submissionContent;
+      existing.attachments = isOnlineAssignment ? [] : payload.attachments || [];
+      existing.onlineAnswers = onlineAnswers;
+      existing.objectiveResult = objectiveResult;
       existing.isDraft = !!payload.isDraft;
-      existing.status = payload.isDraft ? 'draft' : 'submitted';
+      existing.status = payload.isDraft
+        ? 'draft'
+        : isOnlineAssignment
+          ? 'ai_reviewed'
+          : 'submitted';
       existing.submittedAt = payload.isDraft
         ? existing.submittedAt
         : new Date();
-      existing.aiScore = null;
-      existing.aiReviewContent = null;
-      existing.aiReviewMetadata = null;
-      existing.aiReviewedAt = null;
+      existing.aiScore = objectiveGrading?.score ?? null;
+      existing.aiReviewContent = objectiveGrading?.review || null;
+      existing.aiReviewMetadata = objectiveGrading?.metadata || null;
+      existing.aiReviewedAt = objectiveGrading ? new Date() : null;
       existing.teacherScore = null;
       existing.teacherReviewContent = null;
       existing.teacherReviewedAt = null;
@@ -156,7 +181,9 @@ export class SubmissionsService {
         : previousSubmittedCount + 1;
       await existing.save();
 
-      if (!payload.isDraft) {
+      if (!payload.isDraft && isOnlineAssignment) {
+        await this.syncMembershipAfterSubmission(existing);
+      } else if (!payload.isDraft) {
         await this.markAiReviewQueued(existing);
       }
 
@@ -173,22 +200,30 @@ export class SubmissionsService {
       studentNumber: currentUser.studentId,
       classId: targetClassId,
       className,
-      content: payload.content,
-      attachments: payload.attachments || [],
-      status: payload.isDraft ? 'draft' : 'submitted',
+      content: submissionContent,
+      attachments: isOnlineAssignment ? [] : payload.attachments || [],
+      onlineAnswers,
+      objectiveResult,
+      status: payload.isDraft
+        ? 'draft'
+        : isOnlineAssignment
+          ? 'ai_reviewed'
+          : 'submitted',
       isDraft: !!payload.isDraft,
       submittedAt: payload.isDraft ? null : new Date(),
       submissionCount: payload.isDraft ? 0 : 1,
-      aiScore: null,
-      aiReviewContent: null,
-      aiReviewMetadata: null,
-      aiReviewedAt: null,
+      aiScore: objectiveGrading?.score ?? null,
+      aiReviewContent: objectiveGrading?.review || null,
+      aiReviewMetadata: objectiveGrading?.metadata || null,
+      aiReviewedAt: objectiveGrading ? new Date() : null,
       teacherScore: null,
       teacherReviewContent: null,
       teacherReviewedAt: null,
     });
 
-    if (!payload.isDraft) {
+    if (!payload.isDraft && isOnlineAssignment) {
+      await this.syncMembershipAfterSubmission(existing);
+    } else if (!payload.isDraft) {
       await this.markAiReviewQueued(existing);
     }
 
@@ -227,6 +262,11 @@ export class SubmissionsService {
           teacherName: assignment.teacherName,
           aiRule: assignment.aiRule,
           questionMaterial: assignment.questionMaterial,
+          assignmentType: assignment.assignmentType || 'normal',
+          onlineQuestions:
+            assignment.assignmentType === 'online'
+              ? this.toStudentOnlineQuestions(assignment.onlineQuestions || [])
+              : [],
           gradingNotes: assignment.gradingNotes,
           submissionFormat: assignment.submissionFormat,
           status: assignment.status,
@@ -450,7 +490,7 @@ export class SubmissionsService {
       item.status = 'submitted';
       item.aiReviewMetadata = {
         provider: 'doubao',
-        modelUsed: 'doubao-seed-2-0-lite-260215',
+        modelUsed: DEFAULT_DOUBAO_MODEL,
         queueStatus: 'skipped',
         skippedReason: 'queue_disabled',
         skippedAt: new Date().toISOString(),
@@ -473,7 +513,7 @@ export class SubmissionsService {
     item.aiReviewMetadata = {
       queuedAt: new Date().toISOString(),
       provider: 'doubao',
-      modelUsed: 'doubao-seed-2-0-lite-260215',
+      modelUsed: DEFAULT_DOUBAO_MODEL,
       queueStatus: 'queued',
     };
     await item.save();
@@ -488,6 +528,100 @@ export class SubmissionsService {
         },
       },
     );
+  }
+
+  private async syncMembershipAfterSubmission(item: SubmissionDocument) {
+    await this.membershipModel.findOneAndUpdate(
+      { classId: item.classId, studentId: item.studentId },
+      {
+        $set: {
+          totalSubmissions: item.submissionCount,
+          lastSubmissionTime: item.submittedAt || new Date(),
+        },
+      },
+    );
+  }
+
+  private normalizeOnlineAnswers(answers?: Array<Record<string, unknown>>) {
+    return (Array.isArray(answers) ? answers : []).map((item) => ({
+      questionId: String(item.questionId || ''),
+      answer: String(item.answer ?? ''),
+    }));
+  }
+
+  private buildOnlineSubmissionContent(answers?: Array<Record<string, unknown>>) {
+    const normalized = this.normalizeOnlineAnswers(answers);
+    return normalized
+      .map((item, index) => `${index + 1}. ${item.answer}`)
+      .join('\n');
+  }
+
+  private gradeOnlineAnswers(
+    questions: Assignment['onlineQuestions'],
+    answers: Array<{ questionId: string; answer: string }>,
+  ) {
+    const answerMap = new Map(
+      answers.map((item) => [item.questionId, item.answer]),
+    );
+    const details = (questions || []).map((question, index) => {
+      const studentAnswer = answerMap.get(question.id) ?? '';
+      const correctAnswer = question.answer;
+      const isCorrect = studentAnswer === correctAnswer;
+      const score = Number(question.score || 1);
+
+      return {
+        questionId: question.id,
+        questionNumber: index + 1,
+        type: question.type,
+        stem: question.stem,
+        studentAnswer,
+        correctAnswer,
+        isCorrect,
+        score: isCorrect ? score : 0,
+        maxScore: score,
+      };
+    });
+    const totalScore = details.reduce((sum, item) => sum + item.score, 0);
+    const maxScore = details.reduce((sum, item) => sum + item.maxScore, 0);
+    const score = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+    const correctCount = details.filter((item) => item.isCorrect).length;
+
+    return {
+      score,
+      review: `在线客观题自动判分：${correctCount}/${details.length} 题正确，原始得分 ${totalScore}/${maxScore}。填空题按完全一致规则判定，包含英文字母大小写。`,
+      metadata: {
+        provider: 'objective_auto_grader',
+        queueStatus: 'completed',
+        modelUsed: 'objective-auto-grader',
+        completedAt: new Date().toISOString(),
+        objectiveResult: {
+          score,
+          totalScore,
+          maxScore,
+          correctCount,
+          totalQuestions: details.length,
+          details,
+        },
+      },
+      result: {
+        score,
+        totalScore,
+        maxScore,
+        correctCount,
+        totalQuestions: details.length,
+        details,
+      },
+    };
+  }
+
+  private toStudentOnlineQuestions(questions: Assignment['onlineQuestions']) {
+    return (questions || []).map((question) => ({
+      id: question.id,
+      type: question.type,
+      stem: question.stem,
+      options: question.options || [],
+      score: question.score || 1,
+    }));
   }
 
   private async syncMembershipSubmissionStats(
@@ -539,6 +673,8 @@ export class SubmissionsService {
       className: item.className,
       content: item.content,
       attachments: item.attachments || [],
+      onlineAnswers: item.onlineAnswers || [],
+      objectiveResult: item.objectiveResult || null,
       status: item.status === 'ai_review_queued' ? 'submitted' : item.status,
       isDraft: item.isDraft,
       submittedAt: item.submittedAt,

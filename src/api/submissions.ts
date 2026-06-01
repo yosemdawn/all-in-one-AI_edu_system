@@ -28,8 +28,12 @@ export interface AiReviewMetadata {
 export interface SubmitAssignmentParams {
   assignmentId: string;
   classId: string;
-  content: string;
+  content?: string;
   attachments?: Attachment[];
+  onlineAnswers?: Array<{
+    questionId: string;
+    answer: string;
+  }>;
   isDraft?: boolean;
 }
 
@@ -41,6 +45,14 @@ export interface Assignment {
   maxScore: number;
   teacherName: string;
   aiRule: any;
+  assignmentType?: "normal" | "online";
+  onlineQuestions?: Array<{
+    id: string;
+    type: "single_choice" | "fill_blank";
+    stem: string;
+    options?: string[];
+    score?: number;
+  }>;
   status: "draft" | "published" | "terminated";
   terminatedReason?: string;
 }
@@ -60,7 +72,14 @@ export interface Submission {
   createdAt: string;
   isDraft: boolean;
   submissionCount: number;
+  aiScore?: number | null;
+  aiReviewContent?: string | null;
   aiReviewMetadata?: AiReviewMetadata | null;
+  onlineAnswers?: Array<{
+    questionId: string;
+    answer: string;
+  }>;
+  objectiveResult?: Record<string, any> | null;
 }
 
 export interface AiReview {

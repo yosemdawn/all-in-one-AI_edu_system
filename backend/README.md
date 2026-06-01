@@ -1,4 +1,4 @@
-# Nengdou Backend
+# yosem Backend
 
 NestJS backend for authentication, classes, assignments, submissions, AI review, permissions, admin dashboard, and request logs.
 
@@ -60,7 +60,7 @@ Important behavior:
 Build the image:
 
 ```bash
-docker build -t nengdou-backend:prod .
+docker build -t yosem-backend:prod .
 ```
 
 Run with Docker Compose:

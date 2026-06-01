@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
-    image: nengdou-backend:prod
+    image: yosem-backend:prod
     restart: unless-stopped
     env_file:
       - .env.production

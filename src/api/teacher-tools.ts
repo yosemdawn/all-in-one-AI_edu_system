@@ -45,6 +45,7 @@ export function parseObjectiveAnswers(text: string): Promise<{
     url: "/teacher/tools/objective-grading/parse-answers",
     method: "post",
     data: { text },
+    timeout: 60000,
   });
 }
 
@@ -55,6 +56,7 @@ export function parseObjectiveScoreConfig(text: string): Promise<{
     url: "/teacher/tools/objective-grading/parse-score-config",
     method: "post",
     data: { text },
+    timeout: 60000,
   });
 }
 

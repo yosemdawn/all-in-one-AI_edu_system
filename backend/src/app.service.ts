@@ -8,7 +8,7 @@ export class AppService {
 
   getHello() {
     return this.envelope(
-      { name: 'nengdou-backend', ok: true },
+      { name: 'yosem-backend', ok: true },
       'backend ready',
     );
   }
@@ -17,7 +17,7 @@ export class AppService {
     return this.envelope(
       {
         ok: true,
-        service: 'nengdou-backend',
+        service: 'yosem-backend',
         timestamp: new Date().toISOString(),
       },
       'healthy',

@@ -86,6 +86,14 @@
             <el-tag :type="assignment.isExpired ? 'danger' : 'success'" size="small">
               {{ assignment.isExpired ? "已过期" : "进行中" }}
             </el-tag>
+            <el-tag
+              v-if="assignment.assignmentType === 'online'"
+              type="primary"
+              size="small"
+              effect="plain"
+            >
+              在线作业
+            </el-tag>
           </div>
         </el-card>
       </div>
@@ -105,6 +113,17 @@
             <el-table-column prop="title" label="作业标题" min-width="220" />
             <el-table-column prop="className" label="班级" width="120" />
             <el-table-column prop="teacherName" label="教师" width="110" />
+            <el-table-column label="类型" width="100">
+              <template #default="{ row }">
+                <el-tag
+                  :type="row.assignmentType === 'online' ? 'primary' : 'info'"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ row.assignmentType === "online" ? "在线" : "普通" }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="endDate" label="截止时间" width="180">
               <template #default="{ row }">
                 {{ formatDate(row.endDate) }}
@@ -289,6 +308,17 @@ const getActionText = (row: StudentAssignmentListItem) => {
 };
 
 const viewAssignment = (assignment: StudentAssignmentListItem) => {
+  if (assignment.assignmentType === "online") {
+    void router.push({
+      path: "/student/online-assignment",
+      query: {
+        assignmentId: assignment.id,
+        classId: assignment.classId,
+      },
+    });
+    return;
+  }
+
   if (assignment.hasSubmitted || assignment.hasDraft) {
     void router.push({
       path: "/student/submissions",

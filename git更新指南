@@ -1,5 +1,5 @@
 更新指南
-cd /var/www/nengdouAI
+cd /var/www/yosemAI
 git pull
 
 cd backend

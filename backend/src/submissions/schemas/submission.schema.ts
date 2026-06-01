@@ -29,6 +29,15 @@ export class Submission {
   @Prop({ type: Array, default: [] })
   attachments: Array<Record<string, unknown>>;
 
+  @Prop({ type: Array, default: [] })
+  onlineAnswers?: Array<{
+    questionId: string;
+    answer: string;
+  }>;
+
+  @Prop({ type: Object, default: null })
+  objectiveResult?: Record<string, unknown> | null;
+
   @Prop({
     required: true,
     enum: [
