@@ -105,6 +105,17 @@ export const constantRoutes: Array<RouteRecordRaw> = [
           roles: ["student"],
         },
       },
+      {
+        path: "online-assignment",
+        name: "StudentOnlineAssignment",
+        component: () => import("@/views/student/online-assignment/index.vue"),
+        meta: {
+          title: "在线作业",
+          requiresAuth: true,
+          roles: ["student"],
+          hidden: true,
+        },
+      },
     ],
   },
   // 根路径重定向 - 登录后跳转到这里，由权限控制逻辑处理角色跳转
@@ -148,6 +159,7 @@ export function resetRouter() {
         "AdminDashboard",
         "TeacherDashboard",
         "StudentDashboard",
+        "StudentOnlineAssignment",
       ].indexOf(route.name.toString()) === -1
     ) {
       router.removeRoute(route.name);

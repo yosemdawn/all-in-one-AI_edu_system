@@ -3,7 +3,7 @@ import { resolve } from 'path';
 import { parse } from 'dotenv';
 
 const globalState = globalThis as typeof globalThis & {
-  __nengdouEnvPreloaded?: boolean;
+  __yosemEnvPreloaded?: boolean;
 };
 
 function applyEnvFile(filePath: string, originalEnvKeys: Set<string>) {
@@ -20,12 +20,12 @@ function applyEnvFile(filePath: string, originalEnvKeys: Set<string>) {
   }
 }
 
-if (!globalState.__nengdouEnvPreloaded && process.env.NODE_ENV !== 'test') {
+if (!globalState.__yosemEnvPreloaded && process.env.NODE_ENV !== 'test') {
   const originalEnvKeys = new Set(Object.keys(process.env));
   const cwd = process.cwd();
 
   applyEnvFile(resolve(cwd, '.env'), originalEnvKeys);
   applyEnvFile(resolve(cwd, '.env.local'), originalEnvKeys);
 
-  globalState.__nengdouEnvPreloaded = true;
+  globalState.__yosemEnvPreloaded = true;
 }

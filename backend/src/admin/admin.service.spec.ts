@@ -13,7 +13,7 @@ describe('AdminService', () => {
     find: jest.fn(),
     db: {
       readyState: 1,
-      name: 'nengdou_ai_test',
+      name: 'yosem_ai_test',
       db: { admin: () => ({ ping: jest.fn() }) },
     },
   });

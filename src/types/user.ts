@@ -85,6 +85,7 @@ export interface TeacherAiSettings {
   provider: "doubao";
   configured: boolean;
   apiKeyPreview: string;
+  model: string;
   updatedAt?: string | null;
 }
 

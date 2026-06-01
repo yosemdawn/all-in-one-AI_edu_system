@@ -1,6 +1,8 @@
 import request from "@/utils/request";
 import type {
   AiRuleSnapshot,
+  AssignmentType,
+  OnlineQuestion,
   AssignmentMaterial,
   SubmissionFormat,
 } from "@/types/assignments";
@@ -27,6 +29,8 @@ export interface Assignment {
   questionMaterial?: AssignmentMaterial;
   referenceAnswer?: AssignmentMaterial;
   gradingNotes?: string;
+  assignmentType?: AssignmentType;
+  onlineQuestions?: OnlineQuestion[];
   submissionFormat?: SubmissionFormat;
   allowAttachments?: boolean;
   startDate: string;
@@ -139,6 +143,8 @@ export interface CreateAssignmentParams {
   referenceAnswer: AssignmentMaterial;
   gradingNotes: string;
   submissionFormat: SubmissionFormat;
+  assignmentType: AssignmentType;
+  onlineQuestions: OnlineQuestion[];
   allowAttachments?: boolean;
 }
 

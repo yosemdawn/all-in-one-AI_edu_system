@@ -7,12 +7,17 @@ export class SubmitAssignmentDto {
   @IsString()
   classId: string;
 
+  @IsOptional()
   @IsString()
-  content: string;
+  content?: string;
 
   @IsOptional()
   @IsArray()
   attachments?: Array<Record<string, unknown>>;
+
+  @IsOptional()
+  @IsArray()
+  onlineAnswers?: Array<Record<string, unknown>>;
 
   @IsOptional()
   @IsBoolean()

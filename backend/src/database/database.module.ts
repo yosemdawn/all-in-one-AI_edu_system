@@ -23,7 +23,7 @@ import { MemoryDatabaseService } from './memory-database.service';
         if (configService.get<string>('NODE_ENV') === 'test') {
           const testUri = configService.get<string>('TEST_MONGODB_URI');
           return {
-            uri: testUri ?? 'mongodb://127.0.0.1:27017/nengdou_ai_test',
+            uri: testUri ?? 'mongodb://127.0.0.1:27017/yosem_ai_test',
           };
         }
 
@@ -35,7 +35,7 @@ import { MemoryDatabaseService } from './memory-database.service';
         }
 
         return {
-          uri: 'mongodb://127.0.0.1:27017/nengdou_ai',
+          uri: 'mongodb://127.0.0.1:27017/yosem_ai',
         };
       },
     }),

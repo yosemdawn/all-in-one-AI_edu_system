@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { readFile } from 'fs/promises';
 import { Model } from 'mongoose';
+import { resolveDoubaoModel } from '../common/doubao-models';
 import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
 import { decryptAiApiKey } from '../users/ai-api-key.crypto';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -33,6 +34,9 @@ type TeacherAiOptions = {
 
 @Injectable()
 export class DoubaoVisionService {
+  private requestQueue: Promise<void> = Promise.resolve();
+  private nextRequestAt = 0;
+
   constructor(
     private readonly configService: ConfigService,
     @InjectModel(AiModel.name)
@@ -64,7 +68,7 @@ export class DoubaoVisionService {
         {
           role: 'system',
           content:
-            'Return JSON only. Convert the scoring rule into an object keyed by question number with numeric score values. Example: {"1":1,"2":1,"21":2.5}.',
+            'Return JSON only. Convert the scoring rule into an object keyed by question number with numeric score values. Expand every range into individual question keys. Example: "1-20每题1分，21-25每题2.5分" must become {"1":1,"2":1,"3":1,"21":2.5}. Do not return range keys, arrays, markdown, or explanations.',
         },
         {
           role: 'user',
@@ -190,52 +194,77 @@ export class DoubaoVisionService {
     options: { timeoutMs: number; teacherId?: string },
   ): Promise<ChatResult<T>> {
     const config = await this.resolveModelConfig(options.teacherId);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+    const maxAttempts = this.readPositiveInt('DOUBAO_MAX_RETRY_ATTEMPTS', 5);
+    const minIntervalMs = this.readPositiveInt('DOUBAO_MIN_INTERVAL_MS', 2500);
 
-    try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: config.model,
-          messages,
-          temperature: 0.2,
-          max_completion_tokens: 8192,
-        }),
-        signal: controller.signal,
-      });
+    let lastError = '';
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await this.waitForRequestSlot(minIntervalMs);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 
-      if (!response.ok) {
-        const body = await response.text();
-        throw new ServiceUnavailableException(
-          `Doubao request failed: ${response.status} ${this.redact(body)}`,
-        );
+      try {
+        const response = await fetch(`${config.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model,
+            messages,
+            temperature: 0.2,
+            max_completion_tokens: 8192,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          lastError = `Doubao request failed: ${response.status} ${this.redact(body)}`;
+
+          if (this.shouldRetryResponse(response.status) && attempt < maxAttempts) {
+            await this.sleep(this.getRetryDelayMs(response, attempt));
+            continue;
+          }
+
+          if (response.status === 429) {
+            throw new ServiceUnavailableException(
+              'AI 服务当前请求过多，系统已自动重试但仍被限流。请稍后再试，或减少一次上传的图片数量。',
+            );
+          }
+
+          throw new ServiceUnavailableException(lastError);
+        }
+
+        const payload = (await response.json()) as Record<string, unknown>;
+        const content = this.extractContent(payload);
+        if (!content) {
+          throw new ServiceUnavailableException('Doubao response is empty');
+        }
+
+        return {
+          data: this.extractJson<T>(content),
+          rawContent: content,
+          usage: this.readRecord(payload, 'usage'),
+          model: this.readString(payload, 'model') || config.model,
+        };
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          lastError = 'Doubao request timed out';
+          if (attempt < maxAttempts) {
+            await this.sleep(this.getRetryDelayMs(undefined, attempt));
+            continue;
+          }
+          throw new ServiceUnavailableException(lastError);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const payload = (await response.json()) as Record<string, unknown>;
-      const content = this.extractContent(payload);
-      if (!content) {
-        throw new ServiceUnavailableException('Doubao response is empty');
-      }
-
-      return {
-        data: this.extractJson<T>(content),
-        rawContent: content,
-        usage: this.readRecord(payload, 'usage'),
-        model: this.readString(payload, 'model') || config.model,
-      };
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new ServiceUnavailableException('Doubao request timed out');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
     }
+
+    throw new ServiceUnavailableException(lastError || 'Doubao request failed');
   }
 
   private async resolveModelConfig(teacherId?: string) {
@@ -256,10 +285,11 @@ export class DoubaoVisionService {
     return {
       apiKey,
       baseUrl: rawBaseUrl.replace(/\/$/, ''),
-      model:
-        model?.modelName ||
-        this.configService.get<string>('DOUBAO_MODEL') ||
-        'doubao-seed-2-0-lite-260215',
+      model: resolveDoubaoModel(
+        await this.resolveTeacherModel(teacherId) ||
+          model?.modelName ||
+          this.configService.get<string>('DOUBAO_MODEL'),
+      ),
     };
   }
 
@@ -282,6 +312,18 @@ export class DoubaoVisionService {
     } catch {
       return '';
     }
+  }
+
+  private async resolveTeacherModel(teacherId?: string) {
+    if (!teacherId) {
+      return '';
+    }
+
+    const teacher = await this.userModel
+      .findById(teacherId)
+      .select('aiSettings.doubaoModel')
+      .lean();
+    return teacher?.aiSettings?.doubaoModel || '';
   }
 
   private async toImageContent(image: VisionImage) {
@@ -347,5 +389,41 @@ export class DoubaoVisionService {
 
   private redact(value: string) {
     return value.replace(/[A-Za-z0-9_-]{24,}/g, '[REDACTED]');
+  }
+
+  private shouldRetryResponse(status: number) {
+    return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+
+  private getRetryDelayMs(response: Response | undefined, attempt: number) {
+    const retryAfter = response?.headers.get('retry-after');
+    const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+      return Math.min(retryAfterSeconds * 1000, 60_000);
+    }
+
+    return Math.min(4_000 * attempt, 30_000);
+  }
+
+  private async waitForRequestSlot(minIntervalMs: number) {
+    const previous = this.requestQueue.catch(() => undefined);
+    const current = previous.then(async () => {
+      const waitMs = Math.max(0, this.nextRequestAt - Date.now());
+      if (waitMs > 0) {
+        await this.sleep(waitMs);
+      }
+      this.nextRequestAt = Date.now() + minIntervalMs;
+    });
+    this.requestQueue = current;
+    await current;
+  }
+
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private readPositiveInt(key: string, fallback: number) {
+    const value = Number(this.configService.get<string>(key));
+    return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 }

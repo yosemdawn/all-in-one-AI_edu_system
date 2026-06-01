@@ -7,7 +7,7 @@ export function logRuntimeDiagnostics(configService: ConfigService) {
   const port = configService.get<number>('PORT') ?? 3000;
   const mongodbUri =
     configService.get<string>('MONGODB_URI') ||
-    'mongodb://127.0.0.1:27017/nengdou_ai';
+    'mongodb://127.0.0.1:27017/yosem_ai';
   const redisUrl = configService.get<string>('REDIS_URL');
   const jwtSecret = configService.get<string>('JWT_SECRET');
   const doubaoApiKey = configService.get<string>('DOUBAO_API_KEY');

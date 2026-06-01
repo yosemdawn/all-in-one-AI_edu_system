@@ -3,7 +3,7 @@ const { MongoClient, ObjectId } = require("mongodb");
 
 const DEFAULT_ADMIN = {
   username: "admin",
-  email: "admin@nengdou.local",
+  email: "admin@yosem.local",
   name: "超级管理员",
   role: "superadmin",
   status: "active",
@@ -15,7 +15,7 @@ async function main() {
     throw new Error("Refusing to reset the development admin account in production.");
   }
 
-  const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/nengdou_ai";
+  const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/yosem_ai";
   const client = new MongoClient(mongoUri);
 
   await client.connect();

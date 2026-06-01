@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
 import { AppService } from '../app.service';
 import {
   Assignment,
@@ -330,7 +331,7 @@ export class AiModelsService implements OnApplicationBootstrap {
           code: 'doubao',
           name: 'Doubao',
           provider: 'ByteDance',
-          modelName: 'doubao-seed-2-0-lite-260215',
+          modelName: DEFAULT_DOUBAO_MODEL,
           baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
           apiKey: process.env.DOUBAO_API_KEY || '',
           status: 'active',

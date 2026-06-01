@@ -51,6 +51,8 @@ type AssignmentSource = Pick<
   | 'aiRule'
   | 'questionMaterial'
   | 'referenceAnswer'
+  | 'assignmentType'
+  | 'onlineQuestions'
   | 'gradingNotes'
   | 'submissionFormat'
   | 'startDate'
@@ -107,6 +109,7 @@ type StudentAssignmentListItem = {
   submissionStatus?: NormalizedSubmissionStatus;
   submissionId?: string;
   allowAttachments: boolean;
+  assignmentType?: Assignment['assignmentType'];
   createdAt?: Date;
   classId: string;
   className: string;
@@ -334,6 +337,8 @@ export class AssignmentsService {
       aiRule: payload.aiRule || null,
       questionMaterial: payload.questionMaterial || null,
       referenceAnswer: payload.referenceAnswer || null,
+      assignmentType: payload.assignmentType || 'normal',
+      onlineQuestions: this.normalizeOnlineQuestions(payload),
       gradingNotes: payload.gradingNotes || '',
       submissionFormat: payload.submissionFormat || 'answers_only',
       startDate: new Date(payload.startDate),
@@ -378,6 +383,13 @@ export class AssignmentsService {
       item.questionMaterial = payload.questionMaterial;
     if (payload.referenceAnswer !== undefined)
       item.referenceAnswer = payload.referenceAnswer;
+    if (payload.assignmentType !== undefined)
+      item.assignmentType = payload.assignmentType;
+    if (payload.onlineQuestions !== undefined || payload.assignmentType !== undefined)
+      item.onlineQuestions = this.normalizeOnlineQuestions({
+        assignmentType: payload.assignmentType || item.assignmentType,
+        onlineQuestions: payload.onlineQuestions ?? item.onlineQuestions,
+      });
     if (payload.gradingNotes !== undefined)
       item.gradingNotes = payload.gradingNotes;
     if (payload.submissionFormat !== undefined)
@@ -512,6 +524,7 @@ export class AssignmentsService {
         submissionStatus: normalizedStatus,
         submissionId: submission?._id?.toString?.(),
         allowAttachments: !!item.allowAttachments,
+        assignmentType: item.assignmentType || 'normal',
         createdAt: item.createdAt,
         classId: matchedClass?.id || currentUser.classId || '',
         className: matchedClass?.name || currentUser.className || '',
@@ -668,6 +681,10 @@ export class AssignmentsService {
         className: matchedClass?.name || currentUser.className,
         aiRule: assignment.aiRule,
         questionMaterial: assignment.questionMaterial,
+        assignmentType: assignment.assignmentType || 'normal',
+        onlineQuestions: this.toStudentOnlineQuestions(
+          assignment.onlineQuestions || [],
+        ),
         gradingNotes: assignment.gradingNotes,
         submissionFormat: assignment.submissionFormat,
       },
@@ -807,6 +824,78 @@ export class AssignmentsService {
     }));
   }
 
+  private normalizeOnlineQuestions(payload: {
+    assignmentType?: Assignment['assignmentType'];
+    onlineQuestions?: Array<Record<string, unknown>> | Assignment['onlineQuestions'];
+  }) {
+    if (payload.assignmentType !== 'online') {
+      return [];
+    }
+
+    const questions = Array.isArray(payload.onlineQuestions)
+      ? payload.onlineQuestions
+      : [];
+    if (!questions.length) {
+      throw new BadRequestException('Online assignments require questions');
+    }
+
+    return questions.map((question, index) => {
+      const source = question as Record<string, unknown>;
+      const type = source.type;
+      const stem = String(source.stem || '').trim();
+      const answer = String(source.answer || '').trim();
+      const score = Number(source.score ?? 1);
+      const options = Array.isArray(source.options)
+        ? source.options.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+
+      if (type !== 'single_choice' && type !== 'fill_blank') {
+        throw new BadRequestException(`Question ${index + 1} type is invalid`);
+      }
+      const questionType = type as 'single_choice' | 'fill_blank';
+      if (!stem) {
+        throw new BadRequestException(`Question ${index + 1} stem is required`);
+      }
+      if (!answer) {
+        throw new BadRequestException(`Question ${index + 1} answer is required`);
+      }
+      if (!Number.isFinite(score) || score <= 0) {
+        throw new BadRequestException(`Question ${index + 1} score is invalid`);
+      }
+      if (type === 'single_choice') {
+        if (options.length < 2) {
+          throw new BadRequestException(
+            `Question ${index + 1} needs at least two options`,
+          );
+        }
+        if (!options.includes(answer)) {
+          throw new BadRequestException(
+            `Question ${index + 1} answer must match one option exactly`,
+          );
+        }
+      }
+
+      return {
+        id: String(source.id || `q-${index + 1}`),
+        type: questionType,
+        stem,
+        options: questionType === 'single_choice' ? options : [],
+        answer,
+        score,
+      };
+    });
+  }
+
+  private toStudentOnlineQuestions(questions: Assignment['onlineQuestions']) {
+    return (questions || []).map((question) => ({
+      id: question.id,
+      type: question.type,
+      stem: question.stem,
+      options: question.options || [],
+      score: question.score || 1,
+    }));
+  }
+
   private readEntityId(item: { _id?: DocumentIdentifier; id?: string }) {
     return item._id?.toString?.() || item.id || '';
   }
@@ -920,6 +1009,9 @@ export class AssignmentsService {
       aiRule: item.aiRule,
       questionMaterial: item.questionMaterial,
       referenceAnswer: item.referenceAnswer,
+      assignmentType: item.assignmentType || 'normal',
+      onlineQuestions:
+        item.assignmentType === 'online' ? item.onlineQuestions || [] : [],
       gradingNotes: item.gradingNotes,
       submissionFormat: item.submissionFormat,
       startDate: item.startDate,

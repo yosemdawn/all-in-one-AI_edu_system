@@ -20,7 +20,7 @@ describe('AppController', () => {
         code: 200,
         message: 'backend ready',
         data: {
-          name: 'nengdou-backend',
+          name: 'yosem-backend',
           ok: true,
         },
       });

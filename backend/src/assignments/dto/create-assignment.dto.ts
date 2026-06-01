@@ -33,6 +33,14 @@ export class CreateAssignmentDto {
   referenceAnswer?: Record<string, unknown>;
 
   @IsOptional()
+  @IsIn(['normal', 'online'])
+  assignmentType?: 'normal' | 'online';
+
+  @IsOptional()
+  @IsArray()
+  onlineQuestions?: Array<Record<string, unknown>>;
+
+  @IsOptional()
   @IsString()
   gradingNotes?: string;
 
