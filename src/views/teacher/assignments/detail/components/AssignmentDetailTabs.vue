@@ -33,18 +33,20 @@
         </div>
       </el-tab-pane>
 
-      <!-- 预留其他Tab -->
-      <!-- 
-      <el-tab-pane name="analytics" label="数据分析" disabled>
-        <div class="coming-soon">
-          <el-empty description="功能开发中...">
-            <template #image>
-              <el-icon size="64" color="#c0c4cc"><DataAnalysis /></el-icon>
-            </template>
-          </el-empty>
+      <el-tab-pane name="analytics" class="tab-pane">
+        <template #label>
+          <div class="tab-label">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>学情分析</span>
+          </div>
+        </template>
+
+        <div class="tab-content">
+          <slot name="analytics" />
         </div>
       </el-tab-pane>
-      
+
+      <!--
       <el-tab-pane name="settings" label="作业设置" disabled>
         <div class="coming-soon">
           <el-empty description="功能开发中...">
@@ -61,7 +63,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { User } from "@element-plus/icons-vue";
+import { DataAnalysis, User } from "@element-plus/icons-vue";
 
 interface Props {
   submissionStats?: {

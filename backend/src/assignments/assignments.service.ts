@@ -95,6 +95,35 @@ type AssignmentStudentRow = {
   teacherReviewedAt: Date | null | undefined;
   teacherName: string;
 };
+type AssignmentAnalyticsQuestion = {
+  questionId: string;
+  questionNumber: number;
+  type: string;
+  stem: string;
+  maxScore: number;
+  totalAnswered: number;
+  correctCount: number;
+  wrongCount: number;
+  wrongRate: number;
+  commonWrongAnswers: Array<{
+    answer: string;
+    count: number;
+  }>;
+};
+type AssignmentAnalyticsClassStat = {
+  classId: string;
+  className: string;
+  totalStudents: number;
+  submittedCount: number;
+  submissionRate: number;
+  averageScore: number | null;
+};
+type AssignmentAnalyticsSummary = {
+  completionSummary: string;
+  scoreSummary: string;
+  weakPoints: string[];
+  teachingSuggestions: string[];
+};
 type StudentAssignmentListItem = {
   id: string;
   title: string;
@@ -313,6 +342,116 @@ export class AssignmentsService {
         page,
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+      'success',
+    );
+  }
+
+  async getAssignmentAnalytics(currentUser: AuthenticatedUser, id: string) {
+    this.assertTeacherPrivileges(currentUser);
+
+    const assignment = await this.assignmentModel.findById(id).lean();
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+
+    this.assertCanManageAssignment(currentUser, assignment.teacherId);
+
+    const classIds = assignment.classes.map((item) => item.id);
+    const [memberships, submissions] = await Promise.all([
+      this.membershipModel
+        .find({
+          classId: { $in: classIds },
+          status: 'active',
+        })
+        .lean(),
+      this.submissionModel
+        .find({
+          assignmentId: id,
+          classId: { $in: classIds },
+        })
+        .lean(),
+    ]);
+
+    const nonDraftSubmissions = submissions.filter((item) => !item.isDraft);
+    const totalStudentIds = new Set(memberships.map((item) => item.studentId));
+    const submittedStudentIds = new Set(
+      nonDraftSubmissions.map((item) => item.studentId),
+    );
+    const scoredSubmissions = nonDraftSubmissions.filter(
+      (item) => this.getEffectiveScore(item) !== null,
+    );
+    const scores = scoredSubmissions.map((item) => this.getEffectiveScore(item) || 0);
+    const averageScore = scores.length
+      ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10
+      : null;
+
+    const classStats = assignment.classes.map<AssignmentAnalyticsClassStat>(
+      (classItem) => {
+        const classMembers = memberships.filter(
+          (member) => member.classId === classItem.id,
+        );
+        const classSubmissions = nonDraftSubmissions.filter(
+          (submission) => submission.classId === classItem.id,
+        );
+        const classScores = classSubmissions
+          .map((submission) => this.getEffectiveScore(submission))
+          .filter((score): score is number => score !== null);
+
+        return {
+          classId: classItem.id,
+          className: classItem.name,
+          totalStudents: classMembers.length,
+          submittedCount: classSubmissions.length,
+          submissionRate: this.toPercent(
+            classSubmissions.length,
+            classMembers.length,
+          ),
+          averageScore: classScores.length
+            ? Math.round(
+                (classScores.reduce((sum, score) => sum + score, 0) /
+                  classScores.length) *
+                  10,
+              ) / 10
+            : null,
+        };
+      },
+    );
+
+    const wrongQuestionDistribution =
+      this.buildWrongQuestionDistribution(nonDraftSubmissions);
+    const scoreBands = this.buildScoreBands(scores);
+    const summary = this.buildAssignmentAnalyticsSummary({
+      totalStudents: totalStudentIds.size,
+      submittedCount: submittedStudentIds.size,
+      scoredCount: scoredSubmissions.length,
+      averageScore,
+      wrongQuestionDistribution,
+      assignmentType: assignment.assignmentType || 'normal',
+    });
+
+    return this.appService.envelope(
+      {
+        assignmentId: id,
+        assignmentTitle: assignment.title,
+        assignmentType: assignment.assignmentType || 'normal',
+        totalStudents: totalStudentIds.size,
+        submittedCount: submittedStudentIds.size,
+        unsubmittedCount: Math.max(
+          totalStudentIds.size - submittedStudentIds.size,
+          0,
+        ),
+        gradedCount: scoredSubmissions.length,
+        submissionRate: this.toPercent(
+          submittedStudentIds.size,
+          totalStudentIds.size,
+        ),
+        averageScore,
+        scoreBands,
+        classStats,
+        wrongQuestionDistribution,
+        summary,
+        generatedAt: new Date().toISOString(),
       },
       'success',
     );
@@ -958,6 +1097,187 @@ export class AssignmentsService {
       reviewedSubmissions: teacherReviewedSubmissions.length,
       pendingSubmissions: pendingTeacherReviewSubmissions.length,
       draftSubmissions,
+    };
+  }
+
+  private getEffectiveScore(item: {
+    teacherScore?: number | null;
+    aiScore?: number | null;
+  }) {
+    if (typeof item.teacherScore === 'number') return item.teacherScore;
+    if (typeof item.aiScore === 'number') return item.aiScore;
+    return null;
+  }
+
+  private toPercent(value: number, total: number) {
+    if (!total) return 0;
+    return Math.round((value / total) * 1000) / 10;
+  }
+
+  private buildScoreBands(scores: number[]) {
+    const bands = [
+      { label: '90-100', min: 90, max: 100, count: 0 },
+      { label: '80-89', min: 80, max: 89, count: 0 },
+      { label: '70-79', min: 70, max: 79, count: 0 },
+      { label: '60-69', min: 60, max: 69, count: 0 },
+      { label: '0-59', min: 0, max: 59, count: 0 },
+    ];
+
+    scores.forEach((rawScore) => {
+      const score = Math.max(0, Math.min(100, rawScore));
+      const band = bands.find(
+        (item) => score >= item.min && score <= item.max,
+      );
+      if (band) band.count += 1;
+    });
+
+    return bands.map((item) => ({
+      ...item,
+      rate: this.toPercent(item.count, scores.length),
+    }));
+  }
+
+  private buildWrongQuestionDistribution(
+    submissions: Array<{
+      objectiveResult?: Record<string, unknown> | null;
+      aiReviewMetadata?: Record<string, unknown> | null;
+    }>,
+  ): AssignmentAnalyticsQuestion[] {
+    const questionMap = new Map<
+      string,
+      AssignmentAnalyticsQuestion & {
+        wrongAnswerMap: Map<string, number>;
+      }
+    >();
+
+    submissions.forEach((submission) => {
+      const details = this.readObjectiveDetails(submission);
+      details.forEach((detail) => {
+        const questionId = String(detail.questionId || '');
+        if (!questionId) return;
+
+        const existing = questionMap.get(questionId) || {
+          questionId,
+          questionNumber: Number(detail.questionNumber || 0),
+          type: String(detail.type || ''),
+          stem: String(detail.stem || ''),
+          maxScore: Number(detail.maxScore || 0),
+          totalAnswered: 0,
+          correctCount: 0,
+          wrongCount: 0,
+          wrongRate: 0,
+          commonWrongAnswers: [],
+          wrongAnswerMap: new Map<string, number>(),
+        };
+
+        existing.totalAnswered += 1;
+        if (detail.isCorrect === true) {
+          existing.correctCount += 1;
+        } else {
+          existing.wrongCount += 1;
+          const answer = String(detail.studentAnswer ?? '').trim() || '未作答';
+          existing.wrongAnswerMap.set(
+            answer,
+            (existing.wrongAnswerMap.get(answer) || 0) + 1,
+          );
+        }
+
+        questionMap.set(questionId, existing);
+      });
+    });
+
+    return Array.from(questionMap.values())
+      .map((item) => ({
+        questionId: item.questionId,
+        questionNumber: item.questionNumber,
+        type: item.type,
+        stem: item.stem,
+        maxScore: item.maxScore,
+        totalAnswered: item.totalAnswered,
+        correctCount: item.correctCount,
+        wrongCount: item.wrongCount,
+        wrongRate: this.toPercent(item.wrongCount, item.totalAnswered),
+        commonWrongAnswers: Array.from(item.wrongAnswerMap.entries())
+          .map(([answer, count]) => ({ answer, count }))
+          .sort((left, right) => right.count - left.count)
+          .slice(0, 3),
+      }))
+      .sort((left, right) => {
+        if (right.wrongRate !== left.wrongRate) {
+          return right.wrongRate - left.wrongRate;
+        }
+        return right.wrongCount - left.wrongCount;
+      });
+  }
+
+  private readObjectiveDetails(submission: {
+    objectiveResult?: Record<string, unknown> | null;
+    aiReviewMetadata?: Record<string, unknown> | null;
+  }) {
+    const directDetails = submission.objectiveResult?.details;
+    if (Array.isArray(directDetails)) {
+      return directDetails as Array<Record<string, unknown>>;
+    }
+
+    const metadataResult = submission.aiReviewMetadata?.objectiveResult;
+    if (
+      metadataResult &&
+      typeof metadataResult === 'object' &&
+      Array.isArray((metadataResult as Record<string, unknown>).details)
+    ) {
+      return (metadataResult as Record<string, unknown>).details as Array<
+        Record<string, unknown>
+      >;
+    }
+
+    return [];
+  }
+
+  private buildAssignmentAnalyticsSummary(input: {
+    totalStudents: number;
+    submittedCount: number;
+    scoredCount: number;
+    averageScore: number | null;
+    wrongQuestionDistribution: AssignmentAnalyticsQuestion[];
+    assignmentType: Assignment['assignmentType'];
+  }): AssignmentAnalyticsSummary {
+    const submissionRate = this.toPercent(
+      input.submittedCount,
+      input.totalStudents,
+    );
+    const completionSummary = `本次作业共 ${input.totalStudents} 名学生，已提交 ${input.submittedCount} 人，提交率 ${submissionRate}%。`;
+    const scoreSummary =
+      input.averageScore === null
+        ? '当前暂无可统计的批改成绩，建议先完成 AI 批改或教师批改。'
+        : `已统计 ${input.scoredCount} 份成绩，平均分 ${input.averageScore} 分。`;
+    const topWrongQuestions = input.wrongQuestionDistribution.slice(0, 3);
+    const weakPoints = topWrongQuestions.length
+      ? topWrongQuestions.map(
+          (item) =>
+            `第 ${item.questionNumber || '-'} 题错误率 ${item.wrongRate}%，需重点讲解。`,
+        )
+      : [
+          input.assignmentType === 'online'
+            ? '暂未发现集中错题，建议结合学生反馈复核易混题。'
+            : '普通作业暂无结构化错题数据，可结合 AI 评语或后续增加题号标注提升分析精度。',
+        ];
+    const teachingSuggestions = [
+      submissionRate < 80
+        ? '先跟进未提交学生，确保讲评前样本足够完整。'
+        : '提交覆盖较好，可以进入集中讲评和分层巩固。',
+      input.averageScore !== null && input.averageScore < 70
+        ? '平均分偏低，建议安排基础概念回讲和同类题再练。'
+        : '可针对高频错题做短讲，再用变式题快速检测掌握情况。',
+      topWrongQuestions.length
+        ? '优先讲解错误率最高的 1-3 道题，并展示常见错误答案的思路偏差。'
+        : '建议在后续作业中使用在线客观题或题号结构化提交，便于自动生成错题分布。',
+    ];
+
+    return {
+      completionSummary,
+      scoreSummary,
+      weakPoints,
+      teachingSuggestions,
     };
   }
 
