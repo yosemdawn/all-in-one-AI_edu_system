@@ -92,6 +92,55 @@ export interface AssignmentWithSubmissions {
   };
 }
 
+export interface AssignmentAnalytics {
+  assignmentId: string;
+  assignmentTitle: string;
+  assignmentType: AssignmentType;
+  totalStudents: number;
+  submittedCount: number;
+  unsubmittedCount: number;
+  gradedCount: number;
+  submissionRate: number;
+  averageScore: number | null;
+  scoreBands: Array<{
+    label: string;
+    min: number;
+    max: number;
+    count: number;
+    rate: number;
+  }>;
+  classStats: Array<{
+    classId: string;
+    className: string;
+    totalStudents: number;
+    submittedCount: number;
+    submissionRate: number;
+    averageScore: number | null;
+  }>;
+  wrongQuestionDistribution: Array<{
+    questionId: string;
+    questionNumber: number;
+    type: string;
+    stem: string;
+    maxScore: number;
+    totalAnswered: number;
+    correctCount: number;
+    wrongCount: number;
+    wrongRate: number;
+    commonWrongAnswers: Array<{
+      answer: string;
+      count: number;
+    }>;
+  }>;
+  summary: {
+    completionSummary: string;
+    scoreSummary: string;
+    weakPoints: string[];
+    teachingSuggestions: string[];
+  };
+  generatedAt: string;
+}
+
 // 查询参数
 export interface AssignmentQueryParams {
   page?: number;
@@ -189,6 +238,15 @@ export function getAssignmentStudents(
     url: `/teacher/assignments/${id}/students`,
     method: "get",
     params,
+  });
+}
+
+export function getAssignmentAnalytics(
+  id: string
+): Promise<AssignmentAnalytics> {
+  return request({
+    url: `/teacher/assignments/${id}/analytics`,
+    method: "get",
   });
 }
 
@@ -333,4 +391,5 @@ export const assignmentApi = {
     return updateAssignment(id, params);
   },
   deleteAssignment,
+  getAssignmentAnalytics,
 };

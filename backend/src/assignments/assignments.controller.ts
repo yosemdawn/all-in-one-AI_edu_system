@@ -57,6 +57,15 @@ export class AssignmentsController {
   }
 
   @Roles('teacher', 'superadmin')
+  @Get('teacher/assignments/:id/analytics')
+  getTeacherAssignmentAnalytics(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.assignmentsService.getAssignmentAnalytics(currentUser, id);
+  }
+
+  @Roles('teacher', 'superadmin')
   @Post('teacher/assignments')
   createTeacherAssignment(
     @CurrentUser() currentUser: AuthenticatedUser,

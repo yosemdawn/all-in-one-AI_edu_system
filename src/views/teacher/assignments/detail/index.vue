@@ -56,6 +56,13 @@
           @current-change="handleCurrentChange"
         />
       </template>
+
+      <template #analytics>
+        <assignment-analytics-panel
+          :analytics="assignmentAnalytics"
+          :loading="analyticsLoading"
+        />
+      </template>
     </assignment-detail-tabs>
   </div>
 </template>
@@ -71,16 +78,19 @@ import AssignmentStatsCards from "./components/AssignmentStatsCards.vue";
 import AssignmentDetailTabs from "./components/AssignmentDetailTabs.vue";
 import StudentSearchForm from "./components/StudentSearchForm.vue";
 import AssignmentDetailTable from "./components/AssignmentDetailTable.vue";
+import AssignmentAnalyticsPanel from "./components/AssignmentAnalyticsPanel.vue";
 
 // 导入API和类型
 import {
   getAssignmentDetail,
+  getAssignmentAnalytics,
   getAssignmentStudents,
   publishAssignment,
   terminateAssignment,
   AssignmentStatus,
 } from "@/api/assignments";
 import type {
+  AssignmentAnalytics,
   AssignmentSubmissionsQueryParams,
   AssignmentDetail,
 } from "@/api/assignments";
@@ -114,7 +124,9 @@ const openFirstPending = computed(
 
 // 响应式数据
 const loading = ref(true);
+const analyticsLoading = ref(false);
 const assignmentDetail = ref<AssignmentDetail | null>(null);
+const assignmentAnalytics = ref<AssignmentAnalytics | null>(null);
 const submissionList = ref<any[]>([]);
 
 // 分页数据
@@ -197,6 +209,18 @@ const loadSubmissionData = async (searchParams?: any) => {
   }
 };
 
+const loadAssignmentAnalytics = async () => {
+  analyticsLoading.value = true;
+  try {
+    assignmentAnalytics.value = await getAssignmentAnalytics(assignmentId.value);
+  } catch (error) {
+    console.error("加载学情分析失败", error);
+    ElMessage.error("加载学情分析失败");
+  } finally {
+    analyticsLoading.value = false;
+  }
+};
+
 // 处理搜索
 const handleSearch = (searchParams: any) => {
   pagination.page = 1;
@@ -228,6 +252,7 @@ const handleCurrentChange = (val: number) => {
 const handleRefresh = () => {
   // 重新加载作业详情（更新统计数据）
   loadAssignmentDetail();
+  loadAssignmentAnalytics();
   // 获取当前搜索条件
   const searchParams = searchFormRef.value?.searchForm || {};
   loadSubmissionData(searchParams);
@@ -303,7 +328,7 @@ const handleExport = () => {
 onMounted(async () => {
   if (assignmentId.value) {
     await loadAssignmentDetail();
-    await loadSubmissionData();
+    await Promise.all([loadSubmissionData(), loadAssignmentAnalytics()]);
   }
 });
 
