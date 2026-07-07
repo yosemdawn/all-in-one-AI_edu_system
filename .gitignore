@@ -12,7 +12,6 @@ lerna-debug.log*
 node_modules
 .pnp
 .pnp.js
-3.创AI案例征集指南与模板
 
 # Build outputs
 dist
@@ -39,6 +38,10 @@ build
 .env.test.local
 .env.production.local
 
+# Local certificates and secrets
+deploy/ssl/*.pem
+backend/.env.production
+
 # Testing
 coverage
 *.lcov
@@ -62,6 +65,8 @@ Desktop.ini
 .eslintcache
 
 # Local agent/editor settings
+.claude/
+.specstory/
 **/.claude/settings.local.json
 
 # Nested tool generated packages
