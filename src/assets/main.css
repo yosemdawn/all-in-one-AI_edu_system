@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* 全局样式 */
 html,
 body {
@@ -11,7 +7,7 @@ body {
   width: 100%;
   background:
     linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(229, 241, 255, 0.64)),
-    url("../../pic/picture.jpg") center / cover no-repeat fixed;
+    url("/picture.jpg") center / cover no-repeat fixed;
 }
 
 #app {
@@ -31,7 +27,6 @@ body {
 }
 
 .el-card,
-.search-card,
 .page-header,
 .adaptive-table-container {
   background-color: var(--app-glass-bg-strong) !important;

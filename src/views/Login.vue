@@ -343,7 +343,7 @@ const submitForm = async () => {
   position: relative;
   background:
     linear-gradient(135deg, rgba(15, 23, 42, 0.18), rgba(59, 130, 246, 0.16)),
-    url("../../pic/picture.jpg") center / cover no-repeat fixed;
+    url("/picture.jpg") center / cover no-repeat fixed;
 }
 
 .login-page::before {
@@ -380,7 +380,7 @@ const submitForm = async () => {
   justify-content: center;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(15, 23, 42, 0.12)),
-    url("../../pic/picture.jpg") center / cover no-repeat;
+    url("/picture.jpg") center / cover no-repeat;
 }
 
 /* 视频背景 */

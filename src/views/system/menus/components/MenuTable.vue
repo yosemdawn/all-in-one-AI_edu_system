@@ -25,8 +25,8 @@
       <el-table-column prop="name" label="菜单名称" min-width="180" />
       <el-table-column label="图标" width="70" align="center">
         <template #default="{ row }">
-          <el-icon v-if="row.icon" class="text-lg">
-            <component :is="row.icon"></component>
+          <el-icon v-if="getIconComponent(row.icon)" class="text-lg">
+            <component :is="getIconComponent(row.icon)" />
           </el-icon>
           <span v-else>-</span>
         </template>
@@ -157,6 +157,7 @@
 
 <script lang="ts" setup>
 import { ref, nextTick } from "vue";
+import * as ElementPlusIcons from "@element-plus/icons-vue";
 import type { Menu } from "@/types/menu";
 
 const props = defineProps({
@@ -188,6 +189,12 @@ const emit = defineEmits(["add-submenu", "edit", "delete"]);
 const isShow = ref(true);
 // 控制表格展开状态
 const isExpandAll = ref(props.defaultExpandAll);
+
+const getIconComponent = (icon?: string) => {
+  if (!icon) return null;
+  const iconName = icon.charAt(0).toUpperCase() + icon.slice(1);
+  return ElementPlusIcons[iconName] || null;
+};
 
 // 添加子菜单
 const handleAddSubmenu = (row: Menu) => {

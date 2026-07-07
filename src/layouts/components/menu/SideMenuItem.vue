@@ -57,14 +57,10 @@ export default defineComponent({
     const iconComponent = computed(() => {
       const icon = props.menu.icon;
 
-      // 如果没有指定图标，返回默认图标
-      if (!icon) return "Menu";
+      if (!icon) return ElementPlusIcons.Menu;
 
-      // 转换图标名称为Pascal命名法
       const iconName = icon.charAt(0).toUpperCase() + icon.slice(1);
-
-      // 检查图标是否存在
-      return ElementPlusIcons[iconName] ? iconName : "Menu";
+      return ElementPlusIcons[iconName] || ElementPlusIcons.Menu;
     });
 
     // 处理菜单点击

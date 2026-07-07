@@ -51,33 +51,20 @@ export default defineComponent({
   },
   emits: ["menu-click"],
   setup(props, { emit }) {
-    // 调试信息
-    console.log("TopNavItem渲染菜单:", props.menu);
-
-    // 计算是否有子菜单
     const hasChildren = computed(() => {
-      const hasKids = props.menu.children && props.menu.children.length > 0;
-      console.log(`菜单 ${props.menu.name} 是否有子菜单:`, hasKids);
-      return hasKids;
+      return props.menu.children && props.menu.children.length > 0;
     });
 
-    // 处理图标
     const iconComponent = computed(() => {
       const icon = props.menu.icon;
 
-      // 如果没有指定图标，返回默认图标
-      if (!icon) return "Menu";
+      if (!icon) return ElementPlusIcons.Menu;
 
-      // 转换图标名称为Pascal命名法
       const iconName = icon.charAt(0).toUpperCase() + icon.slice(1);
-
-      // 检查图标是否存在
-      return ElementPlusIcons[iconName] ? iconName : "Menu";
+      return ElementPlusIcons[iconName] || ElementPlusIcons.Menu;
     });
 
-    // 处理菜单点击
     const handleMenuClick = (path) => {
-      console.log("TopNavItem菜单点击:", path);
       emit("menu-click", path);
     };
 
