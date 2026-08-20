@@ -10,6 +10,13 @@ export interface SubmissionRecord {
   classId: string;
   className: string;
   content: string;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    fileType: string;
+  }>;
   status: "draft" | "submitted" | "ai_reviewed" | "teacher_reviewed";
   submittedAt?: string;
   aiScore?: number;

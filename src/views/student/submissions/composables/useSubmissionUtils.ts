@@ -1,5 +1,6 @@
 import { ElMessage } from "element-plus";
 import type { Attachment } from "@/api/submissions";
+import { downloadFile as downloadRequest } from "@/utils/request";
 
 export function useSubmissionUtils() {
   // 格式化日期
@@ -52,18 +53,8 @@ export function useSubmissionUtils() {
   };
 
   // 下载文件
-  const downloadFile = (file: Attachment) => {
-    window.open(file.fileUrl, "_blank");
-  };
-
-  // 创建附件对象
-  const createAttachment = (file: File): Attachment => {
-    return {
-      fileName: file.name,
-      fileUrl: `https://example.com/files/${file.name}`, // 实际应该是上传后的URL
-      fileSize: file.size,
-      fileType: file.type,
-    };
+  const downloadFile = async (file: Attachment) => {
+    await downloadRequest(file.fileUrl, undefined, file.fileName);
   };
 
   return {
@@ -73,6 +64,5 @@ export function useSubmissionUtils() {
     validateFileSize,
     beforeUpload,
     downloadFile,
-    createAttachment,
   };
 }

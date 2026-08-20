@@ -67,6 +67,8 @@
           multiple
           accept="image/*"
           :auto-upload="false"
+          :limit="5"
+          :on-exceed="handleRequirementFileExceed"
         >
           <el-icon><UploadFilled /></el-icon>
           <div class="el-upload__text">上传作文题目/要求图片</div>
@@ -86,6 +88,8 @@
           multiple
           accept="image/*"
           :auto-upload="false"
+          :limit="50"
+          :on-exceed="handleEssayFileExceed"
         >
           <el-icon><UploadFilled /></el-icon>
           <div class="el-upload__text">拖拽作文图片到这里，或点击选择</div>
@@ -160,6 +164,14 @@ const submitting = ref(false);
 const currentTask = ref<ToolTask | null>(null);
 let pollTimer: number | undefined;
 
+function handleRequirementFileExceed() {
+  ElMessage.warning("作文要求图片最多上传 5 张");
+}
+
+function handleEssayFileExceed() {
+  ElMessage.warning("单次最多上传 50 张作文图片");
+}
+
 const form = reactive({
   title: "",
   classId: "",
@@ -222,6 +234,13 @@ async function previewRequirements() {
 
 async function submitTask() {
   const files = essayFiles.value.map((item) => item.raw).filter(Boolean);
+  const requirementImageCount = requirementFiles.value.filter(
+    (item) => item.raw
+  ).length;
+  if (files.length + requirementImageCount > 50) {
+    ElMessage.warning("作文要求图片和学生作文图片合计最多上传 50 张");
+    return;
+  }
   if (!files.length) {
     ElMessage.warning("请上传学生作文图片");
     return;

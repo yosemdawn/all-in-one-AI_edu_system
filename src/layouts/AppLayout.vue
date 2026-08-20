@@ -74,10 +74,13 @@ import {
   watch,
 } from "vue";
 import { Menu, Close } from "@element-plus/icons-vue";
+import { ElMessageBox } from "element-plus";
 // 导入组件
 import AppSidebar from "./components/AppSidebar.vue";
 import AppHeader from "./components/AppHeader.vue";
 import { useStore } from "vuex";
+import { useRouter } from "vue-router";
+import { TEACHER_AI_SETUP_PROMPT_KEY } from "@/config/ai-config";
 
 export default defineComponent({
   name: "AppLayout",
@@ -89,7 +92,11 @@ export default defineComponent({
   },
   setup() {
     const store = useStore();
+    const router = useRouter();
     const screenWidth = ref(window.innerWidth);
+    const userRole = computed(() =>
+      String(store.getters["user/getUserInfo"]?.role || "").toLowerCase(),
+    );
 
     // 从Vuex获取侧边栏状态
     const sidebar = computed(() => store.getters["app/sidebar"]);
@@ -132,11 +139,40 @@ export default defineComponent({
       }
     };
 
+    const showTeacherAiSetupPrompt = () => {
+      const shouldShow =
+        userRole.value === "teacher" &&
+        sessionStorage.getItem(TEACHER_AI_SETUP_PROMPT_KEY) === "pending";
+      if (!shouldShow) return;
+
+      sessionStorage.removeItem(TEACHER_AI_SETUP_PROMPT_KEY);
+      window.setTimeout(async () => {
+        try {
+          await ElMessageBox.confirm(
+            "如果想要测试 AI 批改功能，请提前进入「AI 配置」，确认模型并配置好 API 端点和 API Key。",
+            "AI 批改功能使用提示",
+            {
+              confirmButtonText: "去配置",
+              cancelButtonText: "稍后再说",
+              type: "warning",
+              closeOnClickModal: false,
+            },
+          );
+          await router.push("/teacher/ai-settings");
+        } catch {
+          // 教师选择稍后配置时保持在当前页面。
+        }
+      }, 0);
+    };
+
     // 组件挂载时设置侧边栏初始状态和添加窗口尺寸监听
     onMounted(() => {
       handleResize();
       window.addEventListener("resize", handleResize);
+      showTeacherAiSetupPrompt();
     });
+
+    watch(userRole, showTeacherAiSetupPrompt);
 
     // 组件卸载时移除监听器
     onUnmounted(() => {

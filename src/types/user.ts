@@ -86,6 +86,7 @@ export interface TeacherAiSettings {
   configured: boolean;
   apiKeyPreview: string;
   model: string;
+  endpoint: string;
   updatedAt?: string | null;
 }
 

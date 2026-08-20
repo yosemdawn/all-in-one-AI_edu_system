@@ -20,6 +20,8 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    volumes:
+      - backend_uploads:/app/uploads
     healthcheck:
       test: ["CMD", "node", "scripts/healthcheck.js"]
       interval: 30s
@@ -59,3 +61,4 @@ services:
 volumes:
   mongo_data:
   redis_data:
+  backend_uploads:

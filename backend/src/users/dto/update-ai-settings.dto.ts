@@ -1,5 +1,10 @@
-import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
-import { DOUBAO_MODEL_OPTIONS } from '../../common/doubao-models';
+import {
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateAiSettingsDto {
   @IsOptional()
@@ -7,8 +12,17 @@ export class UpdateAiSettingsDto {
   @MinLength(8)
   apiKey?: string;
 
-  @IsOptional()
   @IsString()
-  @IsIn(DOUBAO_MODEL_OPTIONS)
-  model?: string;
+  @MinLength(1)
+  @MaxLength(200)
+  model: string;
+
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    require_tld: false,
+  })
+  @MaxLength(2048)
+  @IsString()
+  endpoint: string;
 }

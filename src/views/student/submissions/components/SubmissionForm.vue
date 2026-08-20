@@ -74,7 +74,11 @@
           scroll-to-error
         >
           <!-- 作业内容 -->
-          <el-form-item label="答案内容" prop="content" required>
+          <el-form-item
+            label="答案内容"
+            prop="content"
+            :required="assignment?.submissionFormat !== 'answer_sheet'"
+          >
             <div class="w-full">
               <wang-editor
                 ref="editorRef"
@@ -83,6 +87,33 @@
                 :placeholder="getContentPlaceholder()"
                 :max-length="5000"
               />
+            </div>
+          </el-form-item>
+
+          <el-form-item v-if="assignment?.allowAttachments" label="作业附件">
+            <div class="w-full">
+              <el-upload
+                v-model:file-list="fileList"
+                drag
+                multiple
+                :auto-upload="false"
+                :limit="10"
+                :before-upload="beforeUpload"
+                :on-change="handleFileChange"
+                :on-remove="handleFileChange"
+                :on-exceed="handleExceed"
+                accept=".doc,.docx,.pdf,.txt,.jpg,.jpeg,.png,.zip,.rar"
+              >
+                <el-icon><UploadFilled /></el-icon>
+                <div class="el-upload__text">
+                  拖拽文件到这里，或点击选择
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    最多 10 个文件，单个不超过 10MB
+                  </div>
+                </template>
+              </el-upload>
             </div>
           </el-form-item>
         </el-form>
@@ -103,6 +134,8 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from "vue";
 import { useStore } from "vuex";
+import { ElMessage } from "element-plus";
+import { UploadFilled } from "@element-plus/icons-vue";
 import type { Submission } from "../../../../api/submissions";
 import { useSubmissionUtils } from "../composables";
 
@@ -115,13 +148,14 @@ interface Props {
 const props = defineProps<Props>();
 const store = useStore();
 
-const { formatDate } = useSubmissionUtils();
+const { formatDate, beforeUpload } = useSubmissionUtils();
 const isMobile = computed(() => store.getters["app/isMobile"]);
 const editorHeight = computed(() => (isMobile.value ? "260px" : "350px"));
 const labelPosition = computed(() => (isMobile.value ? "top" : "right"));
 
 const formRef = ref();
 const editorRef = ref();
+const fileList = ref<any[]>([]);
 
 const getContentPlaceholder = () => {
   if (props.assignment?.submissionFormat === "answer_sheet") {
@@ -157,12 +191,12 @@ const validateContent = (rule: any, value: string, callback: any) => {
     editorRef: !!editorRef.value,
   });
 
-  if (textLength === 0) {
-    callback(new Error("请输入作业内容"));
+  if (textLength === 0 && fileList.value.length === 0) {
+    callback(new Error("请输入作业内容或上传附件"));
     return;
   }
 
-  if (textLength < 10) {
+  if (textLength > 0 && textLength < 10) {
     callback(
       new Error(`作业内容至少需要10个字符，当前只有${textLength}个字符`)
     );
@@ -193,11 +227,40 @@ const validate = async () => {
   }
 };
 
+const handleFileChange = (uploadFile?: any) => {
+  if (uploadFile?.raw && !beforeUpload(uploadFile.raw)) {
+    fileList.value = fileList.value.filter(
+      (item) => item.uid !== uploadFile.uid
+    );
+  }
+  formRef.value?.validateField("content").catch(() => undefined);
+};
+
+const handleExceed = () => {
+  ElMessage.warning("单次提交最多保留 10 个附件");
+};
+
+const getAttachmentPayload = () => {
+  if (!props.assignment?.allowAttachments) {
+    return { files: [], retainedAttachmentIds: [] };
+  }
+
+  return {
+    files: fileList.value
+      .map((item) => item.raw)
+      .filter((file): file is File => file instanceof File),
+    retainedAttachmentIds: fileList.value
+      .map((item) => item.attachmentId)
+      .filter((id): id is string => typeof id === "string" && !!id),
+  };
+};
+
 // 暴露表单实例和数据给父组件
 defineExpose({
   formRef,
   form,
   validate,
+  getAttachmentPayload,
 });
 
 // 监听 submission 变化，填充表单数据
@@ -206,6 +269,17 @@ watch(
   (newSubmission) => {
     if (newSubmission) {
       form.content = newSubmission.content || "";
+      fileList.value = (newSubmission.attachments || []).map((attachment) => ({
+        name: attachment.fileName,
+        size: attachment.fileSize,
+        status: "success",
+        uid: attachment.id,
+        url: attachment.fileUrl,
+        attachmentId: attachment.id,
+      }));
+    } else {
+      form.content = "";
+      fileList.value = [];
     }
   },
   { immediate: true }

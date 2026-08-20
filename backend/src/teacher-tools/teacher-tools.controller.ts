@@ -108,8 +108,8 @@ export class TeacherToolsController {
 
   @Post('objective-grading/tasks')
   @UseInterceptors(
-    FileFieldsInterceptor([{ name: 'answerCards', maxCount: 100 }], {
-      limits: { files: 100, fileSize: 15 * 1024 * 1024 },
+    FileFieldsInterceptor([{ name: 'answerCards', maxCount: 50 }], {
+      limits: { files: 50, fileSize: 15 * 1024 * 1024 },
     }),
   )
   createObjectiveTask(
@@ -147,10 +147,10 @@ export class TeacherToolsController {
     FileFieldsInterceptor(
       [
         { name: 'requirementImages', maxCount: 5 },
-        { name: 'essayImages', maxCount: 100 },
+        { name: 'essayImages', maxCount: 50 },
       ],
       {
-        limits: { files: 105, fileSize: 15 * 1024 * 1024 },
+        limits: { files: 50, fileSize: 15 * 1024 * 1024 },
       },
     ),
   )

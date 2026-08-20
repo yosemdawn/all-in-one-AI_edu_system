@@ -85,6 +85,7 @@ export class AiReviewProcessor extends WorkerHost {
       {
         apiKey: teacherAiSettings.apiKey,
         model: teacherAiSettings.model,
+        endpoint: teacherAiSettings.endpoint,
       },
     );
 
@@ -163,6 +164,7 @@ export class AiReviewProcessor extends WorkerHost {
       return {
         apiKey: decryptAiApiKey(teacher?.aiSettings?.doubaoApiKeyEncrypted),
         model,
+        endpoint: teacher?.aiSettings?.doubaoEndpoint,
       };
     } catch (error) {
       this.logger.error(
@@ -172,6 +174,7 @@ export class AiReviewProcessor extends WorkerHost {
       return {
         apiKey: '',
         model: model || DEFAULT_DOUBAO_MODEL,
+        endpoint: teacher?.aiSettings?.doubaoEndpoint,
       };
     }
   }

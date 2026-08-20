@@ -18,7 +18,7 @@
 - 支持管理员、教师、学生三类角色，按角色展示不同工作台和功能入口。
 - 支持班级创建、学生管理、作业发布、学生在线提交、AI 自动批改、教师人工复核。
 - 支持教师自定义 AI 批改规则，让 AI 按教师给定标准输出分数、评语和亮点。
-- 支持国产豆包大模型配置，可由教师配置自己的 API Key 和模型。
+- 支持 OpenAI 兼容模型配置，可由教师自定义模型 ID、API Key 和兼容端点。
 - 支持教师工具箱：客观题答题卡识别批分、批量作文图片检查、工具批改记录、CSV 导出。
 - 支持将线下图片批改结果同步回系统作业提交记录，打通线上线下批改数据。
 - 支持 Docker / Docker Compose 部署，方便本地或服务器快速启动。
@@ -221,7 +221,7 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 REDIS_URL=redis://127.0.0.1:6379
 DOUBAO_API_KEY=replace-with-your-doubao-api-key
 DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-DOUBAO_MODEL=doubao-seed-2-0-lite-260428
+DOUBAO_MODEL=doubao-seed-2-1-turbo-260628
 AI_REVIEW_REQUIRED=false
 ```
 
@@ -316,7 +316,7 @@ docker compose -f compose.prod.yml up -d --build
 - 作文图片识别与批改
 - 结构化输出分数、评语、亮点和修改建议
 
-教师可以在教师端配置自己的豆包 API Key 和模型。管理员也可以维护系统级 AI 模型配置。
+教师可以在教师端自定义模型 ID、API Key 和兼容端点。管理员也可以维护系统级 AI 模型配置。
 
 AI 输出存在不确定性，建议所有正式成绩和重要评价均由教师复核后再发布给学生。
 

@@ -17,7 +17,10 @@ import {
   Submission,
   SubmissionDocument,
 } from '../submissions/schemas/submission.schema';
-import { resolveDoubaoModel } from '../common/doubao-models';
+import {
+  resolveDoubaoEndpoint,
+  resolveDoubaoModel,
+} from '../common/doubao-models';
 import { AdminUpdateUserPasswordDto } from './dto/admin-update-user-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ImportUserRowDto } from './dto/import-user-row.dto';
@@ -198,6 +201,7 @@ export class UsersService {
     const user = await this.getCurrentUserDocument(currentUser);
     const apiKey = body.apiKey?.trim();
     const model = resolveDoubaoModel(body.model);
+    const endpoint = resolveDoubaoEndpoint(body.endpoint);
 
     if (!apiKey && !user.aiSettings?.doubaoApiKeyEncrypted) {
       throw new BadRequestException('API key is required');
@@ -207,6 +211,7 @@ export class UsersService {
     user.aiSettings = {
       ...(user.aiSettings || {}),
       doubaoModel: model,
+      doubaoEndpoint: endpoint,
     };
     if (apiKey) {
       user.aiSettings.doubaoApiKeyEncrypted = encryptAiApiKey(apiKey);
@@ -226,6 +231,9 @@ export class UsersService {
       doubaoApiKeyPreview: '',
       doubaoApiKeyUpdatedAt: null,
       doubaoModel: resolveDoubaoModel(user.aiSettings?.doubaoModel),
+      doubaoEndpoint: resolveDoubaoEndpoint(
+        user.aiSettings?.doubaoEndpoint,
+      ),
     };
     await user.save();
 
@@ -512,6 +520,7 @@ export class UsersService {
       apiKeyPreview: user.aiSettings?.doubaoApiKeyPreview || '',
       updatedAt: user.aiSettings?.doubaoApiKeyUpdatedAt || null,
       model: resolveDoubaoModel(user.aiSettings?.doubaoModel),
+      endpoint: resolveDoubaoEndpoint(user.aiSettings?.doubaoEndpoint),
     };
   }
 }

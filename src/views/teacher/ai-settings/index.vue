@@ -2,15 +2,15 @@
   <div class="ai-settings-page">
     <PageHeader
       title="AI 配置"
-      subtitle="配置你自己的豆包 API Key 和批改模型，后续学生提交的 AI 批改会使用你的额度。"
+      subtitle="配置你自己的模型 ID、OpenAI 兼容端点和 API Key，后续学生提交及教师工具会使用你的配置。"
     />
 
     <div class="settings-panel">
       <div class="status-row">
         <div>
-          <h2 class="panel-title">豆包 API Key</h2>
+          <h2 class="panel-title">个人 AI 接口</h2>
           <p class="panel-subtitle">
-            Key 只会保存到你的教师账号中，页面不会回显完整内容；模型可随时切换。
+            Key 会加密保存且不会回显完整内容；接口需兼容 Chat Completions。
           </p>
         </div>
         <el-tag :type="settings.configured ? 'success' : 'warning'" size="large">
@@ -28,6 +28,9 @@
         <el-descriptions-item label="当前模型">
           {{ settings.model }}
         </el-descriptions-item>
+        <el-descriptions-item label="当前端点">
+          {{ settings.endpoint }}
+        </el-descriptions-item>
       </el-descriptions>
 
       <el-form
@@ -43,18 +46,28 @@
             type="password"
             show-password
             clearable
-            :placeholder="settings.configured ? '不修改 Key 时可留空' : '请输入你的豆包 API Key'"
+            :placeholder="settings.configured ? '不修改 Key 时可留空' : '请输入你的 API Key'"
           />
         </el-form-item>
-        <el-form-item label="批改模型" prop="model">
-          <el-select v-model="form.model" class="model-select">
-            <el-option
-              v-for="item in modelOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+        <el-form-item label="API 端点" prop="endpoint">
+          <el-input
+            v-model="form.endpoint"
+            clearable
+            placeholder="https://example.com/v1/chat/completions"
+          />
+          <div class="endpoint-tip">
+            可填写 API 根地址或完整的 /chat/completions 地址。
+          </div>
+        </el-form-item>
+        <el-form-item label="模型 ID" prop="model">
+          <el-input
+            v-model="form.model"
+            clearable
+            placeholder="请输入模型 ID"
+          />
+          <div class="endpoint-tip">
+            默认使用 {{ DEFAULT_DOUBAO_MODEL }}，也可以填写兼容端点支持的其他模型。
+          </div>
         </el-form-item>
         <el-form-item>
           <div class="actions">
@@ -90,7 +103,7 @@
         <ol class="guide-list">
           <li>登录火山引擎并开通火山方舟。</li>
           <li>进入“API Key 管理”，创建并复制新的 API Key。</li>
-          <li>回到本页粘贴 Key，选择批改模型后保存。</li>
+          <li>回到本页填写模型 ID、兼容端点并粘贴 API Key 后保存。</li>
         </ol>
         <el-link
           type="primary"
@@ -111,9 +124,9 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "elem
 import { Check, Delete } from "@element-plus/icons-vue";
 import PageHeader from "@/components/PageHeader.vue";
 import {
+  DEFAULT_DOUBAO_ENDPOINT,
   DEFAULT_DOUBAO_MODEL,
   DOUBAO_API_KEY_GUIDE_URL,
-  DOUBAO_MODEL_OPTIONS,
 } from "@/config/ai-config";
 import {
   clearTeacherAiSettings,
@@ -130,13 +143,14 @@ const settings = reactive<TeacherAiSettings>({
   configured: false,
   apiKeyPreview: "",
   model: DEFAULT_DOUBAO_MODEL,
+  endpoint: DEFAULT_DOUBAO_ENDPOINT,
   updatedAt: null,
 });
 const form = reactive({
   apiKey: "",
   model: DEFAULT_DOUBAO_MODEL,
+  endpoint: DEFAULT_DOUBAO_ENDPOINT,
 });
-const modelOptions = DOUBAO_MODEL_OPTIONS;
 const apiKeyGuideUrl = DOUBAO_API_KEY_GUIDE_URL;
 const rules: FormRules = {
   apiKey: [
@@ -156,8 +170,17 @@ const rules: FormRules = {
       trigger: "blur",
     },
   ],
+  endpoint: [
+    { required: true, message: "请输入 API 端点", trigger: "blur" },
+    {
+      type: "url",
+      message: "请输入以 http:// 或 https:// 开头的有效地址",
+      trigger: "blur",
+    },
+  ],
   model: [
-    { required: true, message: "请选择批改模型", trigger: "change" },
+    { required: true, message: "请输入模型 ID", trigger: "blur" },
+    { max: 200, message: "模型 ID 不能超过 200 个字符", trigger: "blur" },
   ],
 };
 
@@ -166,8 +189,10 @@ const applySettings = (nextSettings: TeacherAiSettings) => {
   settings.configured = nextSettings.configured;
   settings.apiKeyPreview = nextSettings.apiKeyPreview || "";
   settings.model = nextSettings.model || DEFAULT_DOUBAO_MODEL;
+  settings.endpoint = nextSettings.endpoint || DEFAULT_DOUBAO_ENDPOINT;
   settings.updatedAt = nextSettings.updatedAt || null;
   form.model = settings.model;
+  form.endpoint = settings.endpoint;
 };
 
 const loadSettings = async () => {
@@ -183,7 +208,8 @@ const saveSettings = async () => {
     applySettings(
       await updateTeacherAiSettings({
         apiKey: form.apiKey.trim() || undefined,
-        model: form.model,
+        model: form.model.trim(),
+        endpoint: form.endpoint.trim(),
       })
     );
     form.apiKey = "";
@@ -209,6 +235,7 @@ const clearSettings = async () => {
     applySettings(await clearTeacherAiSettings());
     form.apiKey = "";
     form.model = settings.model;
+    form.endpoint = settings.endpoint;
     ElMessage.success("AI Key 已清除");
   } finally {
     clearing.value = false;
@@ -269,8 +296,10 @@ onMounted(loadSettings);
   flex-wrap: wrap;
 }
 
-.model-select {
-  width: 100%;
+.endpoint-tip {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
 }
 
 .guide-box {
