@@ -633,7 +633,11 @@ const buildAssignmentData = (includeStatus = false) => {
     startDate: formData.startDate,
     endDate: formData.endDate,
     allowAttachments:
-      formData.assignmentType === "online" ? false : formData.allowAttachments,
+      formData.assignmentType === "online"
+        ? false
+        : formData.submissionFormat === "answer_sheet"
+          ? true
+          : formData.allowAttachments,
   };
 
   if (includeStatus) {

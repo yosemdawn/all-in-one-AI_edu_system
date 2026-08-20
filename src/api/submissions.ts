@@ -1,6 +1,7 @@
 import request from "@/utils/request";
 
 export interface Attachment {
+  id: string;
   fileName: string;
   fileUrl: string;
   fileSize: number;
@@ -29,7 +30,8 @@ export interface SubmitAssignmentParams {
   assignmentId: string;
   classId: string;
   content?: string;
-  attachments?: Attachment[];
+  retainedAttachmentIds?: string[];
+  files?: File[];
   onlineAnswers?: Array<{
     questionId: string;
     answer: string;
@@ -55,6 +57,8 @@ export interface Assignment {
   }>;
   status: "draft" | "published" | "terminated";
   terminatedReason?: string;
+  allowAttachments?: boolean;
+  submissionFormat?: "answer_sheet" | "answers_only" | "mixed";
 }
 
 export interface Submission {
@@ -121,10 +125,33 @@ export class SubmissionsApi {
   static async submit(params: SubmitAssignmentParams) {
     console.log("Submitting assignment:", params);
 
+    const { files = [], ...payload } = params;
+    let data: Omit<SubmitAssignmentParams, "files"> | FormData = payload;
+    if (files.length > 0) {
+      const formData = new FormData();
+      formData.append("assignmentId", payload.assignmentId);
+      formData.append("classId", payload.classId);
+      if (payload.content !== undefined) {
+        formData.append("content", payload.content);
+      }
+      if (payload.isDraft !== undefined) {
+        formData.append("isDraft", String(payload.isDraft));
+      }
+      if (payload.onlineAnswers) {
+        formData.append("onlineAnswers", JSON.stringify(payload.onlineAnswers));
+      }
+      formData.append(
+        "retainedAttachmentIds",
+        JSON.stringify(payload.retainedAttachmentIds || [])
+      );
+      files.forEach((file) => formData.append("files", file));
+      data = formData;
+    }
+
     const result = await request<SubmitAssignmentResponse>({
       url: "/students/submissions/submit",
       method: "POST",
-      data: params,
+      data,
     });
 
     console.log("Submit response:", result);

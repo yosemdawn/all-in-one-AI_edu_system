@@ -74,7 +74,12 @@ export class User {
       doubaoApiKeyEncrypted: { type: String, default: null },
       doubaoApiKeyPreview: { type: String, default: '' },
       doubaoApiKeyUpdatedAt: { type: Date, default: null },
-      doubaoModel: { type: String, default: 'doubao-seed-2-0-lite-260428' },
+      doubaoModel: { type: String, default: 'doubao-seed-2-1-turbo-260628' },
+      doubaoEndpoint: {
+        type: String,
+        default:
+          'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+      },
     },
     default: {},
   })
@@ -83,6 +88,7 @@ export class User {
     doubaoApiKeyPreview?: string;
     doubaoApiKeyUpdatedAt?: Date | null;
     doubaoModel?: string;
+    doubaoEndpoint?: string;
   };
 
   createdAt?: Date;

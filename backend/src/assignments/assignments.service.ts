@@ -482,7 +482,9 @@ export class AssignmentsService {
       submissionFormat: payload.submissionFormat || 'answers_only',
       startDate: new Date(payload.startDate),
       endDate: new Date(payload.endDate),
-      allowAttachments: !!payload.allowAttachments,
+      allowAttachments:
+        payload.submissionFormat === 'answer_sheet' ||
+        !!payload.allowAttachments,
       status: 'draft',
     });
 
@@ -538,6 +540,9 @@ export class AssignmentsService {
     if (payload.endDate !== undefined) item.endDate = new Date(payload.endDate);
     if (payload.allowAttachments !== undefined)
       item.allowAttachments = payload.allowAttachments;
+    if (item.submissionFormat === 'answer_sheet') {
+      item.allowAttachments = true;
+    }
 
     await item.save();
     const stats = await this.getAssignmentStats(item.toObject());

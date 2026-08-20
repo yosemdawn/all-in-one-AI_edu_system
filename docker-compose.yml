@@ -34,6 +34,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
     # 注意：后端端口不需要映射到主机(除非调试)，
     # 因为它通过 Docker 网络在内部与 Nginx 通信。
     # 如果你依然想直接访问后端，可以取消下面注释：
@@ -80,3 +82,4 @@ networks:
 volumes:
   mongo_data:
   redis_data:
+  backend_uploads:

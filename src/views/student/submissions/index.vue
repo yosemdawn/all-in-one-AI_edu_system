@@ -484,9 +484,11 @@ const handleSubmitClick = async () => {
     }
 
     const content = submissionFormRef.value.form.content;
+    const { files, retainedAttachmentIds } =
+      submissionFormRef.value.getAttachmentPayload();
 
     // 调用提交处理，传入AI Loading控制函数
-    await handleSubmitWithAiLoading(content, []);
+    await handleSubmitWithAiLoading(content, files, retainedAttachmentIds);
   } catch (error) {
     console.error("表单验证失败:", error);
   }
@@ -495,7 +497,8 @@ const handleSubmitClick = async () => {
 // 带AI Loading控制的提交处理
 const handleSubmitWithAiLoading = async (
   content: string,
-  attachments: any[]
+  files: File[],
+  retainedAttachmentIds: string[]
 ) => {
   try {
     // 根据当前状态显示不同的确认信息
@@ -520,7 +523,7 @@ const handleSubmitWithAiLoading = async (
     startAiTimeout();
 
     // 调用纯提交逻辑（不包含确认对话框）
-    await handleSubmitDirect(content, attachments);
+    await handleSubmitDirect(content, files, retainedAttachmentIds);
 
     // 提交成功后不立即关闭Loading，等待AI评价完成
     // Loading会在轮询检测到AI评价完成后自动关闭
@@ -537,7 +540,11 @@ const handleSubmitWithAiLoading = async (
 };
 
 // 直接提交（不包含确认对话框）
-const handleSubmitDirect = async (content: string, attachments: any[]) => {
+const handleSubmitDirect = async (
+  content: string,
+  files: File[],
+  retainedAttachmentIds: string[]
+) => {
   // 根据当前状态判断是否为重新提交
   const isResubmit =
     submissionData.value?.submission &&
@@ -551,6 +558,8 @@ const handleSubmitDirect = async (content: string, attachments: any[]) => {
       classId: classId.value,
       content,
       isDraft: false,
+      retainedAttachmentIds,
+      files,
     };
 
     // 调试日志
@@ -559,11 +568,6 @@ const handleSubmitDirect = async (content: string, attachments: any[]) => {
     console.log("classId:", classId.value);
     console.log("content length:", content?.length || 0);
     console.log("route.params:", route.params);
-
-    // 只有当有附件时才添加 attachments 字段
-    if (attachments && attachments.length > 0) {
-      params.attachments = attachments;
-    }
 
     console.log("📤 最终提交参数:", params);
     await SubmissionsApi.submit(params);
@@ -597,7 +601,9 @@ const handleSaveDraftClick = async () => {
     }
 
     const content = submissionFormRef.value.form.content;
-    await handleSaveDraft(content, []);
+    const { files, retainedAttachmentIds } =
+      submissionFormRef.value.getAttachmentPayload();
+    await handleSaveDraft(content, [], files, retainedAttachmentIds);
 
     // 更新保存时间
     updateLastSaveTime();

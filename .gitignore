@@ -18,6 +18,7 @@ dist
 dist-ssr
 build
 *.local
+backend/uploads/
 
 # Editor directories and files
 .vscode/*

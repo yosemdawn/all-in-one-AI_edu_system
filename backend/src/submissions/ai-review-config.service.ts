@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
+import {
+  DEFAULT_DOUBAO_MODEL,
+  resolveDoubaoEndpoint,
+} from '../common/doubao-models';
 
 @Injectable()
 export class AiReviewConfigService {
@@ -33,10 +36,10 @@ export class AiReviewConfigService {
     return this.configService.get<string>('DOUBAO_API_KEY') || '';
   }
 
-  get doubaoBaseUrl() {
-    return (
+  get doubaoEndpoint() {
+    return resolveDoubaoEndpoint(
       this.configService.get<string>('DOUBAO_BASE_URL') ||
-      'https://ark.cn-beijing.volces.com/api/v3'
+        undefined,
     );
   }
 

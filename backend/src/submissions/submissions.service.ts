@@ -2,12 +2,15 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { access, mkdir, stat, unlink, writeFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import { basename, join, resolve, sep } from 'path';
+import { Model, Types } from 'mongoose';
 import { AppService } from '../app.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
@@ -28,8 +31,27 @@ import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SubmitAssignmentDto } from './dto/submit-assignment.dto';
 import { TeacherReviewDto } from './dto/teacher-review.dto';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
+import {
+  ALLOWED_SUBMISSION_FILE_TYPES,
+  MAX_SUBMISSION_FILES,
+  SUBMISSION_UPLOAD_DIR,
+} from './submission-files.constants';
 
 type DocumentIdentifier = string | { toString(): string };
+type UploadedSubmissionFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+};
+
+type StoredSubmissionAttachment = {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  storagePath: string;
+};
 type SubmissionSource = Pick<
   Submission,
   | 'assignmentId'
@@ -62,6 +84,8 @@ type SubmissionSource = Pick<
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
@@ -79,7 +103,11 @@ export class SubmissionsService {
     private readonly aiReviewQueueService?: AiReviewQueueService,
   ) {}
 
-  async submit(currentUser: AuthenticatedUser, payload: SubmitAssignmentDto) {
+  async submit(
+    currentUser: AuthenticatedUser,
+    payload: SubmitAssignmentDto,
+    files: UploadedSubmissionFile[] = [],
+  ) {
     this.assertRoles(currentUser, ['student']);
 
     const assignment = await this.assignmentModel.findById(
@@ -120,6 +148,27 @@ export class SubmissionsService {
       currentUser.className ||
       '';
     const isOnlineAssignment = assignment.assignmentType === 'online';
+    let existing = await this.submissionModel.findOne({
+      assignmentId: payload.assignmentId,
+      studentId: currentUser.id,
+    });
+    const existingAttachments = this.readStoredAttachments(
+      existing?.attachments || [],
+    );
+    const retainedAttachments = isOnlineAssignment
+      ? []
+      : this.selectRetainedAttachments(
+          existingAttachments,
+          payload.retainedAttachmentIds,
+        );
+
+    this.assertAttachmentRequestAllowed(
+      assignment.allowAttachments,
+      isOnlineAssignment,
+      files,
+      retainedAttachments,
+    );
+
     const submissionContent = isOnlineAssignment
       ? this.buildOnlineSubmissionContent(payload.onlineAnswers || [])
       : String(payload.content || '').trim();
@@ -132,100 +181,112 @@ export class SubmissionsService {
         : null;
     const objectiveResult = objectiveGrading?.result || null;
 
-    if (!isOnlineAssignment && !submissionContent) {
-      throw new BadRequestException('Submission content is required');
+    if (
+      !isOnlineAssignment &&
+      !submissionContent &&
+      retainedAttachments.length + files.length === 0
+    ) {
+      throw new BadRequestException(
+        'Submission content or at least one attachment is required',
+      );
     }
 
-    let existing = await this.submissionModel.findOne({
-      assignmentId: payload.assignmentId,
-      studentId: currentUser.id,
-    });
+    const newAttachments = isOnlineAssignment
+      ? []
+      : await this.storeSubmissionFiles(currentUser.id, files);
+    const attachments = [...retainedAttachments, ...newAttachments];
+    const removedAttachments = existingAttachments.filter(
+      (attachment) =>
+        !retainedAttachments.some((retained) => retained.id === attachment.id),
+    );
+    let submissionPersisted = false;
 
-    if (existing) {
-      const previousSubmittedCount = existing.isDraft
-        ? 0
-        : existing.submissionCount || 0;
-      if (!payload.isDraft && existing.status === 'teacher_reviewed') {
-        throw new BadRequestException(
-          'Reviewed submissions cannot be submitted again',
-        );
-      }
-      if (!payload.isDraft && previousSubmittedCount >= 2) {
-        throw new BadRequestException('Submission limit reached');
-      }
+    try {
+      if (existing) {
+        const previousSubmittedCount = existing.isDraft
+          ? 0
+          : existing.submissionCount || 0;
+        if (!payload.isDraft && existing.status === 'teacher_reviewed') {
+          throw new BadRequestException(
+            'Reviewed submissions cannot be submitted again',
+          );
+        }
+        if (!payload.isDraft && previousSubmittedCount >= 2) {
+          throw new BadRequestException('Submission limit reached');
+        }
 
-      existing.classId = targetClassId;
-      existing.className = className;
-      existing.content = submissionContent;
-      existing.attachments = isOnlineAssignment ? [] : payload.attachments || [];
-      existing.onlineAnswers = onlineAnswers;
-      existing.objectiveResult = objectiveResult;
-      existing.isDraft = !!payload.isDraft;
-      existing.status = payload.isDraft
-        ? 'draft'
-        : isOnlineAssignment
-          ? 'ai_reviewed'
-          : 'submitted';
-      existing.submittedAt = payload.isDraft
-        ? existing.submittedAt
-        : new Date();
-      existing.aiScore = objectiveGrading?.score ?? null;
-      existing.aiReviewContent = objectiveGrading?.review || null;
-      existing.aiReviewMetadata = objectiveGrading?.metadata || null;
-      existing.aiReviewedAt = objectiveGrading ? new Date() : null;
-      existing.teacherScore = null;
-      existing.teacherReviewContent = null;
-      existing.teacherReviewedAt = null;
-      existing.submissionCount = payload.isDraft
-        ? previousSubmittedCount
-        : previousSubmittedCount + 1;
-      await existing.save();
+        existing.classId = targetClassId;
+        existing.className = className;
+        existing.content = submissionContent;
+        existing.attachments = attachments;
+        existing.onlineAnswers = onlineAnswers;
+        existing.objectiveResult = objectiveResult;
+        existing.isDraft = !!payload.isDraft;
+        existing.status = payload.isDraft
+          ? 'draft'
+          : isOnlineAssignment
+            ? 'ai_reviewed'
+            : 'submitted';
+        existing.submittedAt = payload.isDraft
+          ? existing.submittedAt
+          : new Date();
+        existing.aiScore = objectiveGrading?.score ?? null;
+        existing.aiReviewContent = objectiveGrading?.review || null;
+        existing.aiReviewMetadata = objectiveGrading?.metadata || null;
+        existing.aiReviewedAt = objectiveGrading ? new Date() : null;
+        existing.teacherScore = null;
+        existing.teacherReviewContent = null;
+        existing.teacherReviewedAt = null;
+        existing.submissionCount = payload.isDraft
+          ? previousSubmittedCount
+          : previousSubmittedCount + 1;
+        await existing.save();
+        submissionPersisted = true;
+      } else {
+        existing = await this.submissionModel.create({
+          _id: new Types.ObjectId(),
+          assignmentId: payload.assignmentId,
+          studentId: currentUser.id,
+          studentName: currentUser.name,
+          studentNumber: currentUser.studentId,
+          classId: targetClassId,
+          className,
+          content: submissionContent,
+          attachments,
+          onlineAnswers,
+          objectiveResult,
+          status: payload.isDraft
+            ? 'draft'
+            : isOnlineAssignment
+              ? 'ai_reviewed'
+              : 'submitted',
+          isDraft: !!payload.isDraft,
+          submittedAt: payload.isDraft ? null : new Date(),
+          submissionCount: payload.isDraft ? 0 : 1,
+          aiScore: objectiveGrading?.score ?? null,
+          aiReviewContent: objectiveGrading?.review || null,
+          aiReviewMetadata: objectiveGrading?.metadata || null,
+          aiReviewedAt: objectiveGrading ? new Date() : null,
+          teacherScore: null,
+          teacherReviewContent: null,
+          teacherReviewedAt: null,
+        });
+        submissionPersisted = true;
+      }
 
       if (!payload.isDraft && isOnlineAssignment) {
         await this.syncMembershipAfterSubmission(existing);
       } else if (!payload.isDraft) {
         await this.markAiReviewQueued(existing);
       }
-
-      return this.appService.envelope(
-        this.toSubmissionPayload(existing),
-        payload.isDraft ? 'draft saved' : 'submitted',
-      );
+    } catch (error) {
+      if (!submissionPersisted) {
+        await this.deleteStoredAttachments(newAttachments);
+      }
+      throw error;
     }
 
-    existing = await this.submissionModel.create({
-      assignmentId: payload.assignmentId,
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      studentNumber: currentUser.studentId,
-      classId: targetClassId,
-      className,
-      content: submissionContent,
-      attachments: isOnlineAssignment ? [] : payload.attachments || [],
-      onlineAnswers,
-      objectiveResult,
-      status: payload.isDraft
-        ? 'draft'
-        : isOnlineAssignment
-          ? 'ai_reviewed'
-          : 'submitted',
-      isDraft: !!payload.isDraft,
-      submittedAt: payload.isDraft ? null : new Date(),
-      submissionCount: payload.isDraft ? 0 : 1,
-      aiScore: objectiveGrading?.score ?? null,
-      aiReviewContent: objectiveGrading?.review || null,
-      aiReviewMetadata: objectiveGrading?.metadata || null,
-      aiReviewedAt: objectiveGrading ? new Date() : null,
-      teacherScore: null,
-      teacherReviewContent: null,
-      teacherReviewedAt: null,
-    });
-
-    if (!payload.isDraft && isOnlineAssignment) {
-      await this.syncMembershipAfterSubmission(existing);
-    } else if (!payload.isDraft) {
-      await this.markAiReviewQueued(existing);
-    }
+    await this.deleteStoredAttachments(removedAttachments);
 
     return this.appService.envelope(
       this.toSubmissionPayload(existing),
@@ -269,6 +330,7 @@ export class SubmissionsService {
               : [],
           gradingNotes: assignment.gradingNotes,
           submissionFormat: assignment.submissionFormat,
+          allowAttachments: !!assignment.allowAttachments,
           status: assignment.status,
           terminatedReason: assignment.terminatedReason,
           createdAt: assignment.createdAt,
@@ -319,7 +381,11 @@ export class SubmissionsService {
 
     const deletedClassId = submission.classId;
     const deletedStudentId = submission.studentId;
+    const deletedAttachments = this.readStoredAttachments(
+      submission.attachments || [],
+    );
     await this.submissionModel.findByIdAndDelete(body.submissionId);
+    await this.deleteStoredAttachments(deletedAttachments);
     await this.syncMembershipSubmissionStats(deletedClassId, deletedStudentId);
     return this.appService.envelope(
       {
@@ -329,6 +395,53 @@ export class SubmissionsService {
       },
       'success',
     );
+  }
+
+  async getAttachmentFile(
+    currentUser: AuthenticatedUser,
+    submissionId: string,
+    attachmentId: string,
+  ) {
+    const submission = await this.submissionModel.findById(submissionId).lean();
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+
+    if (currentUser.role === 'student') {
+      if (submission.studentId !== currentUser.id) {
+        throw new ForbiddenException('Forbidden');
+      }
+    } else if (currentUser.role !== 'superadmin') {
+      this.assertRoles(currentUser, ['teacher']);
+      const assignment = await this.assignmentModel
+        .findById(submission.assignmentId)
+        .select('teacherId')
+        .lean();
+      if (!assignment || assignment.teacherId !== currentUser.id) {
+        throw new ForbiddenException('Forbidden');
+      }
+    }
+
+    const attachment = this.readStoredAttachments(
+      submission.attachments || [],
+    ).find((item) => item.id === attachmentId);
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    const path = this.resolveStoredAttachmentPath(attachment.storagePath);
+    try {
+      await access(path);
+      const fileStat = await stat(path);
+      return {
+        path,
+        fileName: attachment.fileName,
+        mimeType: attachment.fileType || 'application/octet-stream',
+        size: fileStat.size,
+      };
+    } catch {
+      throw new NotFoundException('Attachment file not found');
+    }
   }
 
   async getSubmissionList(
@@ -484,18 +597,26 @@ export class SubmissionsService {
   private async markAiReviewQueued(item: SubmissionDocument) {
     if (!this.aiReviewQueueService) {
       if (this.aiReviewConfigService.aiReviewRequired) {
-        throw new ServiceUnavailableException('AI review queue is unavailable');
+        item.status = 'ai_review_failed';
+        item.aiReviewMetadata = {
+          provider: 'doubao',
+          modelUsed: DEFAULT_DOUBAO_MODEL,
+          queueStatus: 'failed',
+          error: 'AI review queue is unavailable',
+          failedAt: new Date().toISOString(),
+        };
+        await item.save();
+      } else {
+        item.status = 'submitted';
+        item.aiReviewMetadata = {
+          provider: 'doubao',
+          modelUsed: DEFAULT_DOUBAO_MODEL,
+          queueStatus: 'skipped',
+          skippedReason: 'queue_disabled',
+          skippedAt: new Date().toISOString(),
+        };
+        await item.save();
       }
-
-      item.status = 'submitted';
-      item.aiReviewMetadata = {
-        provider: 'doubao',
-        modelUsed: DEFAULT_DOUBAO_MODEL,
-        queueStatus: 'skipped',
-        skippedReason: 'queue_disabled',
-        skippedAt: new Date().toISOString(),
-      };
-      await item.save();
 
       await this.membershipModel.findOneAndUpdate(
         { classId: item.classId, studentId: item.studentId },
@@ -517,7 +638,22 @@ export class SubmissionsService {
       queueStatus: 'queued',
     };
     await item.save();
-    await this.aiReviewQueueService.enqueueReview(item.id);
+    try {
+      await this.aiReviewQueueService.enqueueReview(item.id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to enqueue AI review';
+      this.logger.error(`Failed to enqueue submission ${item.id}: ${message}`);
+      item.status = 'ai_review_failed';
+      item.aiReviewMetadata = {
+        provider: 'doubao',
+        modelUsed: DEFAULT_DOUBAO_MODEL,
+        queueStatus: 'failed',
+        error: message,
+        failedAt: new Date().toISOString(),
+      };
+      await item.save();
+    }
 
     await this.membershipModel.findOneAndUpdate(
       { classId: item.classId, studentId: item.studentId },
@@ -648,6 +784,151 @@ export class SubmissionsService {
     );
   }
 
+  private assertAttachmentRequestAllowed(
+    allowAttachments: boolean | undefined,
+    isOnlineAssignment: boolean,
+    files: UploadedSubmissionFile[],
+    retainedAttachments: StoredSubmissionAttachment[],
+  ) {
+    if (isOnlineAssignment && (files.length || retainedAttachments.length)) {
+      throw new BadRequestException(
+        'Online assignments do not support file attachments',
+      );
+    }
+    if (!allowAttachments && (files.length || retainedAttachments.length)) {
+      throw new BadRequestException('Attachments are not allowed');
+    }
+    if (files.length + retainedAttachments.length > MAX_SUBMISSION_FILES) {
+      throw new BadRequestException(
+        `A submission can contain at most ${MAX_SUBMISSION_FILES} attachments`,
+      );
+    }
+    const invalidFile = files.find(
+      (file) => !ALLOWED_SUBMISSION_FILE_TYPES.has(file.mimetype),
+    );
+    if (invalidFile) {
+      throw new BadRequestException(
+        `Unsupported attachment type: ${invalidFile.originalname}`,
+      );
+    }
+  }
+
+  private selectRetainedAttachments(
+    existingAttachments: StoredSubmissionAttachment[],
+    retainedAttachmentIds?: string[],
+  ) {
+    if (retainedAttachmentIds === undefined) {
+      return existingAttachments;
+    }
+
+    const requestedIds = new Set(retainedAttachmentIds);
+    if (
+      [...requestedIds].some(
+        (id) => !existingAttachments.some((attachment) => attachment.id === id),
+      )
+    ) {
+      throw new BadRequestException('Invalid retained attachment');
+    }
+    return existingAttachments.filter((attachment) =>
+      requestedIds.has(attachment.id),
+    );
+  }
+
+  private async storeSubmissionFiles(
+    studentId: string,
+    files: UploadedSubmissionFile[],
+  ): Promise<StoredSubmissionAttachment[]> {
+    if (!files.length) return [];
+
+    const safeStudentId = studentId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const relativeDir = join(SUBMISSION_UPLOAD_DIR, safeStudentId);
+    const absoluteDir = resolve(process.cwd(), relativeDir);
+    await mkdir(absoluteDir, { recursive: true });
+
+    const stored: StoredSubmissionAttachment[] = [];
+    try {
+      for (const file of files) {
+        const id = randomUUID();
+        const safeName = basename(file.originalname).replace(
+          /[^a-zA-Z0-9._-]/g,
+          '_',
+        );
+        const storagePath = join(relativeDir, `${id}-${safeName}`);
+        await writeFile(resolve(process.cwd(), storagePath), file.buffer);
+        stored.push({
+          id,
+          fileName: file.originalname,
+          fileSize: file.size,
+          fileType: file.mimetype,
+          storagePath,
+        });
+      }
+      return stored;
+    } catch (error) {
+      await this.deleteStoredAttachments(stored);
+      throw error;
+    }
+  }
+
+  private readStoredAttachments(
+    attachments: Array<Record<string, unknown>>,
+  ): StoredSubmissionAttachment[] {
+    return attachments
+      .map((attachment) => ({
+        id: String(attachment.id || attachment.toolTaskId || ''),
+        fileName: String(attachment.fileName || ''),
+        fileSize: Number(attachment.fileSize || 0),
+        fileType: String(attachment.fileType || ''),
+        storagePath: String(
+          attachment.storagePath || attachment.localPath || '',
+        ),
+      }))
+      .filter((attachment) => attachment.id && attachment.storagePath);
+  }
+
+  private resolveStoredAttachmentPath(storagePath: string) {
+    const allowedBaseDirs = [
+      resolve(process.cwd(), SUBMISSION_UPLOAD_DIR),
+      resolve(process.cwd(), 'uploads/teacher-tools'),
+    ];
+    const resolvedPath = resolve(process.cwd(), storagePath);
+    if (
+      !allowedBaseDirs.some(
+        (baseDir) =>
+          resolvedPath === baseDir || resolvedPath.startsWith(`${baseDir}${sep}`),
+      )
+    ) {
+      throw new ForbiddenException('Invalid attachment path');
+    }
+    return resolvedPath;
+  }
+
+  private async deleteStoredAttachments(
+    attachments: StoredSubmissionAttachment[],
+  ) {
+    await Promise.all(
+      attachments.map(async (attachment) => {
+        try {
+          const path = this.resolveStoredAttachmentPath(attachment.storagePath);
+          const submissionBaseDir = resolve(
+            process.cwd(),
+            SUBMISSION_UPLOAD_DIR,
+          );
+          if (!path.startsWith(`${submissionBaseDir}${sep}`)) {
+            return;
+          }
+          await unlink(path);
+        } catch (error: unknown) {
+          if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+            this.logger.warn(
+              `Failed to delete attachment ${attachment.storagePath}`,
+            );
+          }
+        }
+      }),
+    );
+  }
+
   private assertRoles(
     user: AuthenticatedUser,
     allowedRoles: Array<'superadmin' | 'teacher' | 'student'>,
@@ -662,9 +943,10 @@ export class SubmissionsService {
   }
 
   private toSubmissionPayload(item: SubmissionSource) {
+    const submissionId = this.readEntityId(item);
     return {
-      id: this.readEntityId(item),
-      _id: this.readEntityId(item),
+      id: submissionId,
+      _id: submissionId,
       assignmentId: item.assignmentId,
       studentId: item.studentId,
       studentName: item.studentName,
@@ -672,7 +954,15 @@ export class SubmissionsService {
       classId: item.classId,
       className: item.className,
       content: item.content,
-      attachments: item.attachments || [],
+      attachments: this.readStoredAttachments(item.attachments || []).map(
+        (attachment) => ({
+          id: attachment.id,
+          fileName: attachment.fileName,
+          fileSize: attachment.fileSize,
+          fileType: attachment.fileType,
+          fileUrl: `/students/submissions/${submissionId}/attachments/${attachment.id}`,
+        }),
+      ),
       onlineAnswers: item.onlineAnswers || [],
       objectiveResult: item.objectiveResult || null,
       status: item.status === 'ai_review_queued' ? 'submitted' : item.status,

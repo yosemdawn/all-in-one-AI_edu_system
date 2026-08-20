@@ -8,6 +8,15 @@ import {
 } from "../../api/auth";
 import router from "../../router";
 import { ElMessage } from "element-plus";
+import { TEACHER_AI_SETUP_PROMPT_KEY } from "@/config/ai-config";
+
+const updateTeacherAiSetupPrompt = (role) => {
+  if (String(role || "").toLowerCase() === "teacher") {
+    sessionStorage.setItem(TEACHER_AI_SETUP_PROMPT_KEY, "pending");
+  } else {
+    sessionStorage.removeItem(TEACHER_AI_SETUP_PROMPT_KEY);
+  }
+};
 
 /**
  * 用户模块 - 负责用户信息和认证管理
@@ -83,6 +92,7 @@ const actions = {
         isFirstLogin: response.isFirstLogin,
         ...(response.user && response.user),
       });
+      updateTeacherAiSetupPrompt(response.user?.role);
 
       await dispatch("auth/resetAuthResources", null, { root: true });
 
@@ -140,7 +150,8 @@ const actions = {
 
       // 获取用户信息和菜单
       await dispatch("auth/resetAuthResources", null, { root: true });
-      await dispatch("getUserInfo");
+      const userInfo = await dispatch("getUserInfo");
+      updateTeacherAiSetupPrompt(userInfo?.role || registerData.role);
 
       router.push("/dashboard");
 
@@ -166,6 +177,7 @@ const actions = {
       // 清除用户信息并跳转到登录页
       commit("SET_USER_INFO", null);
       localStorage.removeItem("token");
+      sessionStorage.removeItem(TEACHER_AI_SETUP_PROMPT_KEY);
       throw new Error("登录已过期，请重新登录");
     }
 
@@ -201,6 +213,7 @@ const actions = {
         // 刷新失败时清除所有认证信息
         commit("SET_USER_INFO", null);
         localStorage.removeItem("token");
+        sessionStorage.removeItem(TEACHER_AI_SETUP_PROMPT_KEY);
 
         // 重新抛出错误供上层处理
         throw error;
@@ -229,6 +242,7 @@ const actions = {
       // 清除用户信息
       commit("SET_USER_INFO", null);
       localStorage.removeItem("token");
+      sessionStorage.removeItem(TEACHER_AI_SETUP_PROMPT_KEY);
 
       // 清除权限信息
       await dispatch("auth/clearPermissions", null, { root: true });

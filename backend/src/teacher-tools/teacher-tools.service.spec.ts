@@ -144,4 +144,42 @@ describe('TeacherToolsService submission sync', () => {
     });
     expect(submissionModel.create).not.toHaveBeenCalled();
   });
+
+  it('marks a task as failed when Redis enqueue fails', async () => {
+    const queueService = {
+      enqueueTask: jest.fn().mockRejectedValue(new Error('Redis offline')),
+    };
+    const service = new TeacherToolsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      queueService as never,
+    );
+    const task = {
+      id: 'task-1',
+      status: 'queued',
+      totalCount: 3,
+      failureCount: 0,
+      resultSummary: {},
+      completedAt: null,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await (service as any).dispatchTask(task);
+
+    expect(task.status).toBe('failed');
+    expect(task.failureCount).toBe(3);
+    expect(task.resultSummary).toEqual(
+      expect.objectContaining({
+        queueStatus: 'failed',
+        error: 'Redis offline',
+      }),
+    );
+    expect(task.save).toHaveBeenCalled();
+  });
 });

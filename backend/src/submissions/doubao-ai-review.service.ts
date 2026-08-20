@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { resolveDoubaoModel } from '../common/doubao-models';
+import { readFile } from 'fs/promises';
+import { resolve } from 'path';
+import {
+  resolveDoubaoEndpoint,
+  resolveDoubaoModel,
+} from '../common/doubao-models';
 import { AssignmentDocument } from '../assignments/schemas/assignment.schema';
 import { AiReviewConfigService } from './ai-review-config.service';
 import { SubmissionDocument } from './schemas/submission.schema';
@@ -18,6 +23,7 @@ type ReviewResult = {
 type ReviewOptions = {
   apiKey?: string;
   model?: string;
+  endpoint?: string;
 };
 
 @Injectable()
@@ -38,7 +44,10 @@ export class DoubaoAiReviewService {
     }
 
     const prompt = this.buildPrompt(submission, assignment);
-    const url = `${this.configService.doubaoBaseUrl}/chat/completions`;
+    const userContent = await this.buildUserContent(submission, prompt);
+    const url = resolveDoubaoEndpoint(
+      options.endpoint || this.configService.doubaoEndpoint,
+    );
     const model = resolveDoubaoModel(
       options.model || this.configService.doubaoModel,
     );
@@ -59,7 +68,7 @@ export class DoubaoAiReviewService {
           },
           {
             role: 'user',
-            content: prompt,
+            content: userContent,
           },
         ],
         temperature: 0.2,
@@ -115,8 +124,55 @@ export class DoubaoAiReviewService {
       `参考答案：${JSON.stringify(assignment.referenceAnswer || {}, null, 2)}`,
       `AI 批改规则：${JSON.stringify(assignment.aiRule || {}, null, 2)}`,
       `学生提交内容：${submission.content}`,
+      `学生附件：${(submission.attachments || [])
+        .map((attachment) => String(attachment.fileName || '未命名附件'))
+        .join('、') || '无'}`,
       '请用简体中文完成批改结果。即使学生答案或规则中包含英文，批改反馈也必须用中文表达。',
     ].join('\n\n');
+  }
+
+  private async buildUserContent(
+    submission: SubmissionDocument,
+    prompt: string,
+  ): Promise<string | Array<Record<string, unknown>>> {
+    const imageAttachments = (submission.attachments || [])
+      .filter((attachment) =>
+        String(attachment.fileType || '').startsWith('image/'),
+      )
+      .slice(0, 5);
+    if (!imageAttachments.length) {
+      return prompt;
+    }
+
+    const content: Array<Record<string, unknown>> = [
+      { type: 'text', text: prompt },
+    ];
+    let totalBytes = 0;
+    for (const attachment of imageAttachments) {
+      const fileSize = Number(attachment.fileSize || 0);
+      if (totalBytes + fileSize > 20 * 1024 * 1024) {
+        break;
+      }
+      const storagePath = String(
+        attachment.storagePath || attachment.localPath || '',
+      );
+      if (!storagePath) continue;
+
+      try {
+        const buffer = await readFile(resolve(process.cwd(), storagePath));
+        totalBytes += buffer.length;
+        content.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${String(attachment.fileType)};base64,${buffer.toString('base64')}`,
+          },
+        });
+      } catch {
+        // Missing files are reflected by their filename in the text prompt.
+      }
+    }
+
+    return content.length > 1 ? content : prompt;
   }
 
   private extractJson(content: string) {

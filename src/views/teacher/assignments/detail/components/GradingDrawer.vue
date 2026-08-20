@@ -112,7 +112,26 @@
             <div v-if="submissionData?.content" class="submission-content">
               <div v-html="submissionData.content"></div>
             </div>
-            <div v-else class="no-content">
+            <div
+              v-if="submissionData?.attachments?.length"
+              class="submission-attachments"
+            >
+              <div class="attachment-title">附件</div>
+              <el-button
+                v-for="attachment in submissionData.attachments"
+                :key="attachment.id"
+                link
+                type="primary"
+                :icon="Paperclip"
+                @click="handleDownloadAttachment(attachment)"
+              >
+                {{ attachment.fileName }}
+              </el-button>
+            </div>
+            <div
+              v-if="!submissionData?.content && !submissionData?.attachments?.length"
+              class="no-content"
+            >
               <el-empty description="学生尚未提交作业内容" :image-size="80" />
             </div>
           </div>
@@ -297,11 +316,19 @@
 <script lang="ts" setup>
 import { ref, reactive, watch, nextTick, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Document, EditPen, Cpu, User, Warning } from "@element-plus/icons-vue";
+import {
+  Document,
+  EditPen,
+  Cpu,
+  User,
+  Warning,
+  Paperclip,
+} from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
 import { getSubmissionDetail, submitTeacherReview } from "@/api/correcting";
 import { getAssignmentDetail } from "@/api/assignments";
 import { marked } from "marked";
+import { downloadFile } from "@/utils/request";
 // Props
 interface Props {
   visible: boolean;
@@ -326,6 +353,9 @@ const gradingFormRef = ref<FormInstance>();
 
 // 折叠面板激活状态 - 默认展开学生提交和教师批改相关的面板
 const activeCollapse = ref(["submission"]);
+
+const handleDownloadAttachment = (attachment: any) =>
+  downloadFile(attachment.fileUrl, undefined, attachment.fileName);
 
 // 批改表单
 const gradingForm = reactive({

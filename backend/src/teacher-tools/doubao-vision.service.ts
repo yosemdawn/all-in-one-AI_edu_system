@@ -7,7 +7,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { readFile } from 'fs/promises';
 import { Model } from 'mongoose';
-import { resolveDoubaoModel } from '../common/doubao-models';
+import {
+  resolveDoubaoEndpoint,
+  resolveDoubaoModel,
+} from '../common/doubao-models';
 import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
 import { decryptAiApiKey } from '../users/ai-api-key.crypto';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -204,7 +207,7 @@ export class DoubaoVisionService {
       const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 
       try {
-        const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        const response = await fetch(config.endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -277,14 +280,15 @@ export class DoubaoVisionService {
       );
     }
 
-    const rawBaseUrl =
-      model?.baseUrl ||
-      this.configService.get<string>('DOUBAO_BASE_URL') ||
-      'https://ark.cn-beijing.volces.com/api/v3';
+    const endpoint = await this.resolveTeacherEndpoint(teacherId);
 
     return {
       apiKey,
-      baseUrl: rawBaseUrl.replace(/\/$/, ''),
+      endpoint: resolveDoubaoEndpoint(
+        endpoint ||
+          model?.baseUrl ||
+          this.configService.get<string>('DOUBAO_BASE_URL'),
+      ),
       model: resolveDoubaoModel(
         await this.resolveTeacherModel(teacherId) ||
           model?.modelName ||
@@ -324,6 +328,18 @@ export class DoubaoVisionService {
       .select('aiSettings.doubaoModel')
       .lean();
     return teacher?.aiSettings?.doubaoModel || '';
+  }
+
+  private async resolveTeacherEndpoint(teacherId?: string) {
+    if (!teacherId) {
+      return '';
+    }
+
+    const teacher = await this.userModel
+      .findById(teacherId)
+      .select('aiSettings.doubaoEndpoint')
+      .lean();
+    return teacher?.aiSettings?.doubaoEndpoint || '';
   }
 
   private async toImageContent(image: VisionImage) {

@@ -186,8 +186,11 @@ export class TeacherToolsService {
       resultSummary: {},
     });
 
-    await this.dispatchTask(task.id);
-    return this.appService.envelope(this.toTaskPayload(task), 'queued');
+    await this.dispatchTask(task);
+    return this.appService.envelope(
+      this.toTaskPayload(task),
+      task.status === 'failed' ? 'queue failed' : 'queued',
+    );
   }
 
   async createEssayTask(
@@ -246,8 +249,11 @@ export class TeacherToolsService {
       resultSummary: {},
     });
 
-    await this.dispatchTask(task.id);
-    return this.appService.envelope(this.toTaskPayload(task), 'queued');
+    await this.dispatchTask(task);
+    return this.appService.envelope(
+      this.toTaskPayload(task),
+      task.status === 'failed' ? 'queue failed' : 'queued',
+    );
   }
 
   async listTasks(currentUser: AuthenticatedUser, query: ToolTaskQueryDto) {
@@ -502,13 +508,25 @@ export class TeacherToolsService {
     await task.save();
   }
 
-  private async dispatchTask(taskId: string) {
+  private async dispatchTask(task: ToolTaskDocument) {
     if (this.queueService) {
-      await this.queueService.enqueueTask(taskId);
+      try {
+        await this.queueService.enqueueTask(task.id);
+      } catch (error: unknown) {
+        task.status = 'failed';
+        task.failureCount = task.totalCount;
+        task.resultSummary = {
+          queueStatus: 'failed',
+          error: this.getErrorMessage(error),
+          failedAt: new Date().toISOString(),
+        };
+        task.completedAt = new Date();
+        await task.save();
+      }
       return;
     }
 
-    setTimeout(() => void this.processTask(taskId), 0);
+    setTimeout(() => void this.processTask(task.id), 0);
   }
 
   private async resolveClass(

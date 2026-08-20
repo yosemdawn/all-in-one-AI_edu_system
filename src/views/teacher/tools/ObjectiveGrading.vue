@@ -56,6 +56,8 @@
               multiple
               accept="image/*"
               :auto-upload="false"
+              :limit="50"
+              :on-exceed="handleFileExceed"
             >
               <el-icon><UploadFilled /></el-icon>
               <div class="el-upload__text">拖拽图片到这里，或点击选择</div>
@@ -376,6 +378,10 @@ const scoreGroups = computed(() => {
 onMounted(async () => {
   await Promise.all([loadClasses(), loadAssignments()]);
 });
+
+function handleFileExceed() {
+  ElMessage.warning("单次最多上传 50 张答题卡图片");
+}
 
 watch(
   () => form.classId,
