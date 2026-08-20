@@ -32,26 +32,10 @@ export const AI_CONFIG = {
   },
 };
 
-export const DOUBAO_MODEL_OPTIONS = [
-  {
-    label: "doubao-seed-2-0-lite-260428",
-    value: "doubao-seed-2-0-lite-260428",
-  },
-  {
-    label: "doubao-seed-2-0-mini-260428",
-    value: "doubao-seed-2-0-mini-260428",
-  },
-  {
-    label: "doubao-seed-2-0-pro-260215",
-    value: "doubao-seed-2-0-pro-260215",
-  },
-  {
-    label: "doubao-seed-1-8-251228",
-    value: "doubao-seed-1-8-251228",
-  },
-] as const;
-
-export const DEFAULT_DOUBAO_MODEL = "doubao-seed-2-0-lite-260428";
+export const DEFAULT_DOUBAO_MODEL = "doubao-seed-2-1-turbo-260628";
+export const DEFAULT_DOUBAO_ENDPOINT =
+  "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+export const TEACHER_AI_SETUP_PROMPT_KEY = "teacher-ai-setup-prompt";
 export const DOUBAO_API_KEY_GUIDE_URL =
   "https://www.volcengine.com/docs/82379/1361424";
 

@@ -286,7 +286,7 @@ export function useSubmissionManagement() {
     };
 
     if (attachments.length > 0) {
-      params.attachments = attachments;
+      params.retainedAttachmentIds = attachments.map((item) => item.id);
     }
 
     return params;
@@ -328,21 +328,27 @@ export function useSubmissionManagement() {
 
   const handleSaveDraft = async (
     content: string,
-    attachments: Attachment[]
+    attachments: Attachment[],
+    files: File[] = [],
+    retainedAttachmentIds: string[] = []
   ) => {
     if (!canSaveDraft.value) {
       ElMessage.warning("作业已提交，无法保存草稿");
       return;
     }
 
-    if (!content.trim()) {
-      ElMessage.warning("请先输入作业内容");
+    if (!content.trim() && files.length === 0 && retainedAttachmentIds.length === 0) {
+      ElMessage.warning("请先输入作业内容或上传附件");
       return;
     }
 
     try {
       saving.value = true;
-      await SubmissionsApi.submit(buildSubmitParams(content, attachments, true));
+      await SubmissionsApi.submit({
+        ...buildSubmitParams(content, attachments, true),
+        files,
+        retainedAttachmentIds,
+      });
       ElMessage.success("草稿保存成功");
       await new Promise((resolve) => setTimeout(resolve, 500));
       await loadData();

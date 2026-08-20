@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
+import {
+  DEFAULT_DOUBAO_MODEL,
+  resolveDoubaoEndpoint,
+  resolveDoubaoModel,
+} from '../common/doubao-models';
 import { AppService } from '../app.service';
 import {
   Assignment,
@@ -433,17 +437,17 @@ export class AiModelsService implements OnApplicationBootstrap {
       };
     }
 
-    const baseUrl = model.baseUrl.replace(/\/$/, '');
+    const endpoint = resolveDoubaoEndpoint(model.baseUrl);
 
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: model.modelName,
+          model: resolveDoubaoModel(model.modelName),
           messages: [
             {
               role: 'user',
