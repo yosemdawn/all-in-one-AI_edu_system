@@ -1250,17 +1250,55 @@ export class AssignmentsService {
       input.averageScore === null
         ? '当前暂无可统计的批改成绩，建议先完成 AI 批改或教师批改。'
         : `已统计 ${input.scoredCount} 份成绩，平均分 ${input.averageScore} 分。`;
-    const topWrongQuestions = input.wrongQuestionDistribution.slice(0, 3);
-    const weakPoints = topWrongQuestions.length
-      ? topWrongQuestions.map(
-          (item) =>
-            `第 ${item.questionNumber || '-'} 题错误率 ${item.wrongRate}%，需重点讲解。`,
-        )
-      : [
-          input.assignmentType === 'online'
-            ? '暂未发现集中错题，建议结合学生反馈复核易混题。'
-            : '普通作业暂无结构化错题数据，可结合 AI 评语或后续增加题号标注提升分析精度。',
-        ];
+    const topWrongQuestions = input.wrongQuestionDistribution.slice(0, 5);
+    const weakPoints: string[] = [];
+
+    if (topWrongQuestions.length > 0) {
+      // 添加总体薄弱点概述
+      const highErrorQuestions = topWrongQuestions.filter((q) => q.wrongRate >= 50);
+      const mediumErrorQuestions = topWrongQuestions.filter(
+        (q) => q.wrongRate >= 30 && q.wrongRate < 50,
+      );
+
+      if (highErrorQuestions.length > 0) {
+        weakPoints.push(
+          `有 ${highErrorQuestions.length} 道题错误率超过 50%，属于严重薄弱点，需要重点关注。`,
+        );
+      }
+      if (mediumErrorQuestions.length > 0) {
+        weakPoints.push(
+          `有 ${mediumErrorQuestions.length} 道题错误率在 30%-50% 之间，属于中等薄弱点。`,
+        );
+      }
+
+      // 逐题分析薄弱点
+      topWrongQuestions.forEach((item, index) => {
+        const severity =
+          item.wrongRate >= 50 ? '严重' : item.wrongRate >= 30 ? '中等' : '一般';
+        const stemPreview = item.stem.length > 20 ? item.stem.slice(0, 20) + '...' : item.stem;
+        weakPoints.push(
+          `第 ${item.questionNumber || '-'} 题（${stemPreview}）错误率 ${item.wrongRate}%，` +
+            `属于${severity}薄弱点，${item.wrongCount} 人答错。`,
+        );
+      });
+
+      // 添加常见错误分析
+      topWrongQuestions.forEach((item) => {
+        if (item.commonWrongAnswers && item.commonWrongAnswers.length > 0) {
+          const topWrongAnswer = item.commonWrongAnswers[0];
+          weakPoints.push(
+            `第 ${item.questionNumber || '-'} 题最常见错误答案为"${topWrongAnswer.answer}"，` +
+              `有 ${topWrongAnswer.count} 人选择，可能存在概念性误解。`,
+          );
+        }
+      });
+    } else {
+      weakPoints.push(
+        input.assignmentType === 'online'
+          ? '暂未发现集中错题，建议结合学生反馈复核易混题。'
+          : '普通作业暂无结构化错题数据，可结合 AI 评语或后续增加题号标注提升分析精度。',
+      );
+    }
     const teachingSuggestions = [
       submissionRate < 80
         ? '先跟进未提交学生，确保讲评前样本足够完整。'
