@@ -95,12 +95,8 @@
       <div v-if="studentData.length === 0" class="text-center py-8">
         <div class="text-5xl mb-3">👥</div>
         <h3 class="text-lg font-medium text-gray-900 mb-2">暂无学生</h3>
-        <p class="text-gray-500 mb-4">点击"添加学生"按钮开始添加学生到班级</p>
-        <el-button
-          type="primary"
-          :icon="User"
-          @click="showAddStudentDialog = true"
-        >
+        <p class="text-gray-500 mb-4">点击“添加学生”或通过班级邀请码加入</p>
+        <el-button type="primary" :icon="User" @click="showAddStudentDialog = true">
           添加学生
         </el-button>
       </div>
@@ -230,7 +226,6 @@
       />
     </div>
 
-    <!-- 添加学生对话框 -->
     <add-student-dialog
       v-model="showAddStudentDialog"
       :class-id="classId"
@@ -242,7 +237,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { User, Refresh, Search } from "@element-plus/icons-vue";
+import { User, Search } from "@element-plus/icons-vue";
 import moment from "moment";
 import { getClassStudents, updateStudentStatus } from "@/api/classes";
 import type {
@@ -420,7 +415,6 @@ const handleBatchRemove = () => {
   selectedStudents.value = [];
 };
 
-// 添加学生成功回调
 const handleAddStudentSuccess = () => {
   showAddStudentDialog.value = false;
   loadStudentList();
