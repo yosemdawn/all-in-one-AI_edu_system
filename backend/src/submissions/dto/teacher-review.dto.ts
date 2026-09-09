@@ -1,9 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsNumber, IsString, Max, Min } from 'class-validator';
 
 export class TeacherReviewDto {
   @IsString()
   submissionId: string;
+
+  @IsInt()
+  @Min(0)
+  revision: number;
 
   @IsString()
   teacherReviewContent: string;

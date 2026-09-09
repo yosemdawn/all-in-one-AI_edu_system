@@ -204,17 +204,11 @@ const submitForm = async () => {
           confirmPassword: form.confirmPassword,
         });
 
-        ElMessage.success("密码修改成功！");
-
-        // 清除强制修改密码标记
-        store.commit("user/SET_USER_INFO", {
-          ...userInfo.value,
-          mustChangePassword: false,
-        });
-
-        // 跳转到dashboard或用户想要访问的页面
-        const redirect = router.currentRoute.value.query.redirect as string;
-        router.push(redirect || "/dashboard");
+        ElMessage.success("密码修改成功，请使用新密码重新登录");
+        store.commit("user/SET_USER_INFO", null);
+        localStorage.removeItem("token");
+        await store.dispatch("auth/resetAuthResources");
+        await router.replace("/login");
       } catch (err: any) {
         console.error("修改密码失败:", err);
         error.value = err.message || "修改密码失败，请重试";

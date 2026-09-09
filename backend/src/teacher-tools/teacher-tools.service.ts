@@ -1,4 +1,8 @@
 import {
+  revisionFilter,
+  unreviewedFilter,
+} from '../submissions/submission-state';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -83,9 +87,8 @@ export class TeacherToolsService {
     const result = await this.doubaoVisionService.parseStandardAnswers(text, {
       teacherId: currentUser.id,
     });
-    const standardAnswers = this.objectiveGradingService.normalizeStandardAnswers(
-      result.data,
-    );
+    const standardAnswers =
+      this.objectiveGradingService.normalizeStandardAnswers(result.data);
     return this.appService.envelope({ standardAnswers }, 'success');
   }
 
@@ -133,7 +136,9 @@ export class TeacherToolsService {
   ) {
     this.assertTeacher(currentUser);
     if (!files?.length) {
-      throw new BadRequestException('At least one answer-card image is required');
+      throw new BadRequestException(
+        'At least one answer-card image is required',
+      );
     }
 
     const standardAnswers =
@@ -289,7 +294,11 @@ export class TeacherToolsService {
 
   async cancelTask(currentUser: AuthenticatedUser, id: string) {
     const task = await this.requireTaskAccess(currentUser, id);
-    if (['completed', 'partial_failed', 'failed', 'cancelled'].includes(task.status)) {
+    if (
+      ['completed', 'partial_failed', 'failed', 'cancelled'].includes(
+        task.status,
+      )
+    ) {
       return this.appService.envelope(this.toTaskPayload(task), 'success');
     }
 
@@ -368,9 +377,8 @@ export class TeacherToolsService {
           standardAnswers,
           scoreConfig,
         );
-        const totalScore = this.objectiveGradingService.calculateTotalScore(
-          grading,
-        );
+        const totalScore =
+          this.objectiveGradingService.calculateTotalScore(grading);
         const matchedStudent = await this.matchStudent(task.classId, {
           studentName: recognized.data.studentName,
           studentNumber: recognized.data.studentNumber,
@@ -387,10 +395,7 @@ export class TeacherToolsService {
           totalScore,
           rawContent: recognized.rawContent,
         };
-        const syncResult = await this.syncItemToSubmission(
-          task,
-          completedItem,
-        );
+        const syncResult = await this.syncItemToSubmission(task, completedItem);
         await this.pushOrReplaceItem(task, {
           ...completedItem,
           submissionSync: syncResult,
@@ -445,13 +450,16 @@ export class TeacherToolsService {
       await this.pushOrReplaceItem(task, itemBase);
 
       try {
-        const reviewed = await this.doubaoVisionService.reviewEssay({
-          requirementsText,
-          requirementImages,
-          essayImage: file,
-        }, {
-          teacherId: task.teacherId,
-        });
+        const reviewed = await this.doubaoVisionService.reviewEssay(
+          {
+            requirementsText,
+            requirementImages,
+            essayImage: file,
+          },
+          {
+            teacherId: task.teacherId,
+          },
+        );
         if (await this.isTaskCancelled(task.id)) return;
         const score = this.clampScore(reviewed.data.score);
         const matchedStudent = await this.matchStudent(task.classId, {
@@ -475,10 +483,7 @@ export class TeacherToolsService {
           summaryComment: reviewed.data.summary_comment || '',
           rawContent: reviewed.rawContent,
         };
-        const syncResult = await this.syncItemToSubmission(
-          task,
-          completedItem,
-        );
+        const syncResult = await this.syncItemToSubmission(task, completedItem);
         await this.pushOrReplaceItem(task, {
           ...completedItem,
           submissionSync: syncResult,
@@ -606,7 +611,9 @@ export class TeacherToolsService {
   }
 
   private singleAssignmentClass(
-    assignmentInfo: Awaited<ReturnType<TeacherToolsService['resolveAssignment']>>,
+    assignmentInfo: Awaited<
+      ReturnType<TeacherToolsService['resolveAssignment']>
+    >,
   ) {
     if (!assignmentInfo || assignmentInfo.classes.length !== 1) {
       return null;
@@ -651,7 +658,9 @@ export class TeacherToolsService {
       return { status: 'skipped', reason: 'student_not_matched' };
     }
 
-    const assignment = await this.assignmentModel.findById(task.assignmentId).lean();
+    const assignment = await this.assignmentModel
+      .findById(task.assignmentId)
+      .lean();
     if (!assignment) {
       return { status: 'failed', reason: 'assignment_not_found' };
     }
@@ -660,7 +669,12 @@ export class TeacherToolsService {
       assignmentId: task.assignmentId,
       studentId: String(matched.studentId),
     });
-    if (existing?.status === 'teacher_reviewed') {
+    if (
+      existing &&
+      (existing.status === 'teacher_reviewed' ||
+        existing.teacherScore != null ||
+        existing.teacherReviewedAt)
+    ) {
       return {
         status: 'skipped',
         reason: 'teacher_reviewed',
@@ -709,23 +723,42 @@ export class TeacherToolsService {
     };
 
     if (existing) {
-      existing.classId = classId;
-      existing.className = className;
-      existing.content = content;
-      existing.attachments = attachments;
-      existing.isDraft = false;
-      existing.status = 'ai_reviewed';
-      existing.submittedAt = existing.submittedAt || now;
-      existing.submissionCount = Math.max(existing.submissionCount || 0, 1);
-      existing.aiScore = score;
-      existing.aiReviewContent = aiReviewContent;
-      existing.aiReviewMetadata = aiReviewMetadata;
-      existing.aiReviewedAt = now;
-      existing.teacherScore = null;
-      existing.teacherReviewContent = null;
-      existing.teacherReviewedAt = null;
-      await existing.save();
-      await this.syncMembershipSubmissionStats(classId, String(matched.studentId), existing);
+      const updated = await this.submissionModel.findOneAndUpdate(
+        {
+          _id: existing._id,
+          ...revisionFilter(existing.revision ?? 0),
+          ...unreviewedFilter,
+        },
+        {
+          $set: {
+            classId,
+            className,
+            content,
+            attachments,
+            isDraft: false,
+            status: 'ai_reviewed',
+            submittedAt: existing.submittedAt || now,
+            submissionCount: Math.max(existing.submissionCount || 0, 1),
+            aiScore: score,
+            aiReviewContent,
+            aiReviewMetadata,
+            aiReviewedAt: now,
+          },
+          $inc: { revision: 1 },
+        },
+        { returnDocument: 'after', runValidators: true },
+      );
+      if (!updated)
+        return {
+          status: 'skipped',
+          reason: 'submission_changed',
+          submissionId: existing.id,
+        };
+      await this.syncMembershipSubmissionStats(
+        classId,
+        String(matched.studentId),
+        updated,
+      );
       return { status: 'updated', submissionId: existing.id };
     }
 
@@ -742,6 +775,7 @@ export class TeacherToolsService {
       isDraft: false,
       submittedAt: now,
       submissionCount: 1,
+      revision: 1,
       aiScore: score,
       aiReviewContent,
       aiReviewMetadata,
@@ -750,7 +784,11 @@ export class TeacherToolsService {
       teacherReviewContent: null,
       teacherReviewedAt: null,
     });
-    await this.syncMembershipSubmissionStats(classId, String(matched.studentId), created);
+    await this.syncMembershipSubmissionStats(
+      classId,
+      String(matched.studentId),
+      created,
+    );
     return { status: 'created', submissionId: created.id };
   }
 
@@ -790,7 +828,10 @@ export class TeacherToolsService {
     );
   }
 
-  private readScoreForTask(task: ToolTaskDocument, item: Record<string, unknown>) {
+  private readScoreForTask(
+    task: ToolTaskDocument,
+    item: Record<string, unknown>,
+  ) {
     const rawScore =
       task.type === 'objective_grading' ? item.totalScore : item.score;
     const score = Number(rawScore);
@@ -807,12 +848,13 @@ export class TeacherToolsService {
       );
     }
 
-    const answers = item.answers && typeof item.answers === 'object'
-      ? Object.entries(item.answers as Record<string, unknown>)
-          .sort(([a], [b]) => Number(a) - Number(b))
-          .map(([questionId, answer]) => `${questionId}.${answer || '空'}`)
-          .join(' ')
-      : '';
+    const answers =
+      item.answers && typeof item.answers === 'object'
+        ? Object.entries(item.answers as Record<string, unknown>)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([questionId, answer]) => `${questionId}.${answer || '空'}`)
+            .join(' ')
+        : '';
     return [
       '<p>由教师工具箱客观题批分任务同步。</p>',
       `<p>来源文件：${this.escapeHtml(String(item.fileName || ''))}</p>`,
@@ -846,18 +888,25 @@ export class TeacherToolsService {
       return [
         '**批量作文检查结果**',
         `分数：${this.readScoreForTask(task, item)}`,
-        item.summaryComment ? `总评：${this.escapePlain(String(item.summaryComment))}` : '',
-        item.strengths ? `优点：${this.escapePlain(String(item.strengths))}` : '',
-        item.weaknesses ? `问题：${this.escapePlain(String(item.weaknesses))}` : '',
+        item.summaryComment
+          ? `总评：${this.escapePlain(String(item.summaryComment))}`
+          : '',
+        item.strengths
+          ? `优点：${this.escapePlain(String(item.strengths))}`
+          : '',
+        item.weaknesses
+          ? `问题：${this.escapePlain(String(item.weaknesses))}`
+          : '',
         suggestions ? `修改建议：\n${suggestions}` : '',
       ]
         .filter(Boolean)
         .join('\n\n');
     }
 
-    const grading = item.grading && typeof item.grading === 'object'
-      ? (item.grading as Record<string, Record<string, unknown>>)
-      : {};
+    const grading =
+      item.grading && typeof item.grading === 'object'
+        ? (item.grading as Record<string, Record<string, unknown>>)
+        : {};
     const wrongItems = Object.entries(grading)
       .filter(([, result]) => !result.isCorrect)
       .map(
@@ -883,7 +932,10 @@ export class TeacherToolsService {
           throw new BadRequestException('Only image uploads are supported');
         }
         const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const filePath = join(baseDir, `${Date.now()}-${randomUUID()}-${safeName}`);
+        const filePath = join(
+          baseDir,
+          `${Date.now()}-${randomUUID()}-${safeName}`,
+        );
         await writeFile(filePath, file.buffer);
         return {
           originalName: file.originalname,
@@ -901,7 +953,10 @@ export class TeacherToolsService {
     if (!task) {
       throw new NotFoundException('Tool task not found');
     }
-    if (currentUser.role !== 'superadmin' && task.teacherId !== currentUser.id) {
+    if (
+      currentUser.role !== 'superadmin' &&
+      task.teacherId !== currentUser.id
+    ) {
       throw new ForbiddenException('Forbidden');
     }
     return task;
@@ -1040,8 +1095,9 @@ export class TeacherToolsService {
       skippedSubmissionSyncs: syncItems.filter(
         (item) => item.status === 'skipped',
       ).length,
-      failedSubmissionSyncs: syncItems.filter((item) => item.status === 'failed')
-        .length,
+      failedSubmissionSyncs: syncItems.filter(
+        (item) => item.status === 'failed',
+      ).length,
     };
   }
 
@@ -1132,7 +1188,9 @@ export class TeacherToolsService {
             '错误',
           ];
     const rows = (task.items || []).map((item) => {
-      const matched = item.matchedStudent as Record<string, unknown> | undefined;
+      const matched = item.matchedStudent as
+        | Record<string, unknown>
+        | undefined;
       const sync = item.submissionSync as Record<string, unknown> | undefined;
       const syncText = sync
         ? [sync.status, sync.reason].filter(Boolean).join(':')

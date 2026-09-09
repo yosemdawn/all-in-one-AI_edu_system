@@ -1,3 +1,4 @@
+import { createPasswordChangeGuard } from "./password-change";
 import router, { resetRouter } from "./index";
 import store from "@/store";
 import type {
@@ -71,7 +72,7 @@ function isWhiteListRoute(path: string, meta?: any): boolean {
  */
 async function loadDynamicRoutes(
   to: RouteLocationNormalized,
-  next: NavigationGuardNext,
+  next: NavigationGuardNext
 ): Promise<void> {
   // 如果已经在加载路由，等待前一个加载完成
 
@@ -126,49 +127,9 @@ async function loadDynamicRoutes(
   }
 }
 
-// 路由前置守卫
-router.beforeEach(
-  async (
-    to: RouteLocationNormalized,
-    from: RouteLocationNormalized,
-    next: NavigationGuardNext,
-  ) => {
-    // 开始进度条
-    NProgress.start();
-    // 设置页面标题
-    setDocumentTitle(to);
-    // 判断用户是否已登录
-    const token = store.getters["user/getToken"];
-    // 白名单路由直接放行
-    if (isWhiteListRoute(to.path, to.meta)) {
-      next();
-      return;
-    }
-
-    // 如果token不存在，则重定向到登录页
-    if (!token) {
-      // 跳转登录页，保留重定向地址
-      next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
-      NProgress.done();
-      return;
-    }
-
-    // 检查是否需要强制修改密码
-    const mustChangePassword = store.getters["user/mustChangePassword"];
-
-    // 如果需要强制修改密码且不是强制修改密码页面，则重定向
-    if (
-      mustChangePassword &&
-      to.path !== "/force-change-password" &&
-      !to.meta?.skipPasswordCheck
-    ) {
-      next(
-        `/force-change-password?redirect=${encodeURIComponent(to.fullPath)}`,
-      );
-      NProgress.done();
-      return;
-    }
-
+const finishAuthorizedNavigation = createPasswordChangeGuard(
+  () => store.getters["user/mustChangePassword"],
+  async (to, from, next) => {
     // 根据store中的菜单长度判断
     if (store.getters["auth/userMenus"].length === 0) {
       // 动态路由未生成，尝试加载
@@ -202,7 +163,38 @@ router.beforeEach(
       // 动态路由已生成，直接放行
       next();
     }
-  },
+  }
+);
+
+// 路由前置守卫
+router.beforeEach(
+  async (
+    to: RouteLocationNormalized,
+    from: RouteLocationNormalized,
+    next: NavigationGuardNext
+  ) => {
+    // 开始进度条
+    NProgress.start();
+    // 设置页面标题
+    setDocumentTitle(to);
+    // 判断用户是否已登录
+    const token = store.getters["user/getToken"];
+    // 白名单路由直接放行
+    if (isWhiteListRoute(to.path, to.meta)) {
+      next();
+      return;
+    }
+
+    // 如果token不存在，则重定向到登录页
+    if (!token) {
+      // 跳转登录页，保留重定向地址
+      next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
+      NProgress.done();
+      return;
+    }
+
+    await finishAuthorizedNavigation(to, from, next);
+  }
 );
 
 // 预加载所有可能的组件模块
@@ -232,8 +224,9 @@ function loadComponent(componentPath: string) {
 
         // 如果组件不存在，尝试加载NotFound页面
         if (componentModules["../views/NotFound.vue"]) {
-          const notFoundModule =
-            await componentModules["../views/NotFound.vue"]();
+          const notFoundModule = await componentModules[
+            "../views/NotFound.vue"
+          ]();
           return notFoundModule;
         } else {
           // 如果连NotFound都不存在，返回一个简单的错误组件
@@ -252,7 +245,7 @@ function loadComponent(componentPath: string) {
     } catch (error) {
       console.error(
         `组件加载失败: ${componentPath} -> ${cleanComponentPath}`,
-        error,
+        error
       );
 
       // 加载失败时的备用方案

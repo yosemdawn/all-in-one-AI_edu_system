@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import {
+  sanitizeRichText,
+  sanitizeNullableRichText,
+} from '../../common/security/rich-text';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 
@@ -23,7 +27,7 @@ export class Submission {
   @Prop({ required: true, trim: true })
   className: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, set: sanitizeRichText })
   content: string;
 
   @Prop({ type: Array, default: [] })
@@ -67,10 +71,22 @@ export class Submission {
   @Prop({ default: 0 })
   submissionCount: number;
 
+  // Content revision, also incremented by manual review to invalidate outstanding work.
+  @Prop({ default: 0 })
+  revision: number;
+
+  @Prop({ type: Array, default: [] })
+  teacherReviewHistory: Array<{
+    teacherId: string;
+    score: number;
+    content: string;
+    reviewedAt: Date;
+  }>;
+
   @Prop({ type: Number, default: null })
   aiScore?: number | null;
 
-  @Prop({ type: String, default: null })
+  @Prop({ type: String, default: null, set: sanitizeNullableRichText })
   aiReviewContent?: string | null;
 
   @Prop({ type: Object, default: null })
@@ -82,7 +98,7 @@ export class Submission {
   @Prop({ type: Number, default: null })
   teacherScore?: number | null;
 
-  @Prop({ type: String, default: null })
+  @Prop({ type: String, default: null, set: sanitizeNullableRichText })
   teacherReviewContent?: string | null;
 
   @Prop({ type: Date, default: null })

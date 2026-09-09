@@ -10,6 +10,7 @@ export interface SubmissionRecord {
   classId: string;
   className: string;
   content: string;
+  revision: number;
   status: "draft" | "submitted" | "ai_reviewed" | "teacher_reviewed";
   submittedAt?: string;
   aiScore?: number;
@@ -74,6 +75,7 @@ export function getSubmissionDetail(
  */
 export function submitTeacherReview(params: {
   submissionId: string;
+  revision: number;
   teacherReviewContent: string;
   teacherScore: number;
 }): Promise<any> {

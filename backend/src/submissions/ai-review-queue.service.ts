@@ -7,11 +7,12 @@ import { AI_REVIEW_QUEUE } from './ai-review.constants';
 export class AiReviewQueueService {
   constructor(@InjectQueue(AI_REVIEW_QUEUE) private readonly queue: Queue) {}
 
-  async enqueueReview(submissionId: string) {
+  async enqueueReview(submissionId: string, revision: number) {
     await this.queue.add(
       'review-submission',
-      { submissionId },
+      { submissionId, revision },
       {
+        jobId: `review-${submissionId}-${revision}`,
         attempts: 3,
         backoff: {
           type: 'exponential',

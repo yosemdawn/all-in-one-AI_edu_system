@@ -77,7 +77,11 @@ export class ClassesService {
 
     return this.appService.envelope(
       {
-        items: items.map((item) => this.toClassListItem(item)),
+        items: items.map((item) =>
+          currentUser.role === 'student'
+            ? this.toPublicClassListItem(item)
+            : this.toClassListItem(item),
+        ),
         total,
         page,
         limit,
@@ -112,12 +116,26 @@ export class ClassesService {
     );
   }
 
-  async getClass(id: string) {
+  async getClass(currentUser: AuthenticatedUser, id: string) {
     const classItem = await this.classModel.findById(id).lean();
     if (!classItem) {
       throw new NotFoundException('Class not found');
     }
 
+    if (currentUser.role === 'student') {
+      const membership = await this.membershipModel.exists({
+        classId: id,
+        studentId: currentUser.id,
+        status: 'active',
+      });
+      if (!membership)
+        throw new ForbiddenException('Student is not in this class');
+      return this.appService.envelope(
+        this.toPublicClassListItem(classItem),
+        'success',
+      );
+    }
+    this.assertCanManageClass(currentUser, classItem.teacherId);
     return this.appService.envelope(this.toClassListItem(classItem), 'success');
   }
 
@@ -208,12 +226,17 @@ export class ClassesService {
     );
   }
 
-  async getClassStudents(id: string, query: ClassStudentsQueryDto) {
+  async getClassStudents(
+    currentUser: AuthenticatedUser,
+    id: string,
+    query: ClassStudentsQueryDto,
+  ) {
     const classItem = await this.classModel.findById(id).lean();
     if (!classItem) {
       throw new NotFoundException('Class not found');
     }
 
+    this.assertCanManageClass(currentUser, classItem.teacherId);
     const filter: Record<string, unknown> = { classId: id };
     if (query.status) {
       filter.status = query.status;

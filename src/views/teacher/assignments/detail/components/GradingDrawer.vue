@@ -61,17 +61,17 @@
           <div class="collapse-content">
             <div
               class="assignment-content"
-              v-html="assignmentData?.description || '暂无作业要求'"
+              v-safe-html="assignmentData?.description || '暂无作业要求'"
             ></div>
 
             <div v-if="assignmentData?.questionMaterial?.content" class="basis-card">
               <h5>作业原题</h5>
-              <div v-html="assignmentData.questionMaterial.content"></div>
+              <div v-safe-html="assignmentData.questionMaterial.content"></div>
             </div>
 
             <div v-if="assignmentData?.referenceAnswer?.content" class="basis-card basis-card--answer">
               <h5>标准答案</h5>
-              <div v-html="assignmentData.referenceAnswer.content"></div>
+              <div v-safe-html="assignmentData.referenceAnswer.content"></div>
             </div>
 
             <div v-if="assignmentData?.gradingNotes" class="basis-card basis-card--notes">
@@ -110,7 +110,7 @@
           </template>
           <div class="collapse-content">
             <div v-if="submissionData?.content" class="submission-content">
-              <div v-html="submissionData.content"></div>
+              <div v-safe-html="submissionData.content"></div>
             </div>
             <div v-else class="no-content">
               <el-empty description="学生尚未提交作业内容" :image-size="80" />
@@ -171,7 +171,7 @@
             <div v-else class="ai-content">
               <div
                 v-if="submissionData.aiReviewContent"
-                v-html="formatReviewContent(submissionData.aiReviewContent)"
+                v-safe-html="formatReviewContent(submissionData.aiReviewContent)"
               ></div>
               <div v-else>暂无AI评价内容</div>
 
@@ -487,6 +487,7 @@ const handleSubmitGrading = async () => {
     // 调用真实批改API
     await submitTeacherReview({
       submissionId: props.submissionId!,
+      revision: submissionData.value?.revision ?? 0,
       teacherReviewContent: gradingForm.reviewContent,
       teacherScore: gradingForm.score!,
     });

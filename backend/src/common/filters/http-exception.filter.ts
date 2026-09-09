@@ -33,6 +33,10 @@ export class HttpEnvelopeExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       code: status,
       message,
+      ...(typeof exceptionResponse === 'object' &&
+      'errorCode' in exceptionResponse
+        ? { errorCode: exceptionResponse.errorCode }
+        : {}),
       data: null,
       timestamp: new Date().toISOString(),
       path: request.url,

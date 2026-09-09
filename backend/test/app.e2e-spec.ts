@@ -60,6 +60,7 @@ describe('Backend e2e', () => {
     id: string;
   };
   type SubmissionPayload = {
+    revision: number;
     id: string;
     status: string;
     submissionCount: number;
@@ -157,12 +158,12 @@ describe('Backend e2e', () => {
   });
 
   const login = async (
-    usernameOrEmailOrStudentId: string,
+    usernameOrStudentId: string,
     password = '123456',
   ): Promise<LoginPayload> => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ usernameOrEmailOrStudentId, password });
+      .send({ usernameOrStudentId, password });
 
     return unwrap<LoginPayload>(response);
   };
@@ -247,7 +248,7 @@ describe('Backend e2e', () => {
       .post('/api/v1/auth/register')
       .send({
         username: '  LaunchStudent  ',
-        email: ' LaunchStudent@Example.com ',
+
         password: '123456',
         confirmPassword: '123456',
         classId: targetClass._id,
@@ -261,13 +262,24 @@ describe('Backend e2e', () => {
     const emailLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({
-        usernameOrEmailOrStudentId: 'LAUNCHSTUDENT@EXAMPLE.COM',
+        usernameOrStudentId: '  LaunchStudent  ',
         password: '123456',
       });
     const emailLogin = unwrap<LoginPayload>(emailLoginResponse);
-    expect(emailLogin.user.email).toBe('launchstudent@example.com');
+
     expect(emailLogin.user.username).toBe('LaunchStudent');
-    expect(emailLogin.user.classId).toBe(targetClass._id);
+    // Registration does not grant membership; a teacher supplies the invitation.
+    const teacherSession = await login('teacher1');
+    const invite = unwrap<ClassPayload>(
+      await request(app.getHttpServer())
+        .get('/api/classes/' + targetClass._id)
+        .set(authHeader(teacherSession.token)),
+    );
+    await request(app.getHttpServer())
+      .post('/api/classes/join')
+      .set(authHeader(emailLogin.token))
+      .send({ code: invite.code })
+      .expect(201);
 
     const classDetailResponse = await request(app.getHttpServer())
       .get(`/api/classes/${targetClass._id}`)
@@ -291,7 +303,7 @@ describe('Backend e2e', () => {
 
     const compatLoginResponse = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'admin@yosem.local', password: '123456' });
+      .send({ username: 'admin', password: '123456' });
     const compatLogin = unwrap<LoginPayload>(compatLoginResponse);
     expect(compatLogin.token).toBeTruthy();
 
@@ -516,6 +528,7 @@ describe('Backend e2e', () => {
       .set(authHeader(teacherLogin.token))
       .send({
         submissionId,
+        revision: secondSubmission.revision,
         teacherReviewContent: 'Teacher review complete',
         teacherScore: 92,
       });
@@ -701,7 +714,7 @@ describe('Backend e2e', () => {
 
     const reloginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ usernameOrEmailOrStudentId: 'admin', password: '654321' });
+      .send({ usernameOrStudentId: 'admin', password: '654321' });
     const relogin = unwrap<LoginPayload>(reloginResponse);
     expect(relogin.token).toBeTruthy();
 
@@ -716,7 +729,7 @@ describe('Backend e2e', () => {
     const inactiveLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({
-        usernameOrEmailOrStudentId: 'managed_teacher',
+        usernameOrStudentId: 'managed_teacher',
         password: '123456',
       })
       .expect(401);
@@ -731,7 +744,7 @@ describe('Backend e2e', () => {
       newPassword: string;
     }>(resetPasswordResponse);
     expect(resetPasswordResult.success).toBe(true);
-    expect(resetPasswordResult.newPassword).toBe('123456');
+    expect(resetPasswordResult.newPassword.length).toBeGreaterThanOrEqual(20);
 
     const adminOverviewResponse = await request(app.getHttpServer())
       .get('/api/admin/dashboard/overview')
@@ -895,7 +908,7 @@ describe('Backend e2e', () => {
 
     const forgotPasswordResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/forgot-password')
-      .send({ email: 'managed_teacher@yosem.local' });
+      .send({ username: 'managed_teacher' });
     const forgotPasswordResult = unwrap<{
       success: boolean;
       resetToken: string;
@@ -925,7 +938,7 @@ describe('Backend e2e', () => {
     const resetLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({
-        usernameOrEmailOrStudentId: 'managed_teacher',
+        usernameOrStudentId: 'managed_teacher',
         password: 'reset654',
       });
     const resetLogin = unwrap<LoginPayload>(resetLoginResponse);
@@ -958,7 +971,7 @@ describe('Backend e2e', () => {
     const activeTeacherLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({
-        usernameOrEmailOrStudentId: 'managed_teacher',
+        usernameOrStudentId: 'managed_teacher',
         password: 'reset654',
       });
     const activeTeacherLogin = unwrap<LoginPayload>(activeTeacherLoginResponse);

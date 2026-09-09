@@ -7,7 +7,7 @@
             ref="descriptionRef"
             class="prose max-w-none text-gray-700 transition-all duration-300"
             :class="{ 'line-clamp-3': !isExpanded && shouldShowToggle }"
-            v-html="assignment.description"
+            v-safe-html="assignment.description"
           ></div>
 
           <div v-if="shouldShowToggle" class="flex justify-center mt-3">
@@ -25,7 +25,7 @@
 
         <div v-if="assignment.questionMaterial?.content" class="info-card">
           <h4>作业原题</h4>
-          <div v-html="assignment.questionMaterial.content"></div>
+          <div v-safe-html="assignment.questionMaterial.content"></div>
         </div>
 
         <div v-if="assignment.gradingNotes" class="info-card info-card--notes">

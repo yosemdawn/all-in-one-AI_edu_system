@@ -211,7 +211,7 @@
         </template>
         <div
           class="description-content editor-content-view"
-          v-html="assignment.description"
+          v-safe-html="assignment.description"
         ></div>
       </el-card>
 

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -28,6 +29,9 @@ import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SubmitAssignmentDto } from './dto/submit-assignment.dto';
 import { TeacherReviewDto } from './dto/teacher-review.dto';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
+import { requireStudentAssignmentAccess } from '../common/security/student-assignment-access';
+import { sanitizeRichText } from '../common/security/rich-text';
+import { revisionFilter, unreviewedFilter } from './submission-state';
 
 type DocumentIdentifier = string | { toString(): string };
 type SubmissionSource = Pick<
@@ -46,6 +50,7 @@ type SubmissionSource = Pick<
   | 'isDraft'
   | 'submittedAt'
   | 'submissionCount'
+  | 'revision'
   | 'aiScore'
   | 'aiReviewContent'
   | 'aiReviewMetadata'
@@ -122,13 +127,16 @@ export class SubmissionsService {
     const isOnlineAssignment = assignment.assignmentType === 'online';
     const submissionContent = isOnlineAssignment
       ? this.buildOnlineSubmissionContent(payload.onlineAnswers || [])
-      : String(payload.content || '').trim();
+      : sanitizeRichText(String(payload.content || '')).trim();
     const onlineAnswers = isOnlineAssignment
       ? this.normalizeOnlineAnswers(payload.onlineAnswers)
       : [];
     const objectiveGrading =
       isOnlineAssignment && !payload.isDraft
-        ? this.gradeOnlineAnswers(assignment.onlineQuestions || [], onlineAnswers)
+        ? this.gradeOnlineAnswers(
+            assignment.onlineQuestions || [],
+            onlineAnswers,
+          )
         : null;
     const objectiveResult = objectiveGrading?.result || null;
 
@@ -142,44 +150,63 @@ export class SubmissionsService {
     });
 
     if (existing) {
-      const previousSubmittedCount = existing.isDraft
-        ? 0
-        : existing.submissionCount || 0;
-      if (!payload.isDraft && existing.status === 'teacher_reviewed') {
+      const previousSubmittedCount = existing.submissionCount || 0;
+      if (
+        existing.status === 'teacher_reviewed' ||
+        existing.teacherScore != null ||
+        existing.teacherReviewedAt
+      ) {
         throw new BadRequestException(
           'Reviewed submissions cannot be submitted again',
+        );
+      }
+      if (
+        payload.isDraft &&
+        (!existing.isDraft || previousSubmittedCount > 0)
+      ) {
+        throw new BadRequestException(
+          'Submitted work cannot be changed back to a draft',
         );
       }
       if (!payload.isDraft && previousSubmittedCount >= 2) {
         throw new BadRequestException('Submission limit reached');
       }
 
-      existing.classId = targetClassId;
-      existing.className = className;
-      existing.content = submissionContent;
-      existing.attachments = isOnlineAssignment ? [] : payload.attachments || [];
-      existing.onlineAnswers = onlineAnswers;
-      existing.objectiveResult = objectiveResult;
-      existing.isDraft = !!payload.isDraft;
-      existing.status = payload.isDraft
-        ? 'draft'
-        : isOnlineAssignment
-          ? 'ai_reviewed'
-          : 'submitted';
-      existing.submittedAt = payload.isDraft
-        ? existing.submittedAt
-        : new Date();
-      existing.aiScore = objectiveGrading?.score ?? null;
-      existing.aiReviewContent = objectiveGrading?.review || null;
-      existing.aiReviewMetadata = objectiveGrading?.metadata || null;
-      existing.aiReviewedAt = objectiveGrading ? new Date() : null;
-      existing.teacherScore = null;
-      existing.teacherReviewContent = null;
-      existing.teacherReviewedAt = null;
-      existing.submissionCount = payload.isDraft
-        ? previousSubmittedCount
-        : previousSubmittedCount + 1;
-      await existing.save();
+      const revision = existing.revision ?? 0;
+      const updated = await this.submissionModel.findOneAndUpdate(
+        { _id: existing._id, ...revisionFilter(revision), ...unreviewedFilter },
+        {
+          $set: {
+            classId: targetClassId,
+            className,
+            content: submissionContent,
+            attachments: isOnlineAssignment ? [] : payload.attachments || [],
+            onlineAnswers,
+            objectiveResult,
+            isDraft: !!payload.isDraft,
+            status: payload.isDraft
+              ? 'draft'
+              : isOnlineAssignment
+                ? 'ai_reviewed'
+                : 'submitted',
+            submittedAt: payload.isDraft ? existing.submittedAt : new Date(),
+            aiScore: objectiveGrading?.score ?? null,
+            aiReviewContent: objectiveGrading?.review ?? null,
+            aiReviewMetadata: objectiveGrading?.metadata ?? null,
+            aiReviewedAt: objectiveGrading ? new Date() : null,
+            submissionCount: payload.isDraft
+              ? previousSubmittedCount
+              : previousSubmittedCount + 1,
+          },
+          $inc: { revision: 1 },
+        },
+        { returnDocument: 'after', runValidators: true },
+      );
+      if (!updated)
+        throw new ConflictException(
+          'Submission changed; reload before trying again',
+        );
+      existing = updated;
 
       if (!payload.isDraft && isOnlineAssignment) {
         await this.syncMembershipAfterSubmission(existing);
@@ -193,33 +220,48 @@ export class SubmissionsService {
       );
     }
 
-    existing = await this.submissionModel.create({
-      assignmentId: payload.assignmentId,
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      studentNumber: currentUser.studentId,
-      classId: targetClassId,
-      className,
-      content: submissionContent,
-      attachments: isOnlineAssignment ? [] : payload.attachments || [],
-      onlineAnswers,
-      objectiveResult,
-      status: payload.isDraft
-        ? 'draft'
-        : isOnlineAssignment
-          ? 'ai_reviewed'
-          : 'submitted',
-      isDraft: !!payload.isDraft,
-      submittedAt: payload.isDraft ? null : new Date(),
-      submissionCount: payload.isDraft ? 0 : 1,
-      aiScore: objectiveGrading?.score ?? null,
-      aiReviewContent: objectiveGrading?.review || null,
-      aiReviewMetadata: objectiveGrading?.metadata || null,
-      aiReviewedAt: objectiveGrading ? new Date() : null,
-      teacherScore: null,
-      teacherReviewContent: null,
-      teacherReviewedAt: null,
-    });
+    existing = await this.submissionModel
+      .create({
+        assignmentId: payload.assignmentId,
+        studentId: currentUser.id,
+        studentName: currentUser.name,
+        studentNumber: currentUser.studentId,
+        classId: targetClassId,
+        className,
+        content: submissionContent,
+        attachments: isOnlineAssignment ? [] : payload.attachments || [],
+        onlineAnswers,
+        objectiveResult,
+        status: payload.isDraft
+          ? 'draft'
+          : isOnlineAssignment
+            ? 'ai_reviewed'
+            : 'submitted',
+        isDraft: !!payload.isDraft,
+        submittedAt: payload.isDraft ? null : new Date(),
+        submissionCount: payload.isDraft ? 0 : 1,
+        revision: 1,
+        aiScore: objectiveGrading?.score ?? null,
+        aiReviewContent: objectiveGrading?.review || null,
+        aiReviewMetadata: objectiveGrading?.metadata || null,
+        aiReviewedAt: objectiveGrading ? new Date() : null,
+        teacherScore: null,
+        teacherReviewContent: null,
+        teacherReviewedAt: null,
+      })
+      .catch((error: unknown) => {
+        if (
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 11000
+        ) {
+          throw new ConflictException(
+            'Submission already created; reload before trying again',
+          );
+        }
+        throw error;
+      });
 
     if (!payload.isDraft && isOnlineAssignment) {
       await this.syncMembershipAfterSubmission(existing);
@@ -240,6 +282,11 @@ export class SubmissionsService {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
+    await requireStudentAssignmentAccess(
+      this.membershipModel,
+      currentUser,
+      assignment,
+    );
 
     const submission = await this.submissionModel
       .findOne({ assignmentId, studentId: currentUser.id })
@@ -319,7 +366,17 @@ export class SubmissionsService {
 
     const deletedClassId = submission.classId;
     const deletedStudentId = submission.studentId;
-    await this.submissionModel.findByIdAndDelete(body.submissionId);
+    const deleted = await this.submissionModel.findOneAndDelete({
+      _id: submission._id,
+      ...revisionFilter(submission.revision ?? 0),
+      ...(currentUser.role === 'superadmin'
+        ? {}
+        : { isDraft: true, ...unreviewedFilter }),
+    });
+    if (!deleted)
+      throw new ConflictException(
+        'Submission changed; reload before trying again',
+      );
     await this.syncMembershipSubmissionStats(deletedClassId, deletedStudentId);
     return this.appService.envelope(
       {
@@ -350,7 +407,14 @@ export class SubmissionsService {
       assignmentId: { $in: teacherAssignmentIds },
     };
 
-    if (query.assignmentId) filter.assignmentId = query.assignmentId;
+    if (query.assignmentId) {
+      if (!teacherAssignmentIds.includes(query.assignmentId)) {
+        throw new ForbiddenException(
+          'You are not allowed to view these submissions',
+        );
+      }
+      filter.assignmentId = query.assignmentId;
+    }
     if (query.classId) filter.classId = query.classId;
     if (query.status === 'submitted') {
       filter.status = {
@@ -456,6 +520,11 @@ export class SubmissionsService {
     if (item.isDraft) {
       throw new BadRequestException('Draft submissions cannot be reviewed');
     }
+    if (body.revision !== (item.revision ?? 0)) {
+      throw new ConflictException(
+        'Submission changed; reload before reviewing',
+      );
+    }
 
     const assignment = await this.assignmentModel
       .findById(item.assignmentId)
@@ -472,16 +541,44 @@ export class SubmissionsService {
       );
     }
 
-    item.teacherScore = body.teacherScore;
-    item.teacherReviewContent = body.teacherReviewContent;
-    item.teacherReviewedAt = new Date();
-    item.status = 'teacher_reviewed';
-    await item.save();
+    const reviewedAt = new Date();
+    const reviewContent = sanitizeRichText(body.teacherReviewContent);
+    const updated = await this.submissionModel.findOneAndUpdate(
+      { _id: item._id, isDraft: false, ...revisionFilter(item.revision ?? 0) },
+      {
+        $set: {
+          teacherScore: body.teacherScore,
+          teacherReviewContent: reviewContent,
+          teacherReviewedAt: reviewedAt,
+          status: 'teacher_reviewed',
+        },
+        $inc: { revision: 1 },
+        $push: {
+          teacherReviewHistory: {
+            teacherId: currentUser.id,
+            score: body.teacherScore,
+            content: reviewContent,
+            reviewedAt,
+          },
+        },
+      },
+      { returnDocument: 'after', runValidators: true },
+    );
+    if (!updated)
+      throw new ConflictException(
+        'Submission changed; reload before reviewing',
+      );
 
     return this.appService.envelope({ success: true, id: item.id }, 'success');
   }
 
   private async markAiReviewQueued(item: SubmissionDocument) {
+    const filter = {
+      _id: item._id,
+      ...revisionFilter(item.revision ?? 0),
+      ...unreviewedFilter,
+      isDraft: false,
+    };
     if (!this.aiReviewQueueService) {
       if (this.aiReviewConfigService.aiReviewRequired) {
         throw new ServiceUnavailableException('AI review queue is unavailable');
@@ -495,7 +592,17 @@ export class SubmissionsService {
         skippedReason: 'queue_disabled',
         skippedAt: new Date().toISOString(),
       };
-      await item.save();
+      const updated = await this.submissionModel.findOneAndUpdate(
+        filter,
+        {
+          $set: {
+            status: item.status,
+            aiReviewMetadata: item.aiReviewMetadata,
+          },
+        },
+        { returnDocument: 'after' },
+      );
+      if (!updated) return;
 
       await this.membershipModel.findOneAndUpdate(
         { classId: item.classId, studentId: item.studentId },
@@ -516,8 +623,15 @@ export class SubmissionsService {
       modelUsed: DEFAULT_DOUBAO_MODEL,
       queueStatus: 'queued',
     };
-    await item.save();
-    await this.aiReviewQueueService.enqueueReview(item.id);
+    const updated = await this.submissionModel.findOneAndUpdate(
+      filter,
+      {
+        $set: { status: item.status, aiReviewMetadata: item.aiReviewMetadata },
+      },
+      { returnDocument: 'after' },
+    );
+    if (!updated) return;
+    await this.aiReviewQueueService.enqueueReview(item.id, item.revision ?? 0);
 
     await this.membershipModel.findOneAndUpdate(
       { classId: item.classId, studentId: item.studentId },
@@ -549,7 +663,9 @@ export class SubmissionsService {
     }));
   }
 
-  private buildOnlineSubmissionContent(answers?: Array<Record<string, unknown>>) {
+  private buildOnlineSubmissionContent(
+    answers?: Array<Record<string, unknown>>,
+  ) {
     const normalized = this.normalizeOnlineAnswers(answers);
     return normalized
       .map((item, index) => `${index + 1}. ${item.answer}`)
@@ -681,6 +797,7 @@ export class SubmissionsService {
       updatedAt: item.updatedAt,
       createdAt: item.createdAt,
       submissionCount: item.submissionCount || 0,
+      revision: item.revision ?? 0,
       aiScore: item.aiScore,
       aiReviewContent: item.aiReviewContent,
       aiReviewMetadata: item.aiReviewMetadata,

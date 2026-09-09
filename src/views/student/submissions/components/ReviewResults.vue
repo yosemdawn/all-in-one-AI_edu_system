@@ -85,7 +85,7 @@
             </div>
             <div
               class="review-content"
-              v-html="formatReviewContent(aiReview.content || '')"
+              v-safe-html="formatReviewContent(aiReview.content || '')"
             />
           </div>
 
@@ -133,7 +133,7 @@
             </div>
             <div
               class="review-content"
-              v-html="formatReviewContent(teacherReview.content || '')"
+              v-safe-html="formatReviewContent(teacherReview.content || '')"
             />
           </div>
 

@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
   BadRequestException,
   Injectable,
@@ -156,6 +157,11 @@ export class UsersService {
   ) {
     const user = await this.getCurrentUserDocument(currentUser);
     const { currentPassword, newPassword } = body;
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must differ from the current password',
+      );
+    }
 
     if (!currentPassword) {
       throw new BadRequestException('Current password is required');
@@ -313,7 +319,7 @@ export class UsersService {
 
     user.passwordHash = await this.hashPassword(newPassword);
     user.passwordChangedAt = new Date();
-    user.mustChangePassword = false;
+    user.mustChangePassword = true;
     user.lastLogoutAt = new Date();
     user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
@@ -327,7 +333,8 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const newPassword = body?.newPassword || '123456';
+    const newPassword =
+      body?.newPassword || randomBytes(18).toString('base64url');
     if (String(newPassword).length < 6) {
       throw new BadRequestException(
         'New password must be at least 6 characters',
@@ -375,6 +382,8 @@ export class UsersService {
     const rows = Array.isArray(items) ? items : [];
     const failures: Array<{ index: number; reason: string }> = [];
     let successCount = 0;
+    const initialCredentials: Array<{ username: string; password: string }> =
+      [];
 
     for (let index = 0; index < rows.length; index += 1) {
       const item = rows[index];
@@ -384,9 +393,10 @@ export class UsersService {
           item.name?.trim() ||
           `user${Date.now()}${index}`;
 
+        const password = item.password || randomBytes(18).toString('base64url');
         await this.createUser({
           username,
-          password: item.password || '123456',
+          password,
           name: item.name || username,
           role: item.role || 'student',
           studentId: item.studentId,
@@ -394,6 +404,7 @@ export class UsersService {
           status: item.status || 'active',
         });
         successCount += 1;
+        if (!item.password) initialCredentials.push({ username, password });
       } catch (error: unknown) {
         failures.push({
           index,
@@ -408,6 +419,7 @@ export class UsersService {
       successCount,
       failureCount: failures.length,
       failures,
+      initialCredentials,
     };
   }
 

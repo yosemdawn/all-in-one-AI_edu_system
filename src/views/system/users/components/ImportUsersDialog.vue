@@ -111,6 +111,10 @@
           <div class="import-result-details text-center mb-4">
             <p>成功导入: {{ importResult.successCount }} 条</p>
             <p>导入失败: {{ importResult.failureCount }} 条</p>
+            <div v-if="initialCredentials.length">
+              <p>未填写密码的账号已生成独立初始密码。请在关闭前下载，首次登录需修改密码。</p>
+              <el-button @click="downloadInitialCredentials">下载初始密码</el-button>
+            </div>
             <!-- 失败详情按钮 -->
             <el-button
               v-if="importResult.failures && importResult.failures.length > 0"
@@ -179,6 +183,13 @@ const importResult = ref({
   failures: [],
 });
 
+const initialCredentials = ref<Array<{ username: string; password: string }>>([]);
+const downloadInitialCredentials = () => {
+  const sheet = XLSX.utils.json_to_sheet(initialCredentials.value.map(item => ({ 用户名: item.username, 初始密码: item.password })));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "初始密码");
+  XLSX.writeFile(workbook, "新用户初始密码.xlsx");
+};
 const showFailureDialog = ref(false);
 const validationMessage = ref("");
 
@@ -192,10 +203,12 @@ const open = () => {
 const closeDialog = () => {
   if (importing.value) return;
   dialogVisible.value = false;
+  initialCredentials.value = [];
 };
 
 // 重置对话框状态
 const resetDialog = () => {
+  initialCredentials.value = [];
   activeStep.value = 0;
   fileList.value = [];
   previewData.value = [];
@@ -337,7 +350,7 @@ const importUsers = async () => {
   try {
     // 调用后端的批量导入API
     const response = await importUsersBatch(previewData.value);
-    console.log(response, "response");
+    initialCredentials.value = response.initialCredentials || [];
     // 更新导入结果
     importResult.value = {
       success: response.success,

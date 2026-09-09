@@ -1,3 +1,4 @@
+import { AllowPasswordChange } from './decorators/allow-password-change.decorator';
 import {
   BadRequestException,
   Body,
@@ -60,6 +61,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('v1/auth/logout')
+  @AllowPasswordChange()
   logout(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.authService.logout(currentUser);
   }
@@ -77,12 +79,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('v1/auth/profile')
+  @AllowPasswordChange()
   profile(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.authService.profile(currentUser);
   }
 
   @UseGuards(JwtAuthGuard)
   @Put('v1/auth/password')
+  @AllowPasswordChange()
   changePassword(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() body: ChangePasswordDto,
@@ -92,6 +96,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Put('v1/auth/first-password-change')
+  @AllowPasswordChange()
   firstChangePassword(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() body: ChangePasswordDto,

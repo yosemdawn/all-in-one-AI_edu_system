@@ -46,6 +46,7 @@ import type {
 } from "@wangeditor/editor";
 import { ElMessage } from "element-plus";
 import { DomEditor } from "@wangeditor/editor";
+import { sanitizeRichText } from "@/utils/safe-html";
 
 interface Props {
   modelValue?: string;
@@ -116,7 +117,7 @@ const getTextLength = (html: string): number => {
 
   // 创建临时DOM元素来提取纯文本
   const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html;
+  tempDiv.innerHTML = sanitizeRichText(html);
   const text = tempDiv.textContent || tempDiv.innerText || "";
 
   // 移除多余的空白字符并计算长度
@@ -179,7 +180,7 @@ watch(
   () => props.modelValue,
   (val) => {
     if (val !== valueHtml.value) {
-      valueHtml.value = val || "";
+      valueHtml.value = sanitizeRichText(val);
 
       // 更新字数统计
       if (props.maxLength) {

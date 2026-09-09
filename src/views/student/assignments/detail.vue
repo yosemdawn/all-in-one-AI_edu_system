@@ -25,12 +25,12 @@
       <div v-if="assignment" class="p-6">
         <div class="prose max-w-none">
           <h3 class="text-lg font-medium text-gray-900 mb-3">作业要求</h3>
-          <div class="text-gray-700" v-html="assignment.description"></div>
+          <div class="text-gray-700" v-safe-html="assignment.description"></div>
         </div>
 
         <div v-if="assignment.questionMaterial?.content" class="mt-6 detail-card">
           <h3 class="text-lg font-medium text-gray-900 mb-3">题目内容</h3>
-          <div class="text-gray-700" v-html="assignment.questionMaterial.content"></div>
+          <div class="text-gray-700" v-safe-html="assignment.questionMaterial.content"></div>
         </div>
 
         <div v-if="assignment.gradingNotes" class="mt-6 detail-card detail-card--notes">

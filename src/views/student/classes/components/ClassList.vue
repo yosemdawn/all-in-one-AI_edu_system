@@ -63,7 +63,7 @@
         </div>
 
         <div class="class-card__footer">
-          <span class="class-card__code">邀请码：{{ classItem.code || "暂无" }}</span>
+          <span class="class-card__code">已加入班级</span>
           <span v-if="selectedClassId === classItem._id" class="class-card__active-text">
             当前查看
           </span>

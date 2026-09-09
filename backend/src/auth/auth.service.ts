@@ -191,6 +191,11 @@ export class AuthService {
     currentUser: AuthenticatedUser,
     body: ChangePasswordDto,
   ) {
+    if (body.currentPassword === body.newPassword) {
+      throw new BadRequestException(
+        'New password must differ from the current password',
+      );
+    }
     if (body.newPassword !== body.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }

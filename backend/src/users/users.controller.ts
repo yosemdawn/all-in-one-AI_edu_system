@@ -1,3 +1,4 @@
+import { AllowPasswordChange } from '../auth/decorators/allow-password-change.decorator';
 import {
   Body,
   Controller,
@@ -56,6 +57,7 @@ export class UsersController {
   }
 
   @Get('profile')
+  @AllowPasswordChange()
   async getUserProfile(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.appService.envelope(
       await this.usersService.getCurrentUserProfile(currentUser),
@@ -75,6 +77,7 @@ export class UsersController {
   }
 
   @Put('password')
+  @AllowPasswordChange()
   async updatePassword(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() body: UpdateUserPasswordDto,

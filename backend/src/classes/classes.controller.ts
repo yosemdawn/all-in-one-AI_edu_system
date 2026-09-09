@@ -35,8 +35,11 @@ export class ClassesController {
   }
 
   @Get(':id')
-  getClass(@Param('id') id: string) {
-    return this.classesService.getClass(id);
+  getClass(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.classesService.getClass(currentUser, id);
   }
 
   @Roles('teacher', 'superadmin')
@@ -79,10 +82,11 @@ export class ClassesController {
   @Roles('teacher', 'superadmin')
   @Get(':id/students')
   getClassStudents(
+    @CurrentUser() currentUser: AuthenticatedUser,
     @Param('id') id: string,
     @Query() query: ClassStudentsQueryDto,
   ) {
-    return this.classesService.getClassStudents(id, query);
+    return this.classesService.getClassStudents(currentUser, id, query);
   }
 
   @Roles('teacher', 'superadmin')

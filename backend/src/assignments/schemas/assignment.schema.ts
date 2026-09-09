@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import {
+  sanitizeRichText,
+  sanitizeMaterial,
+} from '../../common/security/rich-text';
 
 export type AssignmentDocument = HydratedDocument<Assignment>;
 
@@ -8,7 +12,7 @@ export class Assignment {
   @Prop({ required: true, trim: true })
   title: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, set: sanitizeRichText })
   description: string;
 
   @Prop({ required: true, index: true })
@@ -31,10 +35,10 @@ export class Assignment {
   @Prop({ type: Object, default: null })
   aiRule?: Record<string, unknown> | null;
 
-  @Prop({ type: Object, default: null })
+  @Prop({ type: Object, default: null, set: sanitizeMaterial })
   questionMaterial?: Record<string, unknown> | null;
 
-  @Prop({ type: Object, default: null })
+  @Prop({ type: Object, default: null, set: sanitizeMaterial })
   referenceAnswer?: Record<string, unknown> | null;
 
   @Prop({

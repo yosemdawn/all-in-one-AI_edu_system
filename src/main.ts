@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import { safeHtml } from "./utils/safe-html";
 import { ElLoading } from "element-plus";
 import "element-plus/dist/index.css";
 import App from "./App.vue";
@@ -29,5 +30,6 @@ window.addEventListener("unhandledrejection", (event) => {
 app.use(store);
 app.use(router);
 app.directive("loading", ElLoading.directive);
+app.directive("safe-html", safeHtml);
 
 app.mount("#app");

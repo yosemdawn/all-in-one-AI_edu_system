@@ -1,3 +1,4 @@
+import { requireStudentAssignmentAccess } from '../common/security/student-assignment-access';
 import {
   BadRequestException,
   ForbiddenException,
@@ -381,9 +382,13 @@ export class AssignmentsService {
     const scoredSubmissions = nonDraftSubmissions.filter(
       (item) => this.getEffectiveScore(item) !== null,
     );
-    const scores = scoredSubmissions.map((item) => this.getEffectiveScore(item) || 0);
+    const scores = scoredSubmissions.map(
+      (item) => this.getEffectiveScore(item) || 0,
+    );
     const averageScore = scores.length
-      ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10
+      ? Math.round(
+          (scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10,
+        ) / 10
       : null;
 
     const classStats = assignment.classes.map<AssignmentAnalyticsClassStat>(
@@ -524,7 +529,10 @@ export class AssignmentsService {
       item.referenceAnswer = payload.referenceAnswer;
     if (payload.assignmentType !== undefined)
       item.assignmentType = payload.assignmentType;
-    if (payload.onlineQuestions !== undefined || payload.assignmentType !== undefined)
+    if (
+      payload.onlineQuestions !== undefined ||
+      payload.assignmentType !== undefined
+    )
       item.onlineQuestions = this.normalizeOnlineQuestions({
         assignmentType: payload.assignmentType || item.assignmentType,
         onlineQuestions: payload.onlineQuestions ?? item.onlineQuestions,
@@ -747,25 +755,11 @@ export class AssignmentsService {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    if (assignment.status === 'draft') {
-      throw new ForbiddenException(
-        'Draft assignments are not visible to students',
-      );
-    }
-
-    const memberships = await this.membershipModel
-      .find({
-        studentId: currentUser.id,
-        classId: { $in: assignment.classes.map((item) => item.id) },
-        status: 'active',
-      })
-      .lean();
-
-    if (!memberships.length) {
-      throw new ForbiddenException(
-        'Student is not in any class for this assignment',
-      );
-    }
+    const memberships = await requireStudentAssignmentAccess(
+      this.membershipModel,
+      currentUser,
+      assignment,
+    );
 
     const availableClassIds = memberships.map((item) => item.classId);
     if (classId && !availableClassIds.includes(classId)) {
@@ -965,7 +959,9 @@ export class AssignmentsService {
 
   private normalizeOnlineQuestions(payload: {
     assignmentType?: Assignment['assignmentType'];
-    onlineQuestions?: Array<Record<string, unknown>> | Assignment['onlineQuestions'];
+    onlineQuestions?:
+      | Array<Record<string, unknown>>
+      | Assignment['onlineQuestions'];
   }) {
     if (payload.assignmentType !== 'online') {
       return [];
@@ -996,7 +992,9 @@ export class AssignmentsService {
         throw new BadRequestException(`Question ${index + 1} stem is required`);
       }
       if (!answer) {
-        throw new BadRequestException(`Question ${index + 1} answer is required`);
+        throw new BadRequestException(
+          `Question ${index + 1} answer is required`,
+        );
       }
       if (!Number.isFinite(score) || score <= 0) {
         throw new BadRequestException(`Question ${index + 1} score is invalid`);
@@ -1125,9 +1123,7 @@ export class AssignmentsService {
 
     scores.forEach((rawScore) => {
       const score = Math.max(0, Math.min(100, rawScore));
-      const band = bands.find(
-        (item) => score >= item.min && score <= item.max,
-      );
+      const band = bands.find((item) => score >= item.min && score <= item.max);
       if (band) band.count += 1;
     });
 
@@ -1255,7 +1251,9 @@ export class AssignmentsService {
 
     if (topWrongQuestions.length > 0) {
       // 添加总体薄弱点概述
-      const highErrorQuestions = topWrongQuestions.filter((q) => q.wrongRate >= 50);
+      const highErrorQuestions = topWrongQuestions.filter(
+        (q) => q.wrongRate >= 50,
+      );
       const mediumErrorQuestions = topWrongQuestions.filter(
         (q) => q.wrongRate >= 30 && q.wrongRate < 50,
       );
@@ -1274,8 +1272,13 @@ export class AssignmentsService {
       // 逐题分析薄弱点
       topWrongQuestions.forEach((item, index) => {
         const severity =
-          item.wrongRate >= 50 ? '严重' : item.wrongRate >= 30 ? '中等' : '一般';
-        const stemPreview = item.stem.length > 20 ? item.stem.slice(0, 20) + '...' : item.stem;
+          item.wrongRate >= 50
+            ? '严重'
+            : item.wrongRate >= 30
+              ? '中等'
+              : '一般';
+        const stemPreview =
+          item.stem.length > 20 ? item.stem.slice(0, 20) + '...' : item.stem;
         weakPoints.push(
           `第 ${item.questionNumber || '-'} 题（${stemPreview}）错误率 ${item.wrongRate}%，` +
             `属于${severity}薄弱点，${item.wrongCount} 人答错。`,

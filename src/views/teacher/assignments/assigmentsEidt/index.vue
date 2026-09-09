@@ -358,6 +358,7 @@
 </template>
 
 <script setup lang="ts">
+import { sanitizeRichText } from "@/utils/safe-html";
 import { ref, reactive, onMounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -447,7 +448,7 @@ const formRules: FormRules = {
 
         // 计算纯文本字数
         const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = value;
+        tempDiv.innerHTML = sanitizeRichText(value);
         const text = tempDiv.textContent || tempDiv.innerText || "";
         const textLength = text.replace(/\s+/g, " ").trim().length;
 

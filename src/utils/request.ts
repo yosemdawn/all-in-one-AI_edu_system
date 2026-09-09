@@ -2,6 +2,7 @@ import axios from "axios";
 import type { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { ElLoading, ElMessage, ElMessageBox } from "element-plus";
 import store from "@/store";
+import router from "@/router";
 import { getAuthConfig } from "./auth-codes";
 
 const AUTH_ENTRY_ENDPOINTS = [
@@ -114,6 +115,12 @@ service.interceptors.response.use(
     console.log("处理HTTP状态码", error.response?.status, originalRequest?.url);
 
     if (error.response?.status === 403) {
+      if ((error.response.data as { errorCode?: string })?.errorCode === "PASSWORD_CHANGE_REQUIRED") {
+        store.commit("user/SET_USER_INFO", { mustChangePassword: true });
+        if (router.currentRoute.value.path !== "/force-change-password") {
+          void router.replace("/force-change-password");
+        }
+      }
       ElMessage.error(getResponseErrorMessage(error, "访问被拒绝"));
       return Promise.reject(error);
     }

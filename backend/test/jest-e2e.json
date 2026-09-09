@@ -4,6 +4,21 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  }
+    "^.+\\.ts$": "ts-jest",
+    "^.+\\.js$": [
+      "ts-jest",
+      {
+        "tsconfig": {
+          "allowJs": true,
+          "checkJs": false,
+          "module": "CommonJS",
+          "target": "ES2023"
+        },
+        "diagnostics": false
+      }
+    ]
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(htmlparser2|domhandler|domutils|domelementtype|dom-serializer|entities|launder)/)"
+  ]
 }

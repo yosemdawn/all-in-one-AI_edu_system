@@ -2,6 +2,8 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Job } from 'bullmq';
+import { randomUUID } from 'crypto';
+import { revisionFilter, unreviewedFilter } from './submission-state';
 import { Model } from 'mongoose';
 import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
 import {
@@ -42,107 +44,119 @@ export class AiReviewProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ submissionId: string }>) {
-    const submission = await this.submissionModel.findById(
-      job.data.submissionId,
-    );
-    if (!submission) {
-      this.logger.warn(`Submission not found: ${job.data.submissionId}`);
+  async process(job: Job<{ submissionId: string; revision?: number }>) {
+    const { submissionId, revision } = job.data;
+    // A pre-upgrade job has no content version and must never grade newer work.
+    if (!Number.isInteger(revision) || revision! < 1) {
+      await this.submissionModel.updateOne(
+        {
+          _id: submissionId,
+          ...revisionFilter(0),
+          ...unreviewedFilter,
+          isDraft: false,
+          status: {
+            $in: ['submitted', 'ai_review_queued', 'ai_review_failed'],
+          },
+        },
+        {
+          $set: {
+            status: 'ai_review_failed',
+            aiReviewMetadata: {
+              queueStatus: 'failed',
+              error:
+                'Legacy AI job has no revision; teacher review is required',
+            },
+          },
+        },
+      );
       return;
     }
-
-    const assignment = await this.assignmentModel.findById(
-      submission.assignmentId,
-    );
-    if (!assignment) {
-      submission.status = 'ai_review_failed';
-      submission.aiReviewMetadata = {
-        provider: 'doubao',
-        queueStatus: 'failed',
-        error: 'Assignment not found',
-        failedAt: new Date().toISOString(),
-      };
-      await submission.save();
-      return;
-    }
-
-    const teacherAiSettings = await this.resolveTeacherAiSettings(assignment);
-    submission.status = 'ai_review_queued';
-    submission.aiReviewMetadata = {
-      provider: 'doubao',
-      modelUsed: teacherAiSettings.model,
-      queueStatus: 'processing',
-      jobId: String(job.id),
-      queuedAt:
-        submission.aiReviewMetadata?.queuedAt || new Date().toISOString(),
-      processingStartedAt: new Date().toISOString(),
+    const processingToken = randomUUID();
+    const versionFilter = {
+      _id: submissionId,
+      revision,
+      ...unreviewedFilter,
+      isDraft: false,
+      status: { $in: ['submitted', 'ai_review_queued', 'ai_review_failed'] },
     };
-    await submission.save();
-
-    const result = await this.doubaoAiReviewService.review(
-      submission,
-      assignment,
-      {
-        apiKey: teacherAiSettings.apiKey,
-        model: teacherAiSettings.model,
-      },
-    );
-
-    if (!result.success) {
-      submission.status = 'ai_review_failed';
-      submission.aiScore = null;
-      submission.aiReviewContent = null;
-      submission.aiReviewedAt = null;
-      submission.aiReviewMetadata = {
-        provider: 'doubao',
-        modelUsed: teacherAiSettings.model,
-        queueStatus: 'failed',
-        error: result.error,
-        rawContent: result.rawContent,
-        failedAt: new Date().toISOString(),
-      };
-      await submission.save();
-      throw new Error(result.error || 'AI review failed');
-    }
-
-    submission.status = 'ai_reviewed';
-    submission.aiScore = result.score;
-    submission.aiReviewContent = result.review;
-    submission.aiReviewedAt = new Date();
-    submission.aiReviewMetadata = {
-      provider: 'doubao',
-      modelUsed: result.model || teacherAiSettings.model,
-      queueStatus: 'completed',
-      usage: result.usage,
-      tokenUsed: this.resolveUsageTokens(result.usage),
-      highlights: result.highlights,
-      rawContent: result.rawContent,
-      completedAt: new Date().toISOString(),
-    };
-    await submission.save();
-
-    await this.aiModelModel.updateOne(
-      { code: 'doubao' },
-      {
-        $inc: {
-          totalUsage: 1,
-          totalTokens: this.resolveUsageTokens(result.usage),
-        },
-        $set: {
-          lastUsedAt: submission.aiReviewedAt || new Date(),
-        },
-      },
-    );
-
-    await this.membershipModel.findOneAndUpdate(
-      { classId: submission.classId, studentId: submission.studentId },
+    const submission = await this.submissionModel.findOneAndUpdate(
+      versionFilter,
       {
         $set: {
-          totalSubmissions: submission.submissionCount,
-          lastSubmissionTime: submission.submittedAt || new Date(),
+          status: 'ai_review_queued',
+          aiReviewMetadata: {
+            provider: 'doubao',
+            queueStatus: 'processing',
+            jobId: String(job.id),
+            processingToken,
+            processingStartedAt: new Date().toISOString(),
+          },
         },
       },
+      { returnDocument: 'after' },
     );
+    if (!submission) return;
+    const resultFilter = {
+      ...versionFilter,
+      'aiReviewMetadata.processingToken': processingToken,
+    };
+    try {
+      const assignment = await this.assignmentModel.findById(
+        submission.assignmentId,
+      );
+      if (!assignment) throw new Error('Assignment not found');
+      const teacherAiSettings = await this.resolveTeacherAiSettings(assignment);
+      const result = await this.doubaoAiReviewService.review(
+        submission,
+        assignment,
+        teacherAiSettings,
+      );
+      if (!result.success) throw new Error(result.error || 'AI review failed');
+      const reviewedAt = new Date();
+      const updated = await this.submissionModel.updateOne(resultFilter, {
+        $set: {
+          status: 'ai_reviewed',
+          aiScore: result.score,
+          aiReviewContent: result.review,
+          aiReviewedAt: reviewedAt,
+          aiReviewMetadata: {
+            provider: 'doubao',
+            modelUsed: result.model || teacherAiSettings.model,
+            queueStatus: 'completed',
+            usage: result.usage,
+            tokenUsed: this.resolveUsageTokens(result.usage),
+            highlights: result.highlights,
+            rawContent: result.rawContent,
+            completedAt: reviewedAt.toISOString(),
+          },
+        },
+      });
+      if (!updated.modifiedCount) return;
+      await this.aiModelModel.updateOne(
+        { code: 'doubao' },
+        {
+          $inc: {
+            totalUsage: 1,
+            totalTokens: this.resolveUsageTokens(result.usage),
+          },
+          $set: { lastUsedAt: reviewedAt },
+        },
+      );
+    } catch (error) {
+      // The same version/claim predicate protects manual reviews from failures too.
+      const failed = await this.submissionModel.updateOne(resultFilter, {
+        $set: {
+          status: 'ai_review_failed',
+          aiReviewMetadata: {
+            provider: 'doubao',
+            queueStatus: 'failed',
+            error: error instanceof Error ? error.message : 'AI review failed',
+            failedAt: new Date().toISOString(),
+          },
+        },
+      });
+      if (failed.modifiedCount) throw error;
+    }
   }
 
   private resolveUsageTokens(usage: Record<string, unknown> | undefined) {

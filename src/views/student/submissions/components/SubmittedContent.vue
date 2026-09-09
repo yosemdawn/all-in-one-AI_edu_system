@@ -15,7 +15,7 @@
         <h4 class="font-medium text-gray-900 mb-2">作业内容：</h4>
         <div
           class="prose max-w-none bg-gray-50 p-4 rounded-md"
-          v-html="submission?.content"
+          v-safe-html="submission?.content"
         ></div>
       </div>
 

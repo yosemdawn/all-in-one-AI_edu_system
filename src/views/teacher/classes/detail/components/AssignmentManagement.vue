@@ -160,7 +160,7 @@
           <div
             v-if="assignment.description"
             class="text-[14px] text-gray-600 mb-3 line-clamp-2"
-            v-html="assignment.description"
+            v-safe-html="assignment.description"
           ></div>
 
           <!-- 时间信息 -->

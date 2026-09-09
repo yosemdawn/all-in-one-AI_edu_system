@@ -35,7 +35,15 @@ describe('AiReviewProcessor', () => {
     };
 
     const submissionModel = {
-      findById: jest.fn().mockResolvedValue(submission),
+      findOneAndUpdate: jest.fn().mockResolvedValue(submission),
+      updateOne: jest
+        .fn()
+        .mockImplementation(
+          (_filter: unknown, update: { $set: SavedState }) => {
+            savedStates.push(update.$set);
+            return Promise.resolve({ modifiedCount: 1 });
+          },
+        ),
     };
     const assignmentModel = {
       findById: jest.fn().mockResolvedValue({
@@ -73,7 +81,7 @@ describe('AiReviewProcessor', () => {
     );
     const job = {
       id: 'job-1',
-      data: { submissionId: 'submission-1' },
+      data: { submissionId: 'submission-1', revision: 1 },
     } as unknown as Job<{ submissionId: string }>;
 
     await expect(processor.process(job)).rejects.toThrow(
