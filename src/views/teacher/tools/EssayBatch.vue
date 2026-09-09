@@ -1,8 +1,13 @@
 <template>
   <div class="tool-page">
-    <PageHeader title="批量作文检查" description="上传作文要求和学生作文图片，由豆包多模态直接识别并批改。">
+    <PageHeader
+      title="批量作文检查"
+      description="上传作文要求和学生作文图片，由豆包多模态直接识别并批改。"
+    >
       <template #actions>
-        <el-button :icon="List" @click="router.push('/teacher/tools/tasks')">查看记录</el-button>
+        <el-button :icon="List" @click="router.push('/teacher/tools/tasks')"
+          >查看记录</el-button
+        >
       </template>
     </PageHeader>
 
@@ -11,10 +16,18 @@
         <h3>任务信息</h3>
         <el-form label-position="top">
           <el-form-item label="任务名称">
-            <el-input v-model="form.title" placeholder="例如：高一3班日常作文检查" />
+            <el-input
+              v-model="form.title"
+              placeholder="例如：高一3班日常作文检查"
+            />
           </el-form-item>
           <el-form-item label="关联班级">
-            <el-select v-model="form.classId" clearable filterable placeholder="可选">
+            <el-select
+              v-model="form.classId"
+              clearable
+              filterable
+              placeholder="可选"
+            >
               <el-option
                 v-for="item in classes"
                 :key="item._id"
@@ -65,14 +78,24 @@
           class="upload-block"
           drag
           multiple
-          accept="image/*"
+          :accept="TOOL_IMAGE_ACCEPT"
+          :on-change="checkRequirementImages"
           :auto-upload="false"
         >
           <el-icon><UploadFilled /></el-icon>
           <div class="el-upload__text">上传作文题目/要求图片</div>
+          <template #tip
+            ><div class="el-upload__tip">
+              {{ TOOL_IMAGE_HINT }}题目最多 5 张。
+            </div></template
+          >
         </el-upload>
         <div class="actions">
-          <el-button :icon="MagicStick" :loading="previewing" @click="previewRequirements">
+          <el-button
+            :icon="MagicStick"
+            :loading="previewing"
+            @click="previewRequirements"
+          >
             预览识别要求
           </el-button>
         </div>
@@ -84,21 +107,38 @@
           v-model:file-list="essayFiles"
           drag
           multiple
-          accept="image/*"
+          :accept="TOOL_IMAGE_ACCEPT"
+          :on-change="checkEssayImages"
           :auto-upload="false"
         >
           <el-icon><UploadFilled /></el-icon>
           <div class="el-upload__text">拖拽作文图片到这里，或点击选择</div>
+          <template #tip
+            ><div class="el-upload__tip">
+              作文最多 100 张，和题目图片合计不超过 40 MB。
+            </div></template
+          >
         </el-upload>
       </section>
     </div>
 
     <div class="submit-bar">
-      <el-button type="primary" :icon="Upload" :loading="submitting" @click="submitTask">
+      <el-button
+        type="primary"
+        :icon="Upload"
+        :loading="submitting"
+        @click="submitTask"
+      >
         创建作文检查任务
       </el-button>
     </div>
 
+    <el-alert
+      v-if="progressError && !currentTask"
+      :title="progressError"
+      type="warning"
+      :closable="false"
+    />
     <section v-if="currentTask" class="panel result-panel">
       <div class="result-head">
         <div>
@@ -107,18 +147,27 @@
             {{ taskStatusText(currentTask.status) }}
           </el-tag>
         </div>
-        <el-button :icon="Download" @click="downloadResult(currentTask)">导出结果</el-button>
+        <el-button :icon="Download" @click="downloadResult(currentTask)"
+          >导出结果</el-button
+        >
       </div>
-      <el-progress :percentage="progressPercent(currentTask)" />
+      <ToolTaskProgress :task="currentTask" :error="progressError" />
       <el-table :data="currentTask.items" border>
         <el-table-column prop="fileName" label="文件" min-width="180" />
         <el-table-column prop="studentName" label="姓名" width="110" />
         <el-table-column prop="studentNumber" label="学号" width="120" />
         <el-table-column label="匹配" width="110">
-          <template #default="{ row }">{{ row.matchedStudent?.status || "-" }}</template>
+          <template #default="{ row }">{{
+            row.matchedStudent?.status || "-"
+          }}</template>
         </el-table-column>
         <el-table-column prop="score" label="分数" width="90" />
-        <el-table-column prop="summaryComment" label="总评" min-width="260" show-overflow-tooltip />
+        <el-table-column
+          prop="summaryComment"
+          label="总评"
+          min-width="260"
+          show-overflow-tooltip
+        />
         <el-table-column prop="error" label="错误" min-width="180" />
       </el-table>
     </section>
@@ -126,7 +175,15 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import ToolTaskProgress from "./ToolTaskProgress.vue";
+import {
+  TOOL_IMAGE_ACCEPT,
+  TOOL_IMAGE_HINT,
+  toolUploadError,
+} from "./upload-validation";
+import type { UploadFile } from "element-plus";
+import { useToolTaskProgress } from "./use-tool-task-progress";
+import { onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -137,17 +194,20 @@ import {
   UploadFilled,
 } from "@element-plus/icons-vue";
 import PageHeader from "@/components/PageHeader.vue";
-import { AssignmentStatus, getAssignmentList, type Assignment } from "@/api/assignments";
+import {
+  AssignmentStatus,
+  getAssignmentList,
+  type Assignment,
+} from "@/api/assignments";
 import { getClassList } from "@/api/classes";
 import type { Class } from "@/types/classes";
 import {
   createEssayTask,
   downloadToolTask,
-  getToolTask,
   previewEssayRequirements,
   type ToolTask,
 } from "@/api/teacher-tools";
-import { progressPercent, taskStatusText, taskStatusType } from "./shared";
+import { taskStatusText, taskStatusType } from "./shared";
 
 const router = useRouter();
 const classes = ref<Class[]>([]);
@@ -157,8 +217,8 @@ const requirementFiles = ref<any[]>([]);
 const essayFiles = ref<any[]>([]);
 const previewing = ref(false);
 const submitting = ref(false);
-const currentTask = ref<ToolTask | null>(null);
-let pollTimer: number | undefined;
+const { currentTask, progressError, trackTask, restoreTask } =
+  useToolTaskProgress("essay_batch");
 
 const form = reactive({
   title: "",
@@ -169,7 +229,7 @@ const form = reactive({
 });
 
 onMounted(async () => {
-  await Promise.all([loadClasses(), loadAssignments()]);
+  await Promise.all([loadClasses(), loadAssignments(), restoreTask()]);
 });
 
 watch(
@@ -179,10 +239,6 @@ watch(
     await loadAssignments();
   }
 );
-
-onBeforeUnmount(() => {
-  if (pollTimer) window.clearInterval(pollTimer);
-});
 
 async function loadClasses() {
   const data = await getClassList({ page: 1, limit: 100, status: "active" });
@@ -201,8 +257,45 @@ async function loadAssignments() {
   assignments.value = data.items || [];
 }
 
+function selectedImageGroups() {
+  return [
+    {
+      files: requirementFiles.value.map((item) => item.raw).filter(Boolean),
+      maxCount: 5,
+      label: "题目图片",
+    },
+    {
+      files: essayFiles.value.map((item) => item.raw).filter(Boolean),
+      maxCount: 100,
+      label: "作文图片",
+    },
+  ];
+}
+
+function checkRequirementImages(file: UploadFile) {
+  const error = toolUploadError(selectedImageGroups());
+  if (error) {
+    requirementFiles.value = requirementFiles.value.filter(
+      (item) => item.uid !== file.uid
+    );
+    ElMessage.warning({ message: error, grouping: true });
+  }
+}
+
+function checkEssayImages(file: UploadFile) {
+  const error = toolUploadError(selectedImageGroups());
+  if (error) {
+    essayFiles.value = essayFiles.value.filter((item) => item.uid !== file.uid);
+    ElMessage.warning({ message: error, grouping: true });
+  }
+}
+
 async function previewRequirements() {
   const files = requirementFiles.value.map((item) => item.raw).filter(Boolean);
+  const uploadError = toolUploadError([
+    { files, maxCount: 5, label: "题目图片" },
+  ]);
+  if (uploadError) return void ElMessage.warning(uploadError);
   if (!files.length && !requirementText.value.trim()) {
     ElMessage.warning("请先输入作文要求或上传题目图片");
     return;
@@ -221,6 +314,8 @@ async function previewRequirements() {
 }
 
 async function submitTask() {
+  const uploadError = toolUploadError(selectedImageGroups());
+  if (uploadError) return void ElMessage.warning(uploadError);
   const files = essayFiles.value.map((item) => item.raw).filter(Boolean);
   if (!files.length) {
     ElMessage.warning("请上传学生作文图片");
@@ -257,23 +352,11 @@ async function submitTask() {
       .filter(Boolean)
       .forEach((file) => data.append("requirementImages", file));
     files.forEach((file) => data.append("essayImages", file));
-    currentTask.value = await createEssayTask(data);
+    trackTask(await createEssayTask(data));
     ElMessage.success("任务已创建");
-    startPolling(currentTask.value.id);
   } finally {
     submitting.value = false;
   }
-}
-
-function startPolling(taskId: string) {
-  if (pollTimer) window.clearInterval(pollTimer);
-  pollTimer = window.setInterval(async () => {
-    const task = await getToolTask(taskId);
-    currentTask.value = task;
-    if (["completed", "partial_failed", "failed", "cancelled"].includes(task.status)) {
-      if (pollTimer) window.clearInterval(pollTimer);
-    }
-  }, 3000);
 }
 
 function downloadResult(task: ToolTask) {

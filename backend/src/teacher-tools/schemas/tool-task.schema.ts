@@ -14,7 +14,11 @@ export type ToolTaskStatus =
 
 @Schema({ timestamps: true, collection: 'tool_tasks' })
 export class ToolTask {
-  @Prop({ required: true, enum: ['objective_grading', 'essay_batch'], index: true })
+  @Prop({
+    required: true,
+    enum: ['objective_grading', 'essay_batch'],
+    index: true,
+  })
   type: ToolTaskType;
 
   @Prop({ required: true, index: true })
@@ -52,6 +56,17 @@ export class ToolTask {
     index: true,
   })
   status: ToolTaskStatus;
+
+  @Prop({ type: Date, default: null })
+  startedAt?: Date | null;
+
+  @Prop({ type: Object, default: null })
+  progress?: {
+    stage: string;
+    currentFileName?: string;
+    currentIndex?: number;
+    stageStartedAt: string;
+  } | null;
 
   @Prop({ default: 0 })
   totalCount: number;

@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:20-alpine AS build-stage
+FROM node:22-alpine AS build-stage
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安装依赖
-RUN npm install
+RUN npm ci
 
 # 复制源代码
 COPY . .
@@ -15,7 +15,7 @@ COPY . .
 # 执行构建
 # 注意：构建时可能需要注入环境变量，比如 VITE_API_BASE_URL
 # 如果没有注入，默认会使用 /api (在 nginx 中配置代理)
-RUN npm run build-only
+RUN npm run build
 
 # Stage 2: Serve
 FROM nginx:stable-alpine AS production-stage

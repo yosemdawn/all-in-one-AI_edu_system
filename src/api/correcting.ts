@@ -85,3 +85,14 @@ export function submitTeacherReview(params: {
     data: params,
   });
 }
+
+export function retryAiReview(
+  submissionId: string,
+  revision: number
+): Promise<SubmissionRecord> {
+  return request({
+    url: "/teachers/submissions/retry-ai",
+    method: "post",
+    data: { submissionId, revision },
+  });
+}

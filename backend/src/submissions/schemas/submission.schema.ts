@@ -83,6 +83,9 @@ export class Submission {
     reviewedAt: Date;
   }>;
 
+  @Prop({ type: Object, default: null })
+  aiDispatch?: { state: string; requestedAt: Date; nextAttemptAt: Date } | null;
+
   @Prop({ type: Number, default: null })
   aiScore?: number | null;
 
@@ -111,3 +114,8 @@ export class Submission {
 
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);
 SubmissionSchema.index({ assignmentId: 1, studentId: 1 }, { unique: true });
+
+SubmissionSchema.index({
+  'aiDispatch.state': 1,
+  'aiDispatch.nextAttemptAt': 1,
+});

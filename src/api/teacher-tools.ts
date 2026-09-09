@@ -21,6 +21,13 @@ export interface ToolTask {
   status: ToolTaskStatus;
   totalCount: number;
   processedCount: number;
+  startedAt?: string;
+  progress?: {
+    stage: string;
+    currentFileName?: string;
+    currentIndex?: number;
+    stageStartedAt?: string;
+  };
   successCount: number;
   failureCount: number;
   config: Record<string, any>;
@@ -66,7 +73,7 @@ export function createObjectiveTask(formData: FormData): Promise<ToolTask> {
     method: "post",
     data: formData,
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 60000,
+    timeout: 150000,
   });
 }
 
@@ -78,7 +85,7 @@ export function previewEssayRequirements(formData: FormData): Promise<{
     method: "post",
     data: formData,
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 120000,
+    timeout: 240000,
   });
 }
 
@@ -88,27 +95,37 @@ export function createEssayTask(formData: FormData): Promise<ToolTask> {
     method: "post",
     data: formData,
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 60000,
+    timeout: 150000,
   });
 }
 
-export function getToolTasks(params?: {
-  type?: ToolTaskType;
-  status?: ToolTaskStatus;
-  page?: number;
-  limit?: number;
-}): Promise<ToolTaskListResponse> {
+export function getToolTasks(
+  params?: {
+    type?: ToolTaskType;
+    status?: ToolTaskStatus;
+    page?: number;
+    limit?: number;
+  },
+  signal?: AbortSignal
+): Promise<ToolTaskListResponse> {
   return request({
     url: "/teacher/tools/tasks",
     method: "get",
     params,
+    signal,
+    silentError: !!signal,
   });
 }
 
-export function getToolTask(id: string): Promise<ToolTask> {
+export function getToolTask(
+  id: string,
+  signal?: AbortSignal
+): Promise<ToolTask> {
   return request({
     url: `/teacher/tools/tasks/${id}`,
     method: "get",
+    signal,
+    silentError: !!signal,
   });
 }
 

@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Job } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { revisionFilter, unreviewedFilter } from './submission-state';
-import { Model } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { AiModel, AiModelDocument } from '../admin/schemas/ai-model.schema';
 import {
   Assignment,
@@ -72,9 +72,10 @@ export class AiReviewProcessor extends WorkerHost {
       return;
     }
     const processingToken = randomUUID();
-    const versionFilter = {
+    const versionFilter: QueryFilter<Submission> = {
       _id: submissionId,
       revision,
+      'aiDispatch.state': { $ne: 'done' },
       ...unreviewedFilter,
       isDraft: false,
       status: { $in: ['submitted', 'ai_review_queued', 'ai_review_failed'] },
@@ -116,6 +117,7 @@ export class AiReviewProcessor extends WorkerHost {
       const updated = await this.submissionModel.updateOne(resultFilter, {
         $set: {
           status: 'ai_reviewed',
+          aiDispatch: { state: 'done' },
           aiScore: result.score,
           aiReviewContent: result.review,
           aiReviewedAt: reviewedAt,
@@ -144,13 +146,17 @@ export class AiReviewProcessor extends WorkerHost {
       );
     } catch (error) {
       // The same version/claim predicate protects manual reviews from failures too.
+      const exhausted =
+        (job.attemptsMade ?? 0) + 1 >= (job.opts?.attempts || 1);
       const failed = await this.submissionModel.updateOne(resultFilter, {
         $set: {
-          status: 'ai_review_failed',
+          status: exhausted ? 'ai_review_failed' : 'ai_review_queued',
+          ...(exhausted ? { aiDispatch: { state: 'done' } } : {}),
           aiReviewMetadata: {
             provider: 'doubao',
-            queueStatus: 'failed',
-            error: error instanceof Error ? error.message : 'AI review failed',
+            queueStatus: exhausted ? 'failed' : 'retrying',
+            [exhausted ? 'error' : 'lastError']:
+              error instanceof Error ? error.message : 'AI review failed',
             failedAt: new Date().toISOString(),
           },
         },

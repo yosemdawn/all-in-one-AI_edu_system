@@ -44,6 +44,7 @@ export class DoubaoAiReviewService {
     );
 
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(this.configService.requestTimeoutMs),
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

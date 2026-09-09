@@ -6,6 +6,7 @@ describe('AiReviewProcessor', () => {
   type SavedState = {
     status?: string;
     aiReviewMetadata?: {
+      queuedAt?: string;
       queueStatus?: string;
       error?: string;
     };

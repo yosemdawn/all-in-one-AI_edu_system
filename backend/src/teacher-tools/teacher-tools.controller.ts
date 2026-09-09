@@ -10,7 +10,8 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ToolUploadInterceptor } from './tool-upload.interceptor';
+import type { ToolUploadedFile } from './tool-upload.service';
 import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -22,24 +23,9 @@ import { ToolTaskQueryDto } from './dto/tool-task-query.dto';
 import { TeacherToolsService } from './teacher-tools.service';
 
 type UploadedFileMap = {
-  answerCards?: Array<{
-    originalname: string;
-    mimetype: string;
-    buffer: Buffer;
-    size: number;
-  }>;
-  requirementImages?: Array<{
-    originalname: string;
-    mimetype: string;
-    buffer: Buffer;
-    size: number;
-  }>;
-  essayImages?: Array<{
-    originalname: string;
-    mimetype: string;
-    buffer: Buffer;
-    size: number;
-  }>;
+  answerCards?: ToolUploadedFile[];
+  requirementImages?: ToolUploadedFile[];
+  essayImages?: ToolUploadedFile[];
 };
 
 @Controller('teacher/tools')
@@ -108,9 +94,7 @@ export class TeacherToolsController {
 
   @Post('objective-grading/tasks')
   @UseInterceptors(
-    FileFieldsInterceptor([{ name: 'answerCards', maxCount: 100 }], {
-      limits: { files: 100, fileSize: 15 * 1024 * 1024 },
-    }),
+    ToolUploadInterceptor([{ name: 'answerCards', maxCount: 100 }]),
   )
   createObjectiveTask(
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -126,9 +110,7 @@ export class TeacherToolsController {
 
   @Post('essay-batch/preview-requirements')
   @UseInterceptors(
-    FileFieldsInterceptor([{ name: 'requirementImages', maxCount: 5 }], {
-      limits: { files: 5, fileSize: 15 * 1024 * 1024 },
-    }),
+    ToolUploadInterceptor([{ name: 'requirementImages', maxCount: 5 }]),
   )
   previewEssayRequirements(
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -144,15 +126,10 @@ export class TeacherToolsController {
 
   @Post('essay-batch/tasks')
   @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: 'requirementImages', maxCount: 5 },
-        { name: 'essayImages', maxCount: 100 },
-      ],
-      {
-        limits: { files: 105, fileSize: 15 * 1024 * 1024 },
-      },
-    ),
+    ToolUploadInterceptor([
+      { name: 'requirementImages', maxCount: 5 },
+      { name: 'essayImages', maxCount: 100 },
+    ]),
   )
   createEssayTask(
     @CurrentUser() currentUser: AuthenticatedUser,
@@ -165,4 +142,3 @@ export class TeacherToolsController {
     });
   }
 }
-

@@ -1,8 +1,13 @@
 <template>
   <div class="tool-page">
-    <PageHeader title="客观题批分" description="批量上传答题卡图片，由豆包多模态识别答案并自动批分。">
+    <PageHeader
+      title="客观题批分"
+      description="批量上传答题卡图片，由豆包多模态识别答案并自动批分。"
+    >
       <template #actions>
-        <el-button :icon="List" @click="router.push('/teacher/tools/tasks')">查看记录</el-button>
+        <el-button :icon="List" @click="router.push('/teacher/tools/tasks')"
+          >查看记录</el-button
+        >
       </template>
     </PageHeader>
 
@@ -11,10 +16,18 @@
         <h3>任务信息</h3>
         <el-form label-position="top">
           <el-form-item label="任务名称">
-            <el-input v-model="form.title" placeholder="例如：高一3班周测答题卡" />
+            <el-input
+              v-model="form.title"
+              placeholder="例如：高一3班周测答题卡"
+            />
           </el-form-item>
           <el-form-item label="关联班级">
-            <el-select v-model="form.classId" clearable filterable placeholder="可选">
+            <el-select
+              v-model="form.classId"
+              clearable
+              filterable
+              placeholder="可选"
+            >
               <el-option
                 v-for="item in classes"
                 :key="item._id"
@@ -54,11 +67,17 @@
               v-model:file-list="answerCardFiles"
               drag
               multiple
-              accept="image/*"
+              :accept="TOOL_IMAGE_ACCEPT"
+              :on-change="checkImages"
               :auto-upload="false"
             >
               <el-icon><UploadFilled /></el-icon>
               <div class="el-upload__text">拖拽图片到这里，或点击选择</div>
+              <template #tip
+                ><div class="el-upload__tip">
+                  {{ TOOL_IMAGE_HINT }}最多 100 张。
+                </div></template
+              >
             </el-upload>
           </el-form-item>
         </el-form>
@@ -73,11 +92,18 @@
           placeholder="可输入：1.A 2.B 3.C；也可以粘贴较长的标准答案说明"
         />
         <div class="actions">
-          <el-button :icon="MagicStick" :loading="parsingAnswers" @click="handleParseAnswers">
+          <el-button
+            :icon="MagicStick"
+            :loading="parsingAnswers"
+            @click="handleParseAnswers"
+          >
             AI 解析答案
           </el-button>
         </div>
-        <div class="parse-feedback" :class="{ empty: !answerPreviewItems.length }">
+        <div
+          class="parse-feedback"
+          :class="{ empty: !answerPreviewItems.length }"
+        >
           <template v-if="answerPreviewItems.length">
             <div class="feedback-summary">
               <div>
@@ -129,11 +155,18 @@
           placeholder="例如：1-20题每题1分，21-40题每题2.5分"
         />
         <div class="actions">
-          <el-button :icon="MagicStick" :loading="parsingScores" @click="handleParseScores">
+          <el-button
+            :icon="MagicStick"
+            :loading="parsingScores"
+            @click="handleParseScores"
+          >
             AI 解析分值
           </el-button>
         </div>
-        <div class="parse-feedback" :class="{ empty: !scorePreviewItems.length }">
+        <div
+          class="parse-feedback"
+          :class="{ empty: !scorePreviewItems.length }"
+        >
           <template v-if="scorePreviewItems.length">
             <div class="feedback-summary">
               <div>
@@ -174,11 +207,22 @@
     </div>
 
     <div class="submit-bar">
-      <el-button type="primary" :icon="Upload" :loading="submitting" @click="submitTask">
+      <el-button
+        type="primary"
+        :icon="Upload"
+        :loading="submitting"
+        @click="submitTask"
+      >
         创建批分任务
       </el-button>
     </div>
 
+    <el-alert
+      v-if="progressError && !currentTask"
+      :title="progressError"
+      type="warning"
+      :closable="false"
+    />
     <section v-if="currentTask" class="panel result-panel">
       <div class="result-head">
         <div>
@@ -187,15 +231,19 @@
             {{ taskStatusText(currentTask.status) }}
           </el-tag>
         </div>
-        <el-button :icon="Download" @click="downloadResult(currentTask)">导出结果</el-button>
+        <el-button :icon="Download" @click="downloadResult(currentTask)"
+          >导出结果</el-button
+        >
       </div>
-      <el-progress :percentage="progressPercent(currentTask)" />
+      <ToolTaskProgress :task="currentTask" :error="progressError" />
       <el-table :data="currentTask.items" border>
         <el-table-column prop="fileName" label="文件" min-width="180" />
         <el-table-column prop="studentName" label="姓名" width="110" />
         <el-table-column prop="studentNumber" label="学号" width="120" />
         <el-table-column label="匹配" width="110">
-          <template #default="{ row }">{{ row.matchedStudent?.status || "-" }}</template>
+          <template #default="{ row }">{{
+            row.matchedStudent?.status || "-"
+          }}</template>
         </el-table-column>
         <el-table-column prop="totalScore" label="总分" width="90" />
         <el-table-column prop="status" label="状态" width="110" />
@@ -206,7 +254,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import ToolTaskProgress from "./ToolTaskProgress.vue";
+import {
+  TOOL_IMAGE_ACCEPT,
+  TOOL_IMAGE_HINT,
+  toolUploadError,
+} from "./upload-validation";
+import type { UploadFile } from "element-plus";
+import { useToolTaskProgress } from "./use-tool-task-progress";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -217,23 +273,21 @@ import {
   UploadFilled,
 } from "@element-plus/icons-vue";
 import PageHeader from "@/components/PageHeader.vue";
-import { AssignmentStatus, getAssignmentList, type Assignment } from "@/api/assignments";
+import {
+  AssignmentStatus,
+  getAssignmentList,
+  type Assignment,
+} from "@/api/assignments";
 import { getClassList } from "@/api/classes";
 import type { Class } from "@/types/classes";
 import {
   createObjectiveTask,
   downloadToolTask,
-  getToolTask,
   parseObjectiveAnswers,
   parseObjectiveScoreConfig,
   type ToolTask,
 } from "@/api/teacher-tools";
-import {
-  progressPercent,
-  safeJsonParse,
-  taskStatusText,
-  taskStatusType,
-} from "./shared";
+import { safeJsonParse, taskStatusText, taskStatusType } from "./shared";
 
 const router = useRouter();
 const classes = ref<Class[]>([]);
@@ -246,8 +300,8 @@ const scoreConfigJson = ref("");
 const parsingAnswers = ref(false);
 const parsingScores = ref(false);
 const submitting = ref(false);
-const currentTask = ref<ToolTask | null>(null);
-let pollTimer: number | undefined;
+const { currentTask, progressError, trackTask, restoreTask } =
+  useToolTaskProgress("objective_grading");
 
 const form = reactive({
   title: "",
@@ -329,9 +383,13 @@ const scoreTotal = computed(() =>
 
 const scoreGroups = computed(() => {
   const groups: Array<{ range: string; score: number }> = [];
-  let current:
-    | { start: string; end: string; startNum: number | null; endNum: number | null; score: number }
-    | null = null;
+  let current: {
+    start: string;
+    end: string;
+    startNum: number | null;
+    endNum: number | null;
+    score: number;
+  } | null = null;
 
   const pushCurrent = () => {
     if (!current) return;
@@ -374,7 +432,7 @@ const scoreGroups = computed(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([loadClasses(), loadAssignments()]);
+  await Promise.all([loadClasses(), loadAssignments(), restoreTask()]);
 });
 
 watch(
@@ -384,10 +442,6 @@ watch(
     await loadAssignments();
   }
 );
-
-onBeforeUnmount(() => {
-  if (pollTimer) window.clearInterval(pollTimer);
-});
 
 async function loadClasses() {
   const data = await getClassList({ page: 1, limit: 100, status: "active" });
@@ -458,7 +512,9 @@ function buildMergeMessage(
   incoming: Record<string, unknown>
 ) {
   const incomingCount = Object.keys(incoming).length;
-  const added = Object.keys(incoming).filter((key) => !(key in existing)).length;
+  const added = Object.keys(incoming).filter(
+    (key) => !(key in existing)
+  ).length;
   const updated = incomingCount - added;
 
   if (!incomingCount) {
@@ -490,8 +546,28 @@ function sortQuestionId(a: string, b: string) {
   return a.localeCompare(b, "zh-CN");
 }
 
+function checkImages(file: UploadFile) {
+  const error = toolUploadError([
+    {
+      files: answerCardFiles.value.map((item) => item.raw).filter(Boolean),
+      maxCount: 100,
+      label: "答题卡",
+    },
+  ]);
+  if (error) {
+    answerCardFiles.value = answerCardFiles.value.filter(
+      (item) => item.uid !== file.uid
+    );
+    ElMessage.warning({ message: error, grouping: true });
+  }
+}
+
 async function submitTask() {
   const files = answerCardFiles.value.map((item) => item.raw).filter(Boolean);
+  const uploadError = toolUploadError([
+    { files, maxCount: 100, label: "答题卡" },
+  ]);
+  if (uploadError) return void ElMessage.warning(uploadError);
   if (!files.length) {
     ElMessage.warning("请上传答题卡图片");
     return;
@@ -528,23 +604,11 @@ async function submitTask() {
       JSON.stringify(safeJsonParse(scoreConfigJson.value, {}))
     );
     files.forEach((file) => data.append("answerCards", file));
-    currentTask.value = await createObjectiveTask(data);
+    trackTask(await createObjectiveTask(data));
     ElMessage.success("任务已创建");
-    startPolling(currentTask.value.id);
   } finally {
     submitting.value = false;
   }
-}
-
-function startPolling(taskId: string) {
-  if (pollTimer) window.clearInterval(pollTimer);
-  pollTimer = window.setInterval(async () => {
-    const task = await getToolTask(taskId);
-    currentTask.value = task;
-    if (["completed", "partial_failed", "failed", "cancelled"].includes(task.status)) {
-      if (pollTimer) window.clearInterval(pollTimer);
-    }
-  }, 3000);
 }
 
 function downloadResult(task: ToolTask) {

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { AppService } from '../app.service';
 import { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { AiRuleListQueryDto } from './dto/ai-rule-list-query.dto';
@@ -57,7 +57,7 @@ export class AiRulesService {
         ? {}
         : {
             $or: [
-              { visibility: { $in: ['public', 'system'] } },
+              { visibility: { $in: ['public' as const, 'system' as const] } },
               { createdById: currentUser.id },
             ],
           };
@@ -96,13 +96,16 @@ export class AiRulesService {
   }
 
   async getAvailableAiRules(currentUser: AuthenticatedUser, status = 'active') {
-    const filter =
+    if (status !== 'active' && status !== 'inactive') {
+      throw new BadRequestException('Invalid rule status');
+    }
+    const filter: QueryFilter<AiRule> =
       currentUser.role === 'superadmin'
         ? { status }
         : {
             status,
             $or: [
-              { visibility: { $in: ['public', 'system'] } },
+              { visibility: { $in: ['public' as const, 'system' as const] } },
               { createdById: currentUser.id },
             ],
           };

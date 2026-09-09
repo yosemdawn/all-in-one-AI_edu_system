@@ -27,6 +27,7 @@ import { TeacherToolsController } from './teacher-tools.controller';
 import { TeacherToolsProcessor } from './teacher-tools.processor';
 import { TeacherToolsQueueService } from './teacher-tools-queue.service';
 import { TeacherToolsService } from './teacher-tools.service';
+import { ToolUploadService } from './tool-upload.service';
 
 const redisUrl = process.env.REDIS_URL;
 const queueImports = redisUrl
@@ -57,6 +58,7 @@ const queueProviders = redisUrl
     ]),
   ],
   providers: [
+    ToolUploadService,
     TeacherToolsService,
     DoubaoVisionService,
     ObjectiveGradingService,

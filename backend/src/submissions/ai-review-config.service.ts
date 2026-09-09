@@ -6,6 +6,15 @@ import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
 export class AiReviewConfigService {
   constructor(private readonly configService: ConfigService) {}
 
+  get requestTimeoutMs() {
+    const value = Number(
+      this.configService.get('AI_REQUEST_TIMEOUT_MS') || 60000,
+    );
+    return Number.isFinite(value) && value > 0
+      ? Math.min(value, 120000)
+      : 60000;
+  }
+
   get isProduction() {
     return this.configService.get<string>('NODE_ENV') === 'production';
   }
@@ -42,8 +51,7 @@ export class AiReviewConfigService {
 
   get doubaoModel() {
     return (
-      this.configService.get<string>('DOUBAO_MODEL') ||
-      DEFAULT_DOUBAO_MODEL
+      this.configService.get<string>('DOUBAO_MODEL') || DEFAULT_DOUBAO_MODEL
     );
   }
 }

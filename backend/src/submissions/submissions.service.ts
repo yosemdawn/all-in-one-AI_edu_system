@@ -1,8 +1,14 @@
 import {
+  AiReviewDispatchService,
+  pendingAiDispatch,
+} from './ai-review-dispatch.service';
+import { RetryAiReviewDto } from './dto/retry-ai-review.dto';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -11,7 +17,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppService } from '../app.service';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
-import { DEFAULT_DOUBAO_MODEL } from '../common/doubao-models';
 import {
   Assignment,
   AssignmentDocument,
@@ -67,6 +72,7 @@ type SubmissionSource = Pick<
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
   constructor(
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
@@ -82,6 +88,8 @@ export class SubmissionsService {
     private readonly aiReviewConfigService: AiReviewConfigService,
     @Optional()
     private readonly aiReviewQueueService?: AiReviewQueueService,
+    @Optional()
+    private readonly aiReviewDispatchService?: AiReviewDispatchService,
   ) {}
 
   async submit(currentUser: AuthenticatedUser, payload: SubmitAssignmentDto) {
@@ -125,6 +133,26 @@ export class SubmissionsService {
       currentUser.className ||
       '';
     const isOnlineAssignment = assignment.assignmentType === 'online';
+    if (
+      !payload.isDraft &&
+      !isOnlineAssignment &&
+      this.aiReviewConfigService.aiReviewRequired &&
+      !this.aiReviewDispatchService
+    ) {
+      throw new ServiceUnavailableException('AI review queue is unavailable');
+    }
+    const needsAi =
+      !payload.isDraft && !isOnlineAssignment && !!this.aiReviewDispatchService;
+    const aiDispatch = needsAi ? pendingAiDispatch() : null;
+    const pendingMetadata = needsAi
+      ? {
+          provider: 'doubao',
+          queueStatus: 'queued',
+          queuedAt: new Date().toISOString(),
+        }
+      : !payload.isDraft && !isOnlineAssignment
+        ? { queueStatus: 'skipped', skippedReason: 'queue_disabled' }
+        : null;
     const submissionContent = isOnlineAssignment
       ? this.buildOnlineSubmissionContent(payload.onlineAnswers || [])
       : sanitizeRichText(String(payload.content || '')).trim();
@@ -188,11 +216,14 @@ export class SubmissionsService {
               ? 'draft'
               : isOnlineAssignment
                 ? 'ai_reviewed'
-                : 'submitted',
+                : needsAi
+                  ? 'ai_review_queued'
+                  : 'submitted',
             submittedAt: payload.isDraft ? existing.submittedAt : new Date(),
             aiScore: objectiveGrading?.score ?? null,
             aiReviewContent: objectiveGrading?.review ?? null,
-            aiReviewMetadata: objectiveGrading?.metadata ?? null,
+            aiReviewMetadata: objectiveGrading?.metadata ?? pendingMetadata,
+            aiDispatch,
             aiReviewedAt: objectiveGrading ? new Date() : null,
             submissionCount: payload.isDraft
               ? previousSubmittedCount
@@ -236,14 +267,17 @@ export class SubmissionsService {
           ? 'draft'
           : isOnlineAssignment
             ? 'ai_reviewed'
-            : 'submitted',
+            : needsAi
+              ? 'ai_review_queued'
+              : 'submitted',
         isDraft: !!payload.isDraft,
         submittedAt: payload.isDraft ? null : new Date(),
         submissionCount: payload.isDraft ? 0 : 1,
         revision: 1,
         aiScore: objectiveGrading?.score ?? null,
         aiReviewContent: objectiveGrading?.review || null,
-        aiReviewMetadata: objectiveGrading?.metadata || null,
+        aiReviewMetadata: objectiveGrading?.metadata || pendingMetadata,
+        aiDispatch,
         aiReviewedAt: objectiveGrading ? new Date() : null,
         teacherScore: null,
         teacherReviewContent: null,
@@ -551,6 +585,7 @@ export class SubmissionsService {
           teacherReviewContent: reviewContent,
           teacherReviewedAt: reviewedAt,
           status: 'teacher_reviewed',
+          aiDispatch: { state: 'done' },
         },
         $inc: { revision: 1 },
         $push: {
@@ -572,76 +607,62 @@ export class SubmissionsService {
     return this.appService.envelope({ success: true, id: item.id }, 'success');
   }
 
-  private async markAiReviewQueued(item: SubmissionDocument) {
-    const filter = {
-      _id: item._id,
-      ...revisionFilter(item.revision ?? 0),
-      ...unreviewedFilter,
-      isDraft: false,
-    };
-    if (!this.aiReviewQueueService) {
-      if (this.aiReviewConfigService.aiReviewRequired) {
-        throw new ServiceUnavailableException('AI review queue is unavailable');
-      }
-
-      item.status = 'submitted';
-      item.aiReviewMetadata = {
-        provider: 'doubao',
-        modelUsed: DEFAULT_DOUBAO_MODEL,
-        queueStatus: 'skipped',
-        skippedReason: 'queue_disabled',
-        skippedAt: new Date().toISOString(),
-      };
-      const updated = await this.submissionModel.findOneAndUpdate(
-        filter,
-        {
-          $set: {
-            status: item.status,
-            aiReviewMetadata: item.aiReviewMetadata,
-          },
-        },
-        { returnDocument: 'after' },
-      );
-      if (!updated) return;
-
-      await this.membershipModel.findOneAndUpdate(
-        { classId: item.classId, studentId: item.studentId },
-        {
-          $set: {
-            totalSubmissions: item.submissionCount,
-            lastSubmissionTime: item.submittedAt || new Date(),
-          },
-        },
-      );
-      return;
-    }
-
-    item.status = 'ai_review_queued';
-    item.aiReviewMetadata = {
-      queuedAt: new Date().toISOString(),
-      provider: 'doubao',
-      modelUsed: DEFAULT_DOUBAO_MODEL,
-      queueStatus: 'queued',
-    };
-    const updated = await this.submissionModel.findOneAndUpdate(
-      filter,
+  async retryAiReview(currentUser: AuthenticatedUser, body: RetryAiReviewDto) {
+    await this.getSubmissionDetail(currentUser, body.submissionId);
+    if (!this.aiReviewDispatchService)
+      throw new ServiceUnavailableException('AI queue is unavailable');
+    const item = await this.submissionModel.findOneAndUpdate(
       {
-        $set: { status: item.status, aiReviewMetadata: item.aiReviewMetadata },
+        _id: body.submissionId,
+        ...revisionFilter(body.revision),
+        ...unreviewedFilter,
+        isDraft: false,
+        status: 'ai_review_failed',
+        'aiDispatch.state': { $nin: ['pending', 'queued'] },
+      },
+      {
+        $inc: { revision: 1 },
+        $set: {
+          status: 'ai_review_queued',
+          aiDispatch: pendingAiDispatch(),
+          aiReviewMetadata: {
+            queueStatus: 'queued',
+            queuedAt: new Date().toISOString(),
+          },
+        },
       },
       { returnDocument: 'after' },
     );
-    if (!updated) return;
-    await this.aiReviewQueueService.enqueueReview(item.id, item.revision ?? 0);
-
-    await this.membershipModel.findOneAndUpdate(
-      { classId: item.classId, studentId: item.studentId },
-      {
-        $set: {
-          totalSubmissions: item.submissionCount,
-          lastSubmissionTime: item.submittedAt || new Date(),
-        },
-      },
+    if (!item)
+      throw new ConflictException(
+        'Submission changed or AI review is still running',
+      );
+    await this.markAiReviewQueued(item);
+    return this.appService.envelope(
+      this.toSubmissionPayload(item),
+      'AI retry accepted',
     );
+  }
+
+  private async markAiReviewQueued(item: SubmissionDocument) {
+    // Submission and pending dispatch were saved together. Redis failure must not turn
+    // an accepted submission into a 500 that encourages another counted submission.
+    if (this.aiReviewDispatchService) {
+      try {
+        await this.aiReviewDispatchService.deliver(item.id, item.revision);
+      } catch {
+        this.logger.warn(
+          'AI dispatch deferred; durable record will be retried',
+        );
+      }
+    }
+    try {
+      await this.syncMembershipAfterSubmission(item);
+    } catch {
+      this.logger.warn(
+        'Submission accepted but membership statistics need refresh',
+      );
+    }
   }
 
   private async syncMembershipAfterSubmission(item: SubmissionDocument) {

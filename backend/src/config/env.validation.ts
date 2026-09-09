@@ -130,6 +130,12 @@ function assertProductionReadiness(config: EnvironmentVariables) {
     throw new Error('ENABLE_DEMO_SEED must not be enabled in production');
   }
 
+  if (config.TRUST_PROXY === 'true') {
+    throw new Error(
+      'TRUST_PROXY=true trusts arbitrary forwarding headers; use a trusted proxy IP or CIDR range',
+    );
+  }
+
   const aiReviewRequired = config.AI_REVIEW_REQUIRED !== 'false';
   if (aiReviewRequired) {
     requireValue(

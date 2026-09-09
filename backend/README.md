@@ -63,18 +63,15 @@ Build the image:
 docker build -t yosem-backend:prod .
 ```
 
-Run with Docker Compose:
+Run from the repository root using the canonical production configuration:
 
 ```bash
-copy .env.production.example .env.production
-docker compose -f compose.prod.yml up -d --build
+node backend/scripts/init-production-env.cjs
+# Set CORS_ORIGINS in backend/.env.production before running Compose.
+docker compose --env-file backend/.env.production up -d --build
 ```
 
-The compose file starts:
-
-- `backend`
-- `mongo`
-- `redis`
+The initialization script refuses to overwrite an existing configuration. Existing environments must follow the database/user and upload migration in [deployment notes](../docs/operational-hardening-2026-09-09.md), keeping their Compose project name and volumes. The compatibility compose file includes the root configuration (frontend, backend, authenticated MongoDB/Redis, persistent uploads).
 
 ## Security Defaults
 
@@ -82,11 +79,11 @@ The compose file starts:
 - global request throttling is enabled
 - auth endpoints use stricter throttling
 - CORS is allowlist-based in production
-- `trust proxy` can be enabled via `TRUST_PROXY=true`
+- `TRUST_PROXY=true` is rejected in production; use trusted proxy address ranges. Compose uses private-network proxies and Nginx overwrites incoming forwarding headers.
 
 ## Health Checks
 
 - `GET /api/healthz`
 - `GET /api/readyz`
 
-Both return a standard envelope with `data.ok === true` when the app is up.
+Liveness remains lightweight. Readiness pings MongoDB and the configured Redis instance with short deadlines and returns HTTP 503 on dependency failure. Container health checks use readiness. Probes are exempt from application throttling.

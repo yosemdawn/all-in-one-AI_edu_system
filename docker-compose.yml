@@ -1,82 +1,68 @@
+# 唯一生产入口：docker compose --env-file backend/.env.production up -d --build
 services:
-  # 前端服务 (Nginx)
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: { context: ., dockerfile: Dockerfile }
     image: yosem-frontend:prod
-    container_name: yosem-frontend
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:80"
+    ports: ["127.0.0.1:8080:80"]
     depends_on:
-      - backend
-    networks:
-      - yosem-network
+      backend: { condition: service_healthy }
 
-  # 后端服务 (NestJS)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        NODE_IMAGE: node:22-alpine
+      args: { NODE_IMAGE: "${NODE_IMAGE:-node:22-alpine}" }
     image: yosem-backend:prod
-    container_name: yosem-backend
     restart: unless-stopped
-    env_file:
-      - ./backend/.env.production
+    env_file: [./backend/.env.production]
     environment:
       NODE_ENV: production
       PORT: 3000
+      TRUST_PROXY: uniquelocal
+      MONGODB_URI: "mongodb://yosem:${MONGO_APP_PASSWORD:?Set a random hex MONGO_APP_PASSWORD}@mongo:27017/yosem_ai?authSource=yosem_ai"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:?Set a random hex REDIS_PASSWORD}@redis:6379"
+    volumes: [uploads_data:/app/uploads]
     depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    # 注意：后端端口不需要映射到主机(除非调试)，
-    # 因为它通过 Docker 网络在内部与 Nginx 通信。
-    # 如果你依然想直接访问后端，可以取消下面注释：
-    # ports:
-    #   - "3000:3000"
-    networks:
-      - yosem-network
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, scripts/healthcheck.js]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
-  # 数据库 (MongoDB)
   mongo:
-    image: mongo:7
-    container_name: yosem-mongo
+    image: "${MONGO_IMAGE:-mongo:7}"
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}"
+      MONGO_APP_PASSWORD: "${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD}"
     volumes:
       - mongo_data:/data/db
+      - ./deploy/mongo-init.js:/docker-entrypoint-initdb.d/01-app.js:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "mongodb://127.0.0.1:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      test: [CMD-SHELL, 'mongosh --quiet --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "quit(db.runCommand({ ping: 1 }).ok ? 0 : 1)"']
       interval: 30s
       timeout: 10s
       retries: 5
-    networks:
-      - yosem-network
 
-  # 缓存 (Redis)
   redis:
-    image: redis:7-alpine
-    container_name: yosem-redis
+    image: "${REDIS_IMAGE:-redis:7-alpine}"
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"
+    command: [sh, -c, 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    volumes: [redis_data:/data]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
       interval: 30s
       timeout: 5s
       retries: 5
-    networks:
-      - yosem-network
-
-networks:
-  yosem-network:
-    driver: bridge
 
 volumes:
   mongo_data:
   redis_data:
+  uploads_data:

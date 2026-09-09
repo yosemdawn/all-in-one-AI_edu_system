@@ -17,9 +17,15 @@ export function taskStatusType(status: string) {
   return "info";
 }
 
-export function progressPercent(task?: { totalCount: number; processedCount: number }) {
+export function progressPercent(task?: {
+  totalCount: number;
+  processedCount: number;
+}) {
   if (!task || !task.totalCount) return 0;
-  return Math.round((task.processedCount / task.totalCount) * 100);
+  return Math.min(
+    100,
+    Math.max(0, Math.round((task.processedCount / task.totalCount) * 100))
+  );
 }
 
 export function safeJsonParse(value: string, fallback: any) {
@@ -29,4 +35,3 @@ export function safeJsonParse(value: string, fallback: any) {
     return fallback;
   }
 }
-

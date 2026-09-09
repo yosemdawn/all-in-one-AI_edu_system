@@ -1,3 +1,4 @@
+import { AiReviewDispatchService } from './ai-review-dispatch.service';
 import '../config/preload-env';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
@@ -34,7 +35,7 @@ const queueImports = redisUrl
   : [];
 
 const queueProviders = redisUrl
-  ? [AiReviewQueueService, AiReviewProcessor]
+  ? [AiReviewQueueService, AiReviewProcessor, AiReviewDispatchService]
   : [];
 
 @Module({

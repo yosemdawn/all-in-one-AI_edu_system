@@ -39,6 +39,7 @@ const getResponseErrorMessage = (error: AxiosError, fallback = "请求失败") =
     return responseData?.message || responseData?.error?.message || fallback;
   }
 
+  if (error.response?.status === 413) return "这次上传的内容过大，请减少图片后分两次上传";
   return fallback;
 };
 
@@ -107,6 +108,7 @@ service.interceptors.response.use(
     return Promise.reject(new Error(errorMessage));
   },
   async (error: AxiosError) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     const originalRequest = (error.config || {}) as AxiosRequestConfig & {
       _retry?: boolean;
       headers?: any;
@@ -187,7 +189,9 @@ service.interceptors.response.use(
       }
     }
 
-    ElMessage.error(getResponseErrorMessage(error));
+    if (!(originalRequest as AxiosRequestConfig & { silentError?: boolean }).silentError) {
+      ElMessage.error(getResponseErrorMessage(error));
+    }
     return Promise.reject(error);
   }
 );
@@ -294,6 +298,6 @@ export const downloadFile = async (
   }
 };
 
-export default function request<T = any>(config: AxiosRequestConfig): Promise<T> {
+export default function request<T = any>(config: AxiosRequestConfig & { silentError?: boolean }): Promise<T> {
   return service(config) as unknown as Promise<T>;
 }

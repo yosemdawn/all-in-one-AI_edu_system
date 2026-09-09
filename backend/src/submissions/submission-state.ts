@@ -6,7 +6,7 @@ export function revisionFilter(revision: number) {
 }
 
 export const unreviewedFilter = {
-  status: { $ne: 'teacher_reviewed' },
+  status: { $ne: 'teacher_reviewed' as const },
   teacherScore: null,
   teacherReviewedAt: null,
 };

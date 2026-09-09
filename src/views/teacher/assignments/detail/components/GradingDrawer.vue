@@ -64,25 +64,38 @@
               v-safe-html="assignmentData?.description || '暂无作业要求'"
             ></div>
 
-            <div v-if="assignmentData?.questionMaterial?.content" class="basis-card">
+            <div
+              v-if="assignmentData?.questionMaterial?.content"
+              class="basis-card"
+            >
               <h5>作业原题</h5>
               <div v-safe-html="assignmentData.questionMaterial.content"></div>
             </div>
 
-            <div v-if="assignmentData?.referenceAnswer?.content" class="basis-card basis-card--answer">
+            <div
+              v-if="assignmentData?.referenceAnswer?.content"
+              class="basis-card basis-card--answer"
+            >
               <h5>标准答案</h5>
               <div v-safe-html="assignmentData.referenceAnswer.content"></div>
             </div>
 
-            <div v-if="assignmentData?.gradingNotes" class="basis-card basis-card--notes">
+            <div
+              v-if="assignmentData?.gradingNotes"
+              class="basis-card basis-card--notes"
+            >
               <h5>教师补充要求</h5>
               <p>{{ assignmentData.gradingNotes }}</p>
             </div>
 
             <div class="assignment-meta">
-              <span class="deadline">截止时间：{{ formatDateTime(assignmentData?.endDate) }}</span>
+              <span class="deadline"
+                >截止时间：{{ formatDateTime(assignmentData?.endDate) }}</span
+              >
               <span class="word-limit" v-if="assignmentData?.submissionFormat">
-                提交形式：{{ getSubmissionFormatText(assignmentData.submissionFormat) }}
+                提交形式：{{
+                  getSubmissionFormatText(assignmentData.submissionFormat)
+                }}
               </span>
             </div>
           </div>
@@ -156,6 +169,15 @@
                 <el-icon class="error-icon"><Warning /></el-icon>
                 <div class="error-details">
                   <h4>AI评价失败</h4>
+                  <el-button
+                    v-if="
+                      submissionData.status === 'ai_review_failed' &&
+                      submissionData.teacherScore == null
+                    "
+                    :loading="retryingAi"
+                    @click="handleRetryAi"
+                    >重试 AI 批改</el-button
+                  >
                   <p class="error-text">{{ aiErrorMessage }}</p>
                   <div class="error-meta">
                     <span>使用模型：{{ aiModelUsed }}</span>
@@ -171,7 +193,9 @@
             <div v-else class="ai-content">
               <div
                 v-if="submissionData.aiReviewContent"
-                v-safe-html="formatReviewContent(submissionData.aiReviewContent)"
+                v-safe-html="
+                  formatReviewContent(submissionData.aiReviewContent)
+                "
               ></div>
               <div v-else>暂无AI评价内容</div>
 
@@ -299,7 +323,11 @@ import { ref, reactive, watch, nextTick, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Document, EditPen, Cpu, User, Warning } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
-import { getSubmissionDetail, submitTeacherReview } from "@/api/correcting";
+import {
+  getSubmissionDetail,
+  submitTeacherReview,
+  retryAiReview,
+} from "@/api/correcting";
 import { getAssignmentDetail } from "@/api/assignments";
 import { marked } from "marked";
 // Props
@@ -321,6 +349,24 @@ const emit = defineEmits<{
 const loading = ref(false);
 const submitting = ref(false);
 const submissionData = ref<any>(null);
+const retryingAi = ref(false);
+async function handleRetryAi() {
+  retryingAi.value = true;
+  try {
+    await retryAiReview(
+      submissionData.value._id || submissionData.value.id,
+      submissionData.value.revision
+    );
+    submissionData.value = await getSubmissionDetail(
+      submissionData.value._id || submissionData.value.id
+    );
+    ElMessage.success("已安排重试，不增加学生提交次数");
+  } catch {
+    ElMessage.error("重试未成功，请刷新查看当前状态");
+  } finally {
+    retryingAi.value = false;
+  }
+}
 const assignmentData = ref<any>(null);
 const gradingFormRef = ref<FormInstance>();
 

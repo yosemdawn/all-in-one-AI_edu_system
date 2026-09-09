@@ -1,7 +1,10 @@
+import { RequestThrottlerGuard } from './common/request-throttler.guard';
+import { ReadinessService } from './readiness.service';
+import { THROTTLER_LIMIT } from '@nestjs/throttler/dist/throttler.constants';
 import './config/preload-env';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { APP_GUARD } from '@nestjs/core';
@@ -74,6 +77,14 @@ const queueImports = redisUrl
           },
           {
             name: 'auth',
+            skipIf: (context) =>
+              configService.get<string>('NODE_ENV') === 'test' ||
+              !Reflect.hasMetadata(
+                THROTTLER_LIMIT + 'auth',
+                context.getHandler(),
+              ),
+            getTracker: (req: { ip: string }) =>
+              Promise.resolve(`ip:${req.ip}`),
             ttl: readPositiveNumber(
               configService.get<string>('AUTH_THROTTLE_TTL'),
               DEFAULT_AUTH_THROTTLE_TTL,
@@ -108,9 +119,10 @@ const queueImports = redisUrl
   controllers: [AppController],
   providers: [
     AppService,
+    ReadinessService,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: RequestThrottlerGuard,
     },
   ],
 })

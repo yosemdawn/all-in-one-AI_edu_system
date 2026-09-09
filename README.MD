@@ -283,28 +283,21 @@ npm run start:prod
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-通用部署：
+生产部署统一使用根目录 `docker-compose.yml`：
 
 ```bash
-docker compose up -d --build
+# 仅首次安装；已有 .env.production 不会被覆盖
+node backend/scripts/init-production-env.cjs
+# 修改 backend/.env.production 中的 CORS_ORIGINS
+# 已有环境必须先完成下方迁移说明，保持原 Compose 项目名及数据卷
+
+docker compose --env-file backend/.env.production up -d --build
 ```
 
-后端生产部署也可以参考 `backend/compose.prod.yml`：
-
-```bash
-cd backend
-copy .env.production.example .env.production
-docker compose -f compose.prod.yml up -d --build
-```
-
-生产环境请务必替换：
-
-- `JWT_SECRET`
-- `MONGODB_URI`
-- `CORS_ORIGINS`
-- `REDIS_URL`
-- `DOUBAO_API_KEY`
-- Nginx 域名和证书配置
+Compose 启用 MongoDB/Redis 认证，仅前端绑定宿主机回环端口 8080；后端上传目录使用持久卷。
+`backend/compose.prod.yml` 仅引用根目录配置，不再维护另一套生产服务。
+生产证书、外层反向代理和教师个人 AI Key 仍需配置。
+已有数据库用户、上传文件迁移、备份及故障验收见 [第二批上线修复说明](docs/operational-hardening-2026-09-09.md)。
 
 ## AI 配置说明
 
@@ -406,3 +399,4 @@ AI 输出存在不确定性，建议所有正式成绩和重要评价均由教�
 - `backend/README.md`
 - `src/docs/教师工具箱使用说明书与功能介绍.md`
 - `src/docs/教师工具箱深度整合说明.md`
+- [上传限制、依赖更新与验收记录](docs/upload-and-dependencies-2026-09-09.md)

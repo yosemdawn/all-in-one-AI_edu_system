@@ -1,3 +1,5 @@
+import { Throttle } from '@nestjs/throttler';
+import { RetryAiReviewDto } from './dto/retry-ai-review.dto';
 import {
   Body,
   Controller,
@@ -69,6 +71,16 @@ export class SubmissionsController {
       currentUser,
       submissionId,
     );
+  }
+
+  @Roles('teacher', 'superadmin')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('teachers/submissions/retry-ai')
+  retryAiReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: RetryAiReviewDto,
+  ) {
+    return this.submissionsService.retryAiReview(user, body);
   }
 
   @Roles('teacher', 'superadmin')

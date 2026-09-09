@@ -1,0 +1,15 @@
+node_modules
+.git
+backend
+dist
+coverage
+.temp
+backups
+*.docx
+.env
+.env.local
+.env.*.local
+**/node_modules
+**/.env
+**/.env.production
+tool1-score marker

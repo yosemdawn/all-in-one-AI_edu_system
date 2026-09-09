@@ -1,9 +1,13 @@
 node_modules
 dist
 coverage
+.temp
 .git
 .env
 .env.local
 .env.production
 npm-debug.log
 yarn-error.log
+
+uploads
+backups

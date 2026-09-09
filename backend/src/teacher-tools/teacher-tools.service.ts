@@ -10,10 +10,10 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { mkdir, writeFile } from 'fs/promises';
+import { copyFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { Model } from 'mongoose';
+import { Error as MongooseError, Model, mongo, Types } from 'mongoose';
 import { AppService } from '../app.service';
 import {
   Assignment,
@@ -47,13 +47,7 @@ import {
   ToolTaskType,
 } from './schemas/tool-task.schema';
 import { TeacherToolsQueueService } from './teacher-tools-queue.service';
-
-type UploadedFile = {
-  originalname: string;
-  mimetype: string;
-  buffer: Buffer;
-  size: number;
-};
+import type { ToolUploadedFile as UploadedFile } from './tool-upload.service';
 
 type StoredFile = {
   originalName: string;
@@ -117,10 +111,10 @@ export class TeacherToolsService {
     requirementImages: UploadedFile[],
   ) {
     this.assertTeacher(currentUser);
-    const storedFiles = await this.storeFiles(
-      requirementImages || [],
-      'essay-requirements-preview',
-    );
+    const storedFiles = (requirementImages || []).map((file) => ({
+      path: file.path,
+      mimeType: file.mimetype,
+    }));
     const result = await this.doubaoVisionService.previewEssayRequirements(
       storedFiles,
       this.readString(body.requirementText),
@@ -160,7 +154,7 @@ export class TeacherToolsService {
     );
     classInfo = classInfo || this.singleAssignmentClass(assignmentInfo);
     const storedFiles = await this.storeFiles(files, 'objective-grading');
-    const task = await this.toolTaskModel.create({
+    const task = await this.createTaskWithFiles(storedFiles, {
       type: 'objective_grading',
       teacherId: currentUser.id,
       teacherName: currentUser.name,
@@ -216,11 +210,14 @@ export class TeacherToolsService {
       classInfo?.id,
     );
     classInfo = classInfo || this.singleAssignmentClass(assignmentInfo);
-    const [storedRequirementImages, storedEssayImages] = await Promise.all([
-      this.storeFiles(files.requirementImages || [], 'essay-requirements'),
-      this.storeFiles(essayImages, 'essay-batch'),
-    ]);
-    const task = await this.toolTaskModel.create({
+    const allStoredFiles = await this.storeFiles(
+      [...(files.requirementImages || []), ...essayImages],
+      'essay-batch',
+    );
+    const requirementCount = files.requirementImages?.length || 0;
+    const storedRequirementImages = allStoredFiles.slice(0, requirementCount);
+    const storedEssayImages = allStoredFiles.slice(requirementCount);
+    const task = await this.createTaskWithFiles(allStoredFiles, {
       type: 'essay_batch',
       teacherId: currentUser.id,
       teacherName: currentUser.name,
@@ -318,12 +315,19 @@ export class TeacherToolsService {
 
   async processTask(id: string) {
     const task = await this.toolTaskModel.findById(id);
-    if (!task || task.status === 'cancelled') {
+    if (
+      !task ||
+      ['completed', 'partial_failed', 'failed', 'cancelled'].includes(
+        task.status,
+      )
+    ) {
       return;
     }
 
     task.status = 'processing';
+    task.startedAt = task.startedAt || new Date();
     await task.save();
+    await this.setTaskProgress(task, 'preparing');
 
     try {
       if (task.type === 'objective_grading') {
@@ -332,6 +336,7 @@ export class TeacherToolsService {
         await this.processEssayTask(task);
       }
     } catch (error: unknown) {
+      if (await this.isTaskCancelled(task.id)) return;
       task.status = task.successCount > 0 ? 'partial_failed' : 'failed';
       task.completedAt = new Date();
       task.resultSummary = {
@@ -357,7 +362,7 @@ export class TeacherToolsService {
       config.scoreConfig || {},
     );
 
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       if (await this.isTaskCancelled(task.id)) return;
       const itemBase = {
         fileName: file.originalName,
@@ -365,6 +370,15 @@ export class TeacherToolsService {
         status: 'processing',
       };
       await this.pushOrReplaceItem(task, itemBase);
+      if (
+        !(await this.setTaskProgress(
+          task,
+          task.type === 'essay_batch' ? 'reviewing' : 'recognizing',
+          file,
+          index + 1,
+        ))
+      )
+        return;
 
       try {
         const recognized = await this.doubaoVisionService.recognizeAnswerCard(
@@ -372,6 +386,8 @@ export class TeacherToolsService {
           { teacherId: task.teacherId },
         );
         if (await this.isTaskCancelled(task.id)) return;
+        if (!(await this.setTaskProgress(task, 'grading', file, index + 1)))
+          return;
         const grading = this.objectiveGradingService.gradeStudentAnswers(
           recognized.data.answers || {},
           standardAnswers,
@@ -395,6 +411,8 @@ export class TeacherToolsService {
           totalScore,
           rawContent: recognized.rawContent,
         };
+        if (!(await this.setTaskProgress(task, 'saving', file, index + 1)))
+          return;
         const syncResult = await this.syncItemToSubmission(task, completedItem);
         await this.pushOrReplaceItem(task, {
           ...completedItem,
@@ -402,6 +420,7 @@ export class TeacherToolsService {
         });
         task.successCount += 1;
       } catch (error: unknown) {
+        if (await this.isTaskCancelled(task.id)) return;
         await this.pushOrReplaceItem(task, {
           ...itemBase,
           status: 'failed',
@@ -415,6 +434,7 @@ export class TeacherToolsService {
       await task.save();
     }
 
+    if (await this.isTaskCancelled(task.id)) return;
     this.finishTask(task);
     await task.save();
   }
@@ -430,6 +450,7 @@ export class TeacherToolsService {
     const essayImages = config.essayImages || [];
 
     if (!requirementsText && requirementImages.length) {
+      if (!(await this.setTaskProgress(task, 'requirements'))) return;
       const preview = await this.doubaoVisionService.previewEssayRequirements(
         requirementImages,
         undefined,
@@ -440,7 +461,7 @@ export class TeacherToolsService {
       await task.save();
     }
 
-    for (const file of essayImages) {
+    for (const [index, file] of essayImages.entries()) {
       if (await this.isTaskCancelled(task.id)) return;
       const itemBase = {
         fileName: file.originalName,
@@ -448,6 +469,15 @@ export class TeacherToolsService {
         status: 'processing',
       };
       await this.pushOrReplaceItem(task, itemBase);
+      if (
+        !(await this.setTaskProgress(
+          task,
+          task.type === 'essay_batch' ? 'reviewing' : 'recognizing',
+          file,
+          index + 1,
+        ))
+      )
+        return;
 
       try {
         const reviewed = await this.doubaoVisionService.reviewEssay(
@@ -483,6 +513,8 @@ export class TeacherToolsService {
           summaryComment: reviewed.data.summary_comment || '',
           rawContent: reviewed.rawContent,
         };
+        if (!(await this.setTaskProgress(task, 'saving', file, index + 1)))
+          return;
         const syncResult = await this.syncItemToSubmission(task, completedItem);
         await this.pushOrReplaceItem(task, {
           ...completedItem,
@@ -490,6 +522,7 @@ export class TeacherToolsService {
         });
         task.successCount += 1;
       } catch (error: unknown) {
+        if (await this.isTaskCancelled(task.id)) return;
         await this.pushOrReplaceItem(task, {
           ...itemBase,
           status: 'failed',
@@ -503,6 +536,7 @@ export class TeacherToolsService {
       await task.save();
     }
 
+    if (await this.isTaskCancelled(task.id)) return;
     this.finishTask(task);
     await task.save();
   }
@@ -579,7 +613,7 @@ export class TeacherToolsService {
       return { status: 'unmatched', reason: 'no_class_selected' };
     }
 
-    const filter = { classId, status: 'active' };
+    const filter = { classId, status: 'active' as const };
     if (input.studentNumber?.trim()) {
       const student = await this.membershipModel
         .findOne({
@@ -926,24 +960,57 @@ export class TeacherToolsService {
     const baseDir = join(process.cwd(), TOOL_UPLOAD_DIR, folder);
     await mkdir(baseDir, { recursive: true });
 
-    return Promise.all(
-      files.map(async (file) => {
-        if (!file.mimetype?.startsWith('image/')) {
-          throw new BadRequestException('Only image uploads are supported');
-        }
-        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const stored: StoredFile[] = [];
+    try {
+      for (const file of files) {
+        const safeName = file.originalname
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .slice(-80);
         const filePath = join(
           baseDir,
           `${Date.now()}-${randomUUID()}-${safeName}`,
         );
-        await writeFile(filePath, file.buffer);
-        return {
+        stored.push({
           originalName: file.originalname,
           path: filePath,
           mimeType: file.mimetype,
           size: file.size,
-        };
-      }),
+        });
+        await copyFile(file.path, filePath);
+      }
+      return stored;
+    } catch (error) {
+      await this.removeStoredFiles(stored);
+      throw error;
+    }
+  }
+
+  private async createTaskWithFiles(
+    files: StoredFile[],
+    data: Partial<ToolTask>,
+  ) {
+    const id = new Types.ObjectId();
+    try {
+      return await this.toolTaskModel.create({ ...data, _id: id });
+    } catch (error) {
+      // A lost write acknowledgement can still mean the task was saved.
+      // Keep originals when the outcome is uncertain.
+      const persisted = await this.toolTaskModel.findById(id).catch(() => null);
+      if (persisted) return persisted;
+      if (
+        error instanceof MongooseError.ValidationError ||
+        (error instanceof mongo.MongoServerError &&
+          [11000, 121].includes(Number(error.code)))
+      ) {
+        await this.removeStoredFiles(files);
+      }
+      throw error;
+    }
+  }
+
+  private async removeStoredFiles(files: StoredFile[]) {
+    await Promise.all(
+      files.map((file) => unlink(file.path).catch(() => undefined)),
     );
   }
 
@@ -999,6 +1066,28 @@ export class TeacherToolsService {
     return !!value;
   }
 
+  private async setTaskProgress(
+    task: ToolTaskDocument,
+    stage: string,
+    file?: StoredFile,
+    currentIndex?: number,
+  ) {
+    const result = await this.toolTaskModel.updateOne(
+      { _id: task._id, status: 'processing' },
+      {
+        $set: {
+          progress: {
+            stage,
+            currentFileName: file?.originalName,
+            currentIndex,
+            stageStartedAt: new Date().toISOString(),
+          },
+        },
+      },
+    );
+    return result.matchedCount > 0;
+  }
+
   private async isTaskCancelled(id: string) {
     const task = await this.toolTaskModel.findById(id).select('status').lean();
     return task?.status === 'cancelled';
@@ -1025,9 +1114,9 @@ export class TeacherToolsService {
     task: ToolTaskDocument,
     item: Record<string, unknown>,
   ) {
-    const fileName = String(item.fileName || '');
+    const filePath = item.filePath || item.fileName || '';
     const nextItems = (task.items || []).filter(
-      (existing) => existing.fileName !== fileName,
+      (existing) => (existing.filePath || existing.fileName || '') !== filePath,
     );
     nextItems.push(item);
     task.items = nextItems;
@@ -1251,6 +1340,8 @@ export class TeacherToolsService {
       status: item.status,
       totalCount: item.totalCount,
       processedCount: item.processedCount,
+      progress: item.progress,
+      startedAt: item.startedAt,
       successCount: item.successCount,
       failureCount: item.failureCount,
       config: item.config,
