@@ -86,3 +86,13 @@ tool1-score marker/desktop/installer/package-temp/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Private environment files, keys, and local Git backups
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.bundle
