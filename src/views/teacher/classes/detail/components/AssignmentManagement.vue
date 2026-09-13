@@ -245,7 +245,7 @@ import {
   AssignmentStatus,
 } from "@/api/assignments";
 import type { Assignment, AssignmentQueryParams } from "@/types/assignments";
-import moment from "moment";
+import { formatDateTime as formatLocalDate, isPastDate } from "@/utils/date";
 
 interface Props {
   classId: string;
@@ -346,12 +346,12 @@ const getStatusText = (status: AssignmentStatus) => {
 
 // 判断作业是否过期
 const isAssignmentExpired = (assignment: any) => {
-  return moment().isAfter(moment(assignment.endDate));
+  return isPastDate(assignment.endDate);
 };
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return moment(dateStr).format("YYYY-MM-DD HH:mm");
+  return formatLocalDate(dateStr, "yyyy-MM-dd HH:mm");
 };
 
 // 事件处理

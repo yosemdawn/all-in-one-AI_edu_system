@@ -101,7 +101,11 @@ import {
   Edit,
   Download,
 } from "@element-plus/icons-vue";
-import moment from "moment";
+import {
+  formatDateTime as formatLocalDate,
+  isPastDate,
+  isUrgent,
+} from "@/utils/date";
 import type { AssignmentDetail, AssignmentStatus } from "@/api/assignments";
 
 interface Props {
@@ -122,7 +126,7 @@ const emit = defineEmits<Emits>();
 // 格式化日期时间
 const formatDateTime = (dateTime?: string) => {
   if (!dateTime) return "-";
-  return moment(dateTime).format("YYYY年MM月DD日 HH:mm");
+  return formatLocalDate(dateTime, "yyyy年MM月dd日 HH:mm");
 };
 
 // 获取状态类型
@@ -156,15 +160,13 @@ const getStatusText = (status?: string) => {
 // 是否过期
 const isExpired = computed(() => {
   if (!props.assignmentDetail?.endDate) return false;
-  return moment().isAfter(moment(props.assignmentDetail.endDate));
+  return isPastDate(props.assignmentDetail.endDate);
 });
 
 // 是否即将到期（24小时内）
 const isNearDeadline = computed(() => {
   if (!props.assignmentDetail?.endDate || isExpired.value) return false;
-  const now = moment();
-  const endTime = moment(props.assignmentDetail.endDate);
-  return endTime.diff(now, "hours") <= 24;
+  return isUrgent(props.assignmentDetail.endDate);
 });
 
 // 是否可以操作

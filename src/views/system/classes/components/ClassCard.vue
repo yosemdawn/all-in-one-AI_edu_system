@@ -194,7 +194,7 @@ import {
   Calendar,
   CopyDocument,
 } from "@element-plus/icons-vue";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 import type { Class } from "@/types/classes";
 
 interface Props {
@@ -242,12 +242,12 @@ const getStatusText = (status: string) => {
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return moment(dateStr).format("MM/DD");
+  return formatLocalDate(dateStr, "MM/dd");
 };
 
 // 格式化列表日期
 const formatListDate = (dateStr: string) => {
-  return moment(dateStr).format("MM/DD");
+  return formatLocalDate(dateStr, "MM/dd");
 };
 
 // 复制班级码

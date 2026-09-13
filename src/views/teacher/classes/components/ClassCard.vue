@@ -259,7 +259,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ElMessage } from "element-plus";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 import {
   MoreFilled,
   View,
@@ -335,7 +335,7 @@ const statusText = computed(() => {
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return moment(dateStr).format("YYYY-MM-DD");
+  return formatLocalDate(dateStr, "yyyy-MM-dd");
 };
 
 // 复制邀请码

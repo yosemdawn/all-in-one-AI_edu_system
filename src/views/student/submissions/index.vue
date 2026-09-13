@@ -164,11 +164,7 @@
               <div class="ai-processing-content">
                 <div class="processing-animation">
                   <div class="ai-loading-main">
-                    <img
-                      src="@/assets/image/ai_loading.gif"
-                      alt="AI正在批改"
-                      class="ai-loading-gif-large"
-                    />
+                    <LoadingSpinner />
                   </div>
                 </div>
                 <h3 class="processing-title">🤖 AI智能批改中</h3>
@@ -251,6 +247,7 @@
 </template>
 
 <script setup lang="ts">
+import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -836,35 +833,10 @@ onUnmounted(() => {
 }
 
 .ai-loading-main {
-  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 16px;
-  box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
-}
-
-.ai-loading-gif-large {
-  width: 230px;
-  height: 230px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  animation: aiGifPulse 2s ease-in-out infinite;
-}
-
-@keyframes aiGifPulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+  padding: 20px;
 }
 
 .processing-icon {
@@ -1032,17 +1004,6 @@ onUnmounted(() => {
 
   .processing-icon {
     font-size: 40px;
-  }
-
-  .ai-loading-main {
-    width: 200px;
-    height: 200px;
-    padding: 12px;
-  }
-
-  .ai-loading-gif-large {
-    width: 176px;
-    height: 176px;
   }
 }
 

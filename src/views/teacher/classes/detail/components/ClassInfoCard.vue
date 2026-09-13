@@ -107,7 +107,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ElMessage } from "element-plus";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 import {
   Edit,
   MoreFilled,
@@ -172,9 +172,9 @@ const statusText = computed(() => {
   }
 });
 
-// 格式化日期 - 使用moment库
+// 格式化日期
 const formatDate = (dateStr: string) => {
-  return moment(dateStr).format("YYYY-MM-DD HH:mm:ss");
+  return formatLocalDate(dateStr, "yyyy-MM-dd HH:mm:ss");
 };
 
 // 复制邀请码

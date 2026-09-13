@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical example JWT and NestJS sample badge token; exact placeholders only"
+regexTarget = "secret"
+regexes = ['''^replace-with-a-32-plus-char-secret$''', '''^abc123def456$''']

@@ -58,7 +58,9 @@
               :closable="false"
             />
             <div v-if="aiErrorTime || aiModelUsed" class="meta-block">
-              <div v-if="aiErrorTime">失败时间：{{ formatDate(aiErrorTime) }}</div>
+              <div v-if="aiErrorTime">
+                失败时间：{{ formatDate(aiErrorTime) }}
+              </div>
               <div v-if="aiModelUsed">使用模型：{{ aiModelUsed }}</div>
             </div>
           </div>
@@ -74,7 +76,10 @@
           </div>
 
           <div
-            v-else-if="aiReview && (aiReview.content || typeof aiReview.score === 'number')"
+            v-else-if="
+              aiReview &&
+              (aiReview.content || typeof aiReview.score === 'number')
+            "
             class="review-pane"
           >
             <div class="meta-block">
@@ -90,11 +95,7 @@
           </div>
 
           <div v-else class="pending-pane">
-            <img
-              src="@/assets/image/ai_loading.gif"
-              alt="AI批改中"
-              class="loading-image"
-            />
+            <LoadingSpinner />
             <h4>AI 正在批改中</h4>
             <p>
               {{ pollingHint }}
@@ -145,10 +146,7 @@
     </el-card>
 
     <template v-else>
-      <el-card
-        v-if="showTeacherPendingTip"
-        class="tip-card border-orange-200"
-      >
+      <el-card v-if="showTeacherPendingTip" class="tip-card border-orange-200">
         <div class="tip-row warning">
           <el-icon><Clock /></el-icon>
           <span>教师尚未评分，请耐心等待。</span>
@@ -173,13 +171,9 @@
 </template>
 
 <script setup lang="ts">
+import LoadingSpinner from "@/components/LoadingSpinner.vue";
 import { computed, ref, watch } from "vue";
-import {
-  Clock,
-  InfoFilled,
-  Monitor,
-  User,
-} from "@element-plus/icons-vue";
+import { Clock, InfoFilled, Monitor, User } from "@element-plus/icons-vue";
 import { useStore } from "vuex";
 import type { AiReview, TeacherReview } from "../../../../api/submissions";
 import { checkAiSupport } from "../../../../config/ai-config";
@@ -201,7 +195,9 @@ const activeTab = ref("ai");
 const isMobile = computed(() => store.getters["app/isMobile"]);
 const tabPosition = computed(() => (isMobile.value ? "top" : "left"));
 
-const aiQueueStatus = computed(() => props.aiReview?.aiReviewMetadata?.queueStatus);
+const aiQueueStatus = computed(
+  () => props.aiReview?.aiReviewMetadata?.queueStatus
+);
 const aiModelUsed = computed(() => props.aiReview?.aiReviewMetadata?.modelUsed);
 const aiErrorTime = computed(
   () =>
@@ -262,7 +258,10 @@ const pollingHint = computed(() => {
   if (props.isPolling) {
     return `系统正在刷新批改结果，当前第 ${props.pollingCount || 0} 次检查。`;
   }
-  if (aiQueueStatus.value === "queued" || aiQueueStatus.value === "processing") {
+  if (
+    aiQueueStatus.value === "queued" ||
+    aiQueueStatus.value === "processing"
+  ) {
     return "AI 任务已入队，结果生成后会自动显示。";
   }
   return "结果生成后会自动显示，请稍候。";
@@ -369,12 +368,6 @@ defineOptions({
   padding: 32px 24px;
   text-align: center;
   color: #6b7280;
-}
-
-.loading-image {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
 }
 
 .tab-label {

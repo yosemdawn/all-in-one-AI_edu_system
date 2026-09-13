@@ -1,34 +1,23 @@
 import { ref, reactive } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import moment from "moment";
-import "moment/locale/zh-cn";
+import { formatDateTime, formatRelativeTime } from "@/utils/date";
 import { leaveClass } from "../../../../api/classes";
-
-// 设置moment为中文
-moment.locale("zh-cn");
 
 export function useClassManagement() {
   // 格式化日期的通用函数
   const formatDate = (date: string | Date, type = "full") => {
     if (!date) return "未设置";
 
-    const momentDate = moment(date);
-
-    if (!momentDate.isValid()) return "无效日期";
-
-    switch (type) {
-      case "short":
-        return momentDate.format("YYYY-MM-DD");
-      case "time":
-        return momentDate.format("HH:mm:ss");
-      case "datetime":
-        return momentDate.format("MM-DD HH:mm");
-      case "relative":
-        return momentDate.fromNow();
-      case "full":
-      default:
-        return momentDate.format("YYYY-MM-DD HH:mm:ss");
-    }
+    const patterns = {
+      short: "yyyy-MM-dd",
+      time: "HH:mm:ss",
+      datetime: "MM-dd HH:mm",
+    };
+    const formatted =
+      type === "relative"
+        ? formatRelativeTime(date)
+        : formatDateTime(date, patterns[type] || "yyyy-MM-dd HH:mm:ss");
+    return formatted === "--" ? "无效日期" : formatted;
   };
 
   // 获取班级状态类型

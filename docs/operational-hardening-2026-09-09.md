@@ -40,6 +40,8 @@ docker compose --env-file backend/.env.production up -d --build
 
 ## 已有环境迁移
 
+**2026-09-13 密钥泄露处理补充：** 如果仍使用历史仓库中的密钥，应按 [密钥处理和重新克隆步骤](secret-remediation-2026-09-13.md) 更换并处理教师 Key；下面的“保留密钥”仅适用于未泄露的配置。
+
 **不能直接用初始化环境变量替换已有数据库的账号，也不要通过删除数据卷来解决启动问题。** Mongo 镜像初始化脚本只在空数据卷上执行。
 
 1. 安排维护窗口，停止后端及旧 Worker 的写入，保存原始配置、数据库备份和上传文件。保持原来的 Compose 项目名（必要时显式 `-p 原项目名`），否则会生成另一组空数据卷。
@@ -49,7 +51,42 @@ docker compose --env-file backend/.env.production up -d --build
 5. 使用新配置启动 MongoDB/Redis，再启动后端与前端；验收 readyz、教师登录、旧图片读取和旧成绩。旧任务可以先处理或排空；已超时任务由教师从失败状态重试，不要混跑旧 Worker。
 6. 新旧代码回退时同样保留数据卷和密钥，不回退到无认证公网数据库或丢失上传的配置。
 
-## 备份
+## 日常更新与配置文件保护
+
+**历史重写后的第一次更新请改用 [重新克隆步骤](secret-remediation-2026-09-13.md#历史重写后的第一次服务器更新)，不要执行本节的首次 `git pull` 示例。** 完成切换后才恢复普通更新流程。
+
+以下日常更新流程仅适用于已经完成上文账号、上传卷迁移的服务器。始终使用原来的 Compose 项目名；如原先使用 `-p`，后续命令也必须使用相同值。
+
+**第一次拉取取消跟踪 `backend/.env.production` 的提交前，先备份服务器自己的配置。** Git 在应用文件删除记录时可能移除服务器上的旧文件；本地执行 `git rm --cached` 保留文件，不代表其他机器执行 `git pull` 也会保留。请在项目根目录逐步执行：
+
+```bash
+# 备份到仓库外，命令失败时先停止，不要继续拉取
+config_backup=$(mktemp "$HOME/yosem-production-env.XXXXXX")
+cp backend/.env.production "$config_backup"
+chmod 600 "$config_backup"
+
+git pull --ff-only
+# 拉取成功后还原原配置，禁止用示例文件覆盖
+cp "$config_backup" backend/.env.production
+chmod 600 backend/.env.production
+```
+
+如果 `git pull` 提示有本地修改或发生冲突，先停止更新并保留备份，确认冲突内容后再处理；不要使用 `reset --hard` 丢弃配置。
+
+配置还原并完成旧环境迁移后，检查配置并更新容器：
+
+```bash
+docker compose --env-file backend/.env.production config -q
+docker compose --env-file backend/.env.production up -d --build --wait
+docker compose --env-file backend/.env.production ps
+curl -fsS http://127.0.0.1:8080/api/readyz
+```
+
+以后常规更新前先做好数据备份，再 `git pull --ff-only` 并执行上述容器更新命令。无需先 `down`；不要使用 `down -v`。初始化配置脚本只用于新安装，不为已有环境重新生成密钥。
+
+取消跟踪不会清除 Git 历史中的旧配置。如果曾提交真实密钥，需要单独安排更换及已加密教师 Key 的迁移；本次精简没有自动更换任何密钥。
+
+## 备份操作
 
 仓库提供 `deploy/backup.sh`（Linux/服务器 Shell）。从项目根目录、停止业务写入后执行：
 

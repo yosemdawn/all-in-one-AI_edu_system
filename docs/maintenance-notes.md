@@ -6,7 +6,6 @@
 
 - `src/`：Vue 3 前端源码，包含接口封装、布局、路由、状态管理和业务页面。
 - `backend/`：NestJS 后端源码，包含认证、用户、权限、班级、作业、提交、教师工具箱和管理端接口。
-- `public/README/`：README 使用的截图和动图素材。
 - `deploy/`：服务器 Nginx 与证书申请脚本。真实证书和私钥不应提交到仓库。
 - `docs/`：维护说明和二次开发笔记。
 
@@ -19,11 +18,13 @@
 - 富文本编辑使用 `src/components/WangEditor.vue`，作业编辑页仍依赖该组件。
 - 教师工具箱页面位于 `src/views/teacher/tools/`，支持客观题批分、批量作文检查、任务记录、CSV 导出和同步到作业提交记录。
 - 学生提交与 AI 轮询逻辑拆在 `src/views/student/submissions/composables/`，其中 `useAiReviewPolling.ts` 负责 AI 批改状态轮询。
+- 日期格式、相对时间和截止判断统一使用 `src/utils/date.ts`（date-fns）；等待状态使用 `LoadingSpinner`，无需下载动画图片。
+- `src/views/admin/dashboard/index.vue` 只兼容旧菜单路径，实际页面统一到 `src/views/dashboard/AdminDashboard.vue`。三个角色的 `index.vue` 保留为嵌套路由入口。
 
 ## 后端维护要点
 
 - 后端入口是 `backend/src/main.ts`，核心模块在 `backend/src/app.module.ts` 注册。
-- AI 批改与教师工具箱任务使用 Redis / BullMQ。生产环境启用 `AI_REVIEW_REQUIRED=true` 时，必须配置可用的 `REDIS_URL` 和 `DOUBAO_API_KEY`。
+- AI 批改与教师工具箱任务使用 Redis / BullMQ。生产环境需要可用的 Redis；教师在 AI 设置页配置个人 Key，不能用环境中的全局 Key 代替普通作业所需的教师配置。
 - 生产环境变量从 `backend/.env.production.example` 复制，真实 `.env`、API Key、JWT secret 和证书私钥不要提交。
 - 健康检查接口为 `/api/healthz` 和 `/api/readyz`。
 - 开发管理员可通过根目录脚本 `npm run reset:dev-admin` 重置。
@@ -33,31 +34,16 @@
 本地开发：
 
 ```bash
-npm install
-npm --prefix backend install
+npm ci
+npm --prefix backend ci
 npm run dev:full
 ```
 
-服务器常规更新流程：
+服务器统一从项目根目录使用 `docker-compose.yml`。安装、旧环境迁移、日常更新和备份以 [部署维护说明](operational-hardening-2026-09-09.md) 为准。Docker 构建会安装依赖和编译，不需要先在服务器手动运行 npm 构建。
 
-```bash
-git pull
-npm install
-npm --prefix backend install
-npm run build
-npm --prefix backend run build
-docker compose up -d --build
-sudo systemctl reload nginx
-```
+首次拉取取消跟踪 `.env.production` 的提交前，先备份服务器配置，拉取后还原；操作见上述说明。旧服务器还需要迁移数据库账号及上传文件。
 
-如果只部署后端容器：
-
-```bash
-cd backend
-docker compose -f compose.prod.yml up -d --build
-```
-
-SSL 证书请在服务器上使用 `deploy/setup-ssl.sh` 或 Certbot 生成。Nginx 配置默认读取 `/etc/letsencrypt/live/yosem.vip/` 下的证书文件。
+HTTPS 由服务器外层反向代理提供，转发到本机 `127.0.0.1:8080`。`deploy/` 中的域名、证书路径是示例，需按实际域名调整。
 
 ## 功能边界
 

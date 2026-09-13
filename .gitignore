@@ -41,6 +41,14 @@ build
 # Local certificates and secrets
 deploy/ssl/*.pem
 backend/.env.production
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.bundle
 
 # Testing
 coverage

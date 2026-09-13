@@ -107,7 +107,11 @@
               </div>
 
               <div class="mb-6">
-                <el-form-item label="作业类型" prop="assignmentType" class="form-item">
+                <el-form-item
+                  label="作业类型"
+                  prop="assignmentType"
+                  class="form-item"
+                >
                   <el-radio-group v-model="formData.assignmentType">
                     <el-radio-button label="normal">普通作业</el-radio-button>
                     <el-radio-button label="online">在线作业</el-radio-button>
@@ -133,15 +137,23 @@
               </div>
 
               <!-- 批改依据 -->
-              <div v-if="formData.assignmentType === 'normal'" class="mb-6 space-y-6">
+              <div
+                v-if="formData.assignmentType === 'normal'"
+                class="mb-6 space-y-6"
+              >
                 <div class="material-block">
                   <div class="material-block__header">
                     <h4 class="material-block__title">作业原题</h4>
                     <p class="material-block__desc">
-                      当学生提交答题卡或只写答案时，AI 会优先参考这里的题目内容。
+                      当学生提交答题卡或只写答案时，AI
+                      会优先参考这里的题目内容。
                     </p>
                   </div>
-                  <el-form-item label="原题内容" prop="questionMaterial.content" class="form-item">
+                  <el-form-item
+                    label="原题内容"
+                    prop="questionMaterial.content"
+                    class="form-item"
+                  >
                     <wang-editor
                       v-model="formData.questionMaterial.content"
                       :height="isMobile ? '240px' : '260px'"
@@ -156,10 +168,15 @@
                   <div class="material-block__header">
                     <h4 class="material-block__title">标准答案</h4>
                     <p class="material-block__desc">
-                      AI 将以这里的标准答案作为批改依据，适合答题卡、选择题、简答题等场景。
+                      AI
+                      将以这里的标准答案作为批改依据，适合答题卡、选择题、简答题等场景。
                     </p>
                   </div>
-                  <el-form-item label="答案内容" prop="referenceAnswer.content" class="form-item">
+                  <el-form-item
+                    label="答案内容"
+                    prop="referenceAnswer.content"
+                    class="form-item"
+                  >
                     <wang-editor
                       v-model="formData.referenceAnswer.content"
                       :height="isMobile ? '240px' : '260px'"
@@ -170,7 +187,11 @@
                   </el-form-item>
                 </div>
 
-                <el-form-item label="补充要求" prop="gradingNotes" class="form-item">
+                <el-form-item
+                  label="补充要求"
+                  prop="gradingNotes"
+                  class="form-item"
+                >
                   <el-input
                     v-model="formData.gradingNotes"
                     type="textarea"
@@ -181,9 +202,15 @@
                   />
                 </el-form-item>
 
-                <el-form-item label="学生提交形式" prop="submissionFormat" class="form-item">
+                <el-form-item
+                  label="学生提交形式"
+                  prop="submissionFormat"
+                  class="form-item"
+                >
                   <el-radio-group v-model="formData.submissionFormat">
-                    <el-radio label="answer_sheet">答题卡 / 图片 / PDF</el-radio>
+                    <el-radio label="answer_sheet"
+                      >答题卡 / 图片 / PDF</el-radio
+                    >
                     <el-radio label="answers_only">仅填写答案</el-radio>
                     <el-radio label="mixed">答案 + 附件混合</el-radio>
                   </el-radio-group>
@@ -199,14 +226,21 @@
                         选择题答案必须与某个选项完全一致；填空题会按字符完全一致判分，英文字母大小写也必须一致。
                       </p>
                     </div>
-                    <el-button type="primary" :icon="Plus" plain @click="addOnlineQuestion">
+                    <el-button
+                      type="primary"
+                      :icon="Plus"
+                      plain
+                      @click="addOnlineQuestion"
+                    >
                       添加题目
                     </el-button>
                   </div>
 
                   <div class="online-question-list">
                     <div
-                      v-for="(question, questionIndex) in formData.onlineQuestions"
+                      v-for="(
+                        question, questionIndex
+                      ) in formData.onlineQuestions"
                       :key="question.id"
                       class="online-question-card"
                     >
@@ -215,7 +249,11 @@
                           第 {{ questionIndex + 1 }} 题
                         </div>
                         <div class="online-question-card__actions">
-                          <el-select v-model="question.type" class="question-type-select" @change="handleQuestionTypeChange(question)">
+                          <el-select
+                            v-model="question.type"
+                            class="question-type-select"
+                            @change="handleQuestionTypeChange(question)"
+                          >
                             <el-option label="选择题" value="single_choice" />
                             <el-option label="填空题" value="fill_blank" />
                           </el-select>
@@ -252,13 +290,18 @@
                         />
                       </el-form-item>
 
-                      <div v-if="question.type === 'single_choice'" class="option-list">
+                      <div
+                        v-if="question.type === 'single_choice'"
+                        class="option-list"
+                      >
                         <div
                           v-for="(option, optionIndex) in question.options"
                           :key="`${question.id}-option-${optionIndex}`"
                           class="option-row"
                         >
-                          <span class="option-label">{{ getOptionLabel(optionIndex) }}</span>
+                          <span class="option-label">{{
+                            getOptionLabel(optionIndex)
+                          }}</span>
                           <el-input
                             v-model="question.options[optionIndex]"
                             placeholder="选项内容"
@@ -271,7 +314,12 @@
                             @click="removeOption(question, optionIndex)"
                           />
                         </div>
-                        <el-button link type="primary" :icon="Plus" @click="addOption(question)">
+                        <el-button
+                          link
+                          type="primary"
+                          :icon="Plus"
+                          @click="addOption(question)"
+                        >
                           添加选项
                         </el-button>
                       </div>
@@ -284,7 +332,9 @@
                           placeholder="请选择正确选项"
                         >
                           <el-option
-                            v-for="(option, optionIndex) in question.options.filter(Boolean)"
+                            v-for="(
+                              option, optionIndex
+                            ) in question.options.filter(Boolean)"
                             :key="`${question.id}-answer-${optionIndex}`"
                             :label="`${getOptionLabel(optionIndex)}. ${option}`"
                             :value="option"
@@ -340,12 +390,18 @@
               </el-form-item>
 
               <div class="grading-hint-card">
-                <h4>{{ formData.assignmentType === 'online' ? '在线作业说明' : 'AI 批改说明' }}</h4>
+                <h4>
+                  {{
+                    formData.assignmentType === "online"
+                      ? "在线作业说明"
+                      : "AI 批改说明"
+                  }}
+                </h4>
                 <p>
                   {{
-                    formData.assignmentType === 'online'
-                      ? '学生将在独立答题页逐题完成，提交后系统立即按标准答案自动判分。'
-                      : '当前默认采用“题目 + 标准答案 + 评分规则模板”进行批改。适合答题卡、仅答案、简答题和混合提交场景。'
+                    formData.assignmentType === "online"
+                      ? "学生将在独立答题页逐题完成，提交后系统立即按标准答案自动判分。"
+                      : "当前默认采用“题目 + 标准答案 + 评分规则模板”进行批改。适合答题卡、仅答案、简答题和混合提交场景。"
                   }}
                 </p>
               </div>
@@ -381,7 +437,7 @@ import type { Assignment as ApiAssignment } from "@/api/assignments";
 import WangEditor from "@/components/WangEditor.vue";
 import ClassSelector from "../components/ClassSelector.vue";
 import AiRuleSelector from "../components/AiRuleSelector.vue";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 
 const route = useRoute();
 const router = useRouter();
@@ -587,7 +643,9 @@ const loadAssignmentData = async () => {
 
   loading.value = true;
   try {
-    const assignment = (await getAssignment(assignmentId.value)) as ApiAssignment;
+    const assignment = (await getAssignment(
+      assignmentId.value
+    )) as ApiAssignment;
     Object.assign(formData, {
       title: assignment.title,
       description: assignment.description,
@@ -596,14 +654,13 @@ const loadAssignmentData = async () => {
       questionMaterial: assignment.questionMaterial || { content: "" },
       referenceAnswer: assignment.referenceAnswer || { content: "" },
       assignmentType: assignment.assignmentType || "normal",
-      onlineQuestions:
-        assignment.onlineQuestions?.length
-          ? assignment.onlineQuestions
-          : [createOnlineQuestion()],
+      onlineQuestions: assignment.onlineQuestions?.length
+        ? assignment.onlineQuestions
+        : [createOnlineQuestion()],
       gradingNotes: assignment.gradingNotes || "",
       submissionFormat: assignment.submissionFormat || "mixed",
-      startDate: moment(assignment.startDate).format("YYYY-MM-DD HH:mm:ss"),
-      endDate: moment(assignment.endDate).format("YYYY-MM-DD HH:mm:ss"),
+      startDate: formatLocalDate(assignment.startDate, "yyyy-MM-dd HH:mm:ss"),
+      endDate: formatLocalDate(assignment.endDate, "yyyy-MM-dd HH:mm:ss"),
       allowAttachments: assignment.allowAttachments,
     });
   } catch (error) {
@@ -622,15 +679,23 @@ const buildAssignmentData = (includeStatus = false) => {
     classes: formData.classes,
     aiRule: formData.assignmentType === "normal" ? formData.aiRule : null,
     questionMaterial:
-      formData.assignmentType === "normal" ? formData.questionMaterial : { content: "" },
+      formData.assignmentType === "normal"
+        ? formData.questionMaterial
+        : { content: "" },
     referenceAnswer:
-      formData.assignmentType === "normal" ? formData.referenceAnswer : { content: "" },
+      formData.assignmentType === "normal"
+        ? formData.referenceAnswer
+        : { content: "" },
     assignmentType: formData.assignmentType,
     onlineQuestions:
-      formData.assignmentType === "online" ? normalizeOnlineQuestionsForSubmit() : [],
+      formData.assignmentType === "online"
+        ? normalizeOnlineQuestionsForSubmit()
+        : [],
     gradingNotes: formData.gradingNotes,
     submissionFormat:
-      formData.assignmentType === "online" ? "answers_only" : formData.submissionFormat,
+      formData.assignmentType === "online"
+        ? "answers_only"
+        : formData.submissionFormat,
     startDate: formData.startDate,
     endDate: formData.endDate,
     allowAttachments:
@@ -714,7 +779,10 @@ const validateOnlineQuestions = () => {
   const invalidIndex = questions.findIndex((question) => {
     if (!question.stem || !question.answer || question.score <= 0) return true;
     if (question.type === "single_choice") {
-      return question.options.length < 2 || !question.options.includes(question.answer);
+      return (
+        question.options.length < 2 ||
+        !question.options.includes(question.answer)
+      );
     }
     return false;
   });

@@ -93,18 +93,24 @@ export function isToday(date: string | Date): boolean {
  * @param date 日期字符串或Date对象
  * @returns 是否即将到期
  */
-export function isUrgent(date: string | Date): boolean {
+export function isUrgent(date: string | Date, now = new Date()): boolean {
   if (!date) return false;
 
   try {
     const dateObj = typeof date === "string" ? parseISO(date) : date;
-    const now = new Date();
     const hoursLeft = (dateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    return hoursLeft > 0 && hoursLeft < 24;
+    return hoursLeft > 0 && hoursLeft <= 24;
   } catch (error) {
     return false;
   }
+}
+
+/** Invalid or missing deadlines must never be treated as expired. */
+export function isPastDate(date: string | Date, now = new Date()): boolean {
+  if (!date) return false;
+  const parsed = typeof date === "string" ? parseISO(date) : date;
+  return isValid(parsed) && parsed.getTime() < now.getTime();
 }
 
 /**

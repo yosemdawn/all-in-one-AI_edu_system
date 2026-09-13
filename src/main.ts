@@ -9,10 +9,6 @@ import "./router/permission";
 import "@wangeditor/editor/dist/css/style.css";
 import "@/assets/wangEidtAdd.css";
 import "@/assets/styles/adaptive-table.css";
-import moment from "moment";
-import "moment/locale/zh-cn";
-
-moment.locale("zh-cn");
 
 const app = createApp(App);
 

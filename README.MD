@@ -397,6 +397,6 @@ AI 输出存在不确定性，建议所有正式成绩和重要评价均由教�
 如果你基于本项目做二次开发，建议优先阅读：
 
 - `backend/README.md`
-- `src/docs/教师工具箱使用说明书与功能介绍.md`
-- `src/docs/教师工具箱深度整合说明.md`
+- [项目维护说明](docs/maintenance-notes.md)
+- [部署、迁移和备份](docs/operational-hardening-2026-09-09.md)
 - [上传限制、依赖更新与验收记录](docs/upload-and-dependencies-2026-09-09.md)

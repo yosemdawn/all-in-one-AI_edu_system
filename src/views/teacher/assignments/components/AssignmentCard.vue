@@ -176,7 +176,7 @@ import {
 } from "@element-plus/icons-vue";
 import { AssignmentStatus } from "@/api/assignments";
 import type { AssignmentListItem } from "@/types/assignments";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 
 interface Props {
   assignment: AssignmentListItem;
@@ -240,15 +240,10 @@ const getProgressColor = (assignment: AssignmentListItem) => {
 
 // 格式化时间范围
 const formatDateRange = (startDate: string, endDate: string) => {
-  const start = moment(startDate);
-  const end = moment(endDate);
-
-  // 格式化为：2024/05/25 14:42 ~ 2024/06/01 13:42
-  const formatDate = (date: any) => {
-    return date.format("YYYY/MM/DD HH:mm");
-  };
-
-  return `${formatDate(start)} ~ ${formatDate(end)}`;
+  return `${formatLocalDate(startDate, "yyyy/MM/dd HH:mm")} ~ ${formatLocalDate(
+    endDate,
+    "yyyy/MM/dd HH:mm"
+  )}`;
 };
 
 // 处理卡片点击

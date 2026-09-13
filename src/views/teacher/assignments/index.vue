@@ -372,7 +372,7 @@ import type {
 import AssignmentCard from "./components/AssignmentCard.vue";
 import AssignmentDetail from "./components/AssignmentDetail.vue";
 import PageHeader from "../../../components/PageHeader.vue";
-import moment from "moment";
+import { formatDateTime as formatLocalDate } from "@/utils/date";
 
 const router = useRouter();
 
@@ -756,8 +756,8 @@ const getSubmissionPercentageForList = (assignment: AssignmentListItem) => {
 };
 
 const formatDate = (dateString: string) => {
-  // 使用moment格式化为 YYYY/MM/DD HH:mm
-  return moment(dateString).format("YYYY/MM/DD HH:mm");
+  // 保持页面原有日期显示格式
+  return formatLocalDate(dateString, "yyyy/MM/dd HH:mm");
 };
 
 // 初始化
