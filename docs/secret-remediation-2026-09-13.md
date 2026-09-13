@@ -46,6 +46,8 @@
 
 分支历史清理不保证 GitHub 的旧提交链接、Pull Request 引用、缓存、别人的 fork 或克隆也已消失。停用凭据后，根据 [GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) 联系 GitHub Support 申请处理残留引用/缓存；不要把密钥原文附在公开 issue 中。私有的本地清理报告会保留所需提交映射和受影响引用，供申请时使用。
 
+2026-09-13 推送后的实际核对：两个分支及 PR #1 的 head 引用已更新，但 `refs/pull/1/merge` 仍引用旧历史，旧敏感提交 API 仍返回 200。PR #1 当前存在合并冲突。**远端残留尚未完全清除，应请 GitHub Support 处理；不要通过恢复旧分支或合并旧历史来解决。** 仓库维护者无法用普通 Git 推送直接删除 GitHub 管理的 PR 引用。
+
 ## 后续防误提交
 
 - `.gitignore` 排除实际环境配置、私钥和 Git 备份包，保留 `.env.example` / `.env.*.example` 模板。
